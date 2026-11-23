@@ -219,6 +219,37 @@
       "method": "POST",
       "auth": "platform"
     },
+    "arenaChallenge": {
+      "url": "__API_BASE__/api/arena/challenge",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "mailList": {
+      "url": "__API_BASE__/api/mail/list",
+      "method": "GET",
+      "query": ["realmId"],
+      "auth": "platform"
+    },
+    "mailSend": {
+      "url": "__API_BASE__/api/mail/send",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "mailRead": {
+      "url": "__API_BASE__/api/mail/read",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "mailClaim": {
+      "url": "__API_BASE__/api/mail/claim",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "mailDelete": {
+      "url": "__API_BASE__/api/mail/delete",
+      "method": "POST",
+      "auth": "platform"
+    },
     "gmGrant": {
       "url": "__API_BASE__/api/gm/grant",
       "method": "POST",

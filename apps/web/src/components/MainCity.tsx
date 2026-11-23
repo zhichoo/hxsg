@@ -132,7 +132,7 @@ export function MainCity({
     { label: '赌坊', onClick: () => onOpenPanel('casino') },
     { label: '排行', onClick: () => onOpenPanel('rank') },
     { label: '招贤', onClick: () => onOpenPanel('tavern') },
-    { label: '铁匠', onClick: () => onOpenPanel('blacksmith') },
+    { label: '飞鸽', onClick: () => onOpenPanel('mail') },
     { label: '钱庄', onClick: () => onOpenPanel('bank') },
     { label: '集市', onClick: () => onOpenPanel('market') },
     { label: '客栈', onClick: () => onRestInn() },
@@ -171,9 +171,21 @@ export function MainCity({
         <span className="text-[17px] font-bold tracking-widest text-white hx-stroke">
           {currentMap.name}
         </span>
-        <span className="absolute right-2 text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80]">
-          {currentMap.recommendedLevel}
-        </span>
+        <div className="absolute right-2 flex items-center gap-1.5">
+          {character.unreadMailCount > 0 && (
+            <button
+              type="button"
+              onClick={() => onOpenPanel('mail')}
+              className="text-[10.5px] font-bold text-[#fff4b8] bg-[#b82018] px-1.5 py-0.5 border border-[#ffe26b] animate-pulse"
+              title="有未读飞鸽传书"
+            >
+              ✉ {character.unreadMailCount}
+            </button>
+          )}
+          <span className="text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80]">
+            {currentMap.recommendedLevel}
+          </span>
+        </div>
       </AssetBg>
 
       {/* 2. Main Split Panel: Left Hero Info + Right Function/NPC/Move/Facility */}

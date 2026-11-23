@@ -27,6 +27,7 @@ import {
   type Gender,
   type GeneralView,
   type InventoryItemView,
+  type MailView,
   type MainQuestView,
   type MarketListingKind,
   type MarketListingView,
@@ -74,6 +75,10 @@ interface CharacterRow {
   tower_sweep_date?: string | null;
   bank_silver?: number;
   bank_gold?: number;
+  arena_wins?: number;
+  arena_losses?: number;
+  arena_daily_rewards?: number;
+  arena_reward_date?: string | null;
 }
 
 interface GeneralRow {
@@ -413,6 +418,19 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     inventory,
     quests: hydrateQuestState(row.id, row.level),
     tower: buildTowerState(row.tower_floor ?? 0, row.tower_sweep_date ?? null),
+    arena: {
+      wins: row.arena_wins ?? 0,
+      losses: row.arena_losses ?? 0,
+      dailyRewardsLeft: Math.max(
+        0,
+        5 - (row.arena_reward_date === getTodayDateStr() ? (row.arena_daily_rewards ?? 0) : 0),
+      ),
+    },
+    unreadMailCount: (
+      db
+        .prepare('SELECT COUNT(*) AS cnt FROM mails WHERE recipient_id = ? AND is_read = 0')
+        .get(row.id) as { cnt: number }
+    ).cnt,
   };
 }
 
@@ -2620,6 +2638,14 @@ export function buyMarketListing(
     ).run(buyerId, buyer.name, now, listingId);
 
     const unit = row.currency === 'gold' ? '金砖' : '银两';
+    sendSystemMail(
+      buyer.realmId,
+      row.seller_id,
+      row.seller_name,
+      `集市成交：${row.title}`,
+      `恭喜！【${buyer.name}】以 ${row.price} ${unit} 购买了你寄售的【${row.title}】。扣除 5% 税费后，实得 ${sellerProceeds} ${unit} 已自动存入你的许昌钱庄金库！`,
+    );
+
     return {
       character: getCharacterById(buyerId)!,
       message: `购买成功！【${row.title}】已存入行囊/营帐（花费 ${row.price} ${unit}）`,
@@ -2651,4 +2677,246 @@ export function cancelMarketListing(
       message: `已下架并取回【${row.title}】`,
     };
   });
+}
+
+export function sendSystemMail(
+  realmId: string,
+  recipientId: number,
+  recipientName: string,
+  subject: string,
+  body: string,
+  attachSilver = 0,
+  attachGold = 0,
+): void {
+  db.prepare(
+    `INSERT INTO mails (
+      realm_id, sender_id, sender_name, recipient_id, recipient_name,
+      subject, body, attach_silver, attach_gold, claimed, is_read, created_at
+    ) VALUES (?, 0, '系统飞鸽', ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+  ).run(
+    realmId,
+    recipientId,
+    recipientName,
+    subject.slice(0, 60),
+    body.slice(0, 500),
+    Math.max(0, Math.floor(attachSilver)),
+    Math.max(0, Math.floor(attachGold)),
+    attachSilver > 0 || attachGold > 0 ? 0 : 1,
+    Date.now(),
+  );
+}
+
+interface MailRow {
+  id: number;
+  sender_id: number;
+  sender_name: string;
+  recipient_id: number;
+  recipient_name: string;
+  subject: string;
+  body: string;
+  attach_silver: number;
+  attach_gold: number;
+  claimed: number;
+  is_read: number;
+  created_at: number;
+}
+
+export function getMails(characterId: number): MailView[] {
+  const rows = db
+    .prepare('SELECT * FROM mails WHERE recipient_id = ? ORDER BY created_at DESC LIMIT 50')
+    .all(characterId) as unknown as MailRow[];
+  return rows.map((r) => ({
+    id: r.id,
+    senderId: r.sender_id,
+    senderName: r.sender_name,
+    recipientId: r.recipient_id,
+    recipientName: r.recipient_name,
+    subject: r.subject,
+    body: r.body,
+    attachSilver: r.attach_silver,
+    attachGold: r.attach_gold,
+    claimed: Boolean(r.claimed),
+    isRead: Boolean(r.is_read),
+    createdAt: r.created_at,
+  }));
+}
+
+export function sendPlayerMail(
+  senderId: number,
+  opts: {
+    recipientName: string;
+    subject: string;
+    body: string;
+    attachSilver?: number;
+    attachGold?: number;
+  },
+): { character: CharacterView; message: string } {
+  const recName = opts.recipientName.trim();
+  const subject = opts.subject.trim() || '飞鸽传书';
+  const body = opts.body.trim();
+  if (!recName) throw new Error('请输入收件人角色名');
+  if (!body) throw new Error('信件内容不能为空');
+
+  const attachSilver = Math.max(0, Math.floor(opts.attachSilver ?? 0));
+  const attachGold = Math.max(0, Math.floor(opts.attachGold ?? 0));
+
+  return withTx(() => {
+    const sender = getCharacterById(senderId);
+    if (!sender) throw new Error('角色不存在');
+    const recipient = db
+      .prepare('SELECT id, name FROM characters WHERE realm_id = ? AND name = ?')
+      .get(sender.realmId, recName) as { id: number; name: string } | undefined;
+    if (!recipient) throw new Error(`同区未找到角色【${recName}】`);
+    if (recipient.id === senderId) throw new Error('不能给自己发飞鸽传书');
+    if (sender.silver < attachSilver) throw new Error('随身银两不足以附寄');
+    if (sender.gold < attachGold) throw new Error('随身金砖不足以附寄');
+
+    const now = Date.now();
+    if (attachSilver > 0 || attachGold > 0) {
+      db.prepare(
+        'UPDATE characters SET silver = silver - ?, gold = gold - ?, updated_at = ? WHERE id = ?',
+      ).run(attachSilver, attachGold, now, senderId);
+    }
+
+    db.prepare(
+      `INSERT INTO mails (
+        realm_id, sender_id, sender_name, recipient_id, recipient_name,
+        subject, body, attach_silver, attach_gold, claimed, is_read, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    ).run(
+      sender.realmId,
+      sender.id,
+      sender.name,
+      recipient.id,
+      recipient.name,
+      subject.slice(0, 60),
+      body.slice(0, 500),
+      attachSilver,
+      attachGold,
+      attachSilver > 0 || attachGold > 0 ? 0 : 1,
+      now,
+    );
+
+    const giftText =
+      attachSilver > 0 || attachGold > 0
+        ? `（附寄 ${[attachSilver > 0 ? `${attachSilver}银` : '', attachGold > 0 ? `${attachGold}金` : ''].filter(Boolean).join('+')}）`
+        : '';
+    return {
+      character: getCharacterById(senderId)!,
+      message: `飞鸽已发出！寄给【${recipient.name}】${giftText}`,
+    };
+  });
+}
+
+export function markMailRead(characterId: number, mailId: number): CharacterView {
+  db.prepare('UPDATE mails SET is_read = 1 WHERE id = ? AND recipient_id = ?').run(
+    mailId,
+    characterId,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function claimMailAttachment(
+  characterId: number,
+  mailId: number,
+): { character: CharacterView; message: string } {
+  return withTx(() => {
+    const row = db
+      .prepare('SELECT * FROM mails WHERE id = ? AND recipient_id = ?')
+      .get(mailId, characterId) as unknown as MailRow | undefined;
+    if (!row) throw new Error('邮件不存在');
+    if (row.claimed || (row.attach_silver <= 0 && row.attach_gold <= 0)) {
+      throw new Error('该信件没有可领取的附件');
+    }
+    db.prepare('UPDATE mails SET claimed = 1, is_read = 1 WHERE id = ?').run(mailId);
+    db.prepare(
+      'UPDATE characters SET silver = silver + ?, gold = gold + ?, updated_at = ? WHERE id = ?',
+    ).run(row.attach_silver, row.attach_gold, Date.now(), characterId);
+    const parts: string[] = [];
+    if (row.attach_silver > 0) parts.push(`银两 +${row.attach_silver}`);
+    if (row.attach_gold > 0) parts.push(`金砖 +${row.attach_gold}`);
+    return {
+      character: getCharacterById(characterId)!,
+      message: `已领取飞鸽附件：${parts.join('、')}`,
+    };
+  });
+}
+
+export function deleteMail(
+  characterId: number,
+  mailId: number,
+): { character: CharacterView; message: string } {
+  const row = db
+    .prepare('SELECT id, claimed, attach_silver, attach_gold FROM mails WHERE id = ? AND recipient_id = ?')
+    .get(mailId, characterId) as
+    | { id: number; claimed: number; attach_silver: number; attach_gold: number }
+    | undefined;
+  if (!row) throw new Error('邮件不存在');
+  if (!row.claimed && (row.attach_silver > 0 || row.attach_gold > 0)) {
+    throw new Error('请先领取附件再删除信件');
+  }
+  db.prepare('DELETE FROM mails WHERE id = ? AND recipient_id = ?').run(mailId, characterId);
+  return {
+    character: getCharacterById(characterId)!,
+    message: '信件已删除',
+  };
+}
+
+export function recordArenaOutcome(
+  challengerId: number,
+  targetId: number,
+  won: boolean,
+): { exp: number; silver: number; summary: string } {
+  const ch = getCharacterById(challengerId);
+  const target = getCharacterById(targetId);
+  if (!ch || !target) return { exp: 0, silver: 0, summary: '擂台切磋结束' };
+
+  const today = getTodayDateStr();
+  let exp = 0;
+  let silver = 0;
+  let summary = '';
+
+  if (won) {
+    const usedToday = 5 - ch.arena.dailyRewardsLeft;
+    const canReward = ch.arena.dailyRewardsLeft > 0;
+    if (canReward) {
+      exp = 80 + target.level * 25;
+      silver = 120 + target.level * 30;
+    }
+    db.prepare(
+      `UPDATE characters
+       SET arena_wins = arena_wins + 1,
+           arena_daily_rewards = ?,
+           arena_reward_date = ?,
+           updated_at = ?
+       WHERE id = ?`,
+    ).run(canReward ? usedToday + 1 : usedToday, today, Date.now(), challengerId);
+    db.prepare('UPDATE characters SET arena_losses = arena_losses + 1 WHERE id = ?').run(targetId);
+
+    sendSystemMail(
+      ch.realmId,
+      target.id,
+      target.name,
+      `擂台战报：${ch.name} 切磋挑战`,
+      `【${ch.name}】(Lv.${ch.level}) 在许昌演武擂台向你的离线镜像发起了切磋，经过一番激战你的镜像惜败（你的随身财物与气血无任何损失，可随时到排行榜回敬切磋！）。`,
+    );
+    summary = canReward
+      ? `⚔ 擂台切磋大胜【${target.name}】！今日有奖切磋剩余 ${Math.max(0, ch.arena.dailyRewardsLeft - 1)}/5 次`
+      : `⚔ 擂台切磋大胜【${target.name}】！（今日有奖次数已满，计入胜场战绩）`;
+  } else {
+    db.prepare('UPDATE characters SET arena_losses = arena_losses + 1 WHERE id = ?').run(
+      challengerId,
+    );
+    db.prepare('UPDATE characters SET arena_wins = arena_wins + 1 WHERE id = ?').run(targetId);
+    sendSystemMail(
+      ch.realmId,
+      target.id,
+      target.name,
+      `擂台捷报：成功击退 ${ch.name}`,
+      `【${ch.name}】(Lv.${ch.level}) 在许昌演武擂台挑战你的离线镜像，被你的精锐阵容成功击退！`,
+    );
+    summary = `擂台切磋惜败于【${target.name}】的镜像阵容，再接再厉！`;
+  }
+
+  return { exp, silver, summary };
 }

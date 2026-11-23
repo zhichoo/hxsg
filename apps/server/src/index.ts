@@ -16,6 +16,7 @@ import { loginAccount, registerAccount, verifyToken, type AuthPayload } from './
 import {
   getActiveBattle,
   performBattleAction,
+  startArenaBattle,
   startBattle,
   type PlayerBattleCommand,
 } from './battleEngine.js';
@@ -31,20 +32,24 @@ import {
   buyMarketListing,
   buyShopItem,
   cancelMarketListing,
+  claimMailAttachment,
   claimMainQuest,
   claimPaohuan,
   createCharacter,
   createMarketListing,
+  deleteMail,
   digTreasureMap,
   dismissGeneral,
   drawGeneralWithToken,
   equipItem,
   feedGeneralExpPill,
   getCharacterByAccountAndRealm,
+  getMails,
   getMarketListings,
   getRankings,
   gmGrant,
   learnGeneralSkillBook,
+  markMailRead,
   moveCharacter,
   playCasinoChibi,
   playCasinoDice,
@@ -53,6 +58,7 @@ import {
   resetCharacterStats,
   restAtInn,
   sellEquipment,
+  sendPlayerMail,
   setGeneralSlot,
   sweepTowerDaily,
   unequipSlot,
@@ -589,6 +595,72 @@ app.post('/api/market/cancel', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return cancelMarketListing(current.id, Number(body.listingId));
+});
+
+app.post('/api/arena/challenge', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; targetCharacterId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  const existing = getActiveBattle(current.id);
+  if (existing && existing.status === 'ongoing') {
+    return { battle: existing };
+  }
+  const battle = startArenaBattle(current.id, Number(body.targetCharacterId));
+  return { battle };
+});
+
+app.get('/api/mail/list', async (req) => {
+  const auth = await requireAuth(req);
+  const q = req.query as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, q.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { mails: getMails(current.id) };
+});
+
+app.post('/api/mail/send', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    recipientName?: string;
+    subject?: string;
+    body?: string;
+    attachSilver?: number;
+    attachGold?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return sendPlayerMail(current.id, {
+    recipientName: body.recipientName || '',
+    subject: body.subject || '飞鸽传书',
+    body: body.body || '',
+    attachSilver: body.attachSilver,
+    attachGold: body.attachGold,
+  });
+});
+
+app.post('/api/mail/read', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; mailId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: markMailRead(current.id, Number(body.mailId)) };
+});
+
+app.post('/api/mail/claim', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; mailId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return claimMailAttachment(current.id, Number(body.mailId));
+});
+
+app.post('/api/mail/delete', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; mailId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return deleteMail(current.id, Number(body.mailId));
 });
 
 app.post('/api/gm/grant', async (req) => {

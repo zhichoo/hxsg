@@ -192,6 +192,25 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_market_realm_status ON market_listings(realm_id, status, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS mails (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    realm_id TEXT NOT NULL,
+    sender_id INTEGER NOT NULL,
+    sender_name TEXT NOT NULL,
+    recipient_id INTEGER NOT NULL,
+    recipient_name TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    attach_silver INTEGER NOT NULL DEFAULT 0,
+    attach_gold INTEGER NOT NULL DEFAULT 0,
+    claimed INTEGER NOT NULL DEFAULT 0,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (recipient_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_mails_recipient ON mails(recipient_id, created_at DESC);
 `);
 
 // Safe online schema migration for existing DBs created in Phase 1
@@ -217,6 +236,10 @@ const newCols: Array<[string, string]> = [
   ['tower_sweep_date', 'TEXT DEFAULT NULL'],
   ['bank_silver', 'INTEGER NOT NULL DEFAULT 0'],
   ['bank_gold', 'INTEGER NOT NULL DEFAULT 0'],
+  ['arena_wins', 'INTEGER NOT NULL DEFAULT 0'],
+  ['arena_losses', 'INTEGER NOT NULL DEFAULT 0'],
+  ['arena_daily_rewards', 'INTEGER NOT NULL DEFAULT 0'],
+  ['arena_reward_date', 'TEXT DEFAULT NULL'],
 ];
 
 for (const [col, def] of newCols) {

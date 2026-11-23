@@ -6,6 +6,7 @@ import type {
   EquipmentSlot,
   Gender,
   GeneralView,
+  MailView,
   MarketListingKind,
   MarketListingView,
   OnlinePlayerSummary,
@@ -440,6 +441,42 @@ export const api = {
         body: { realmId, listingId },
       },
     ),
+  challengeArena: (realmId: string, targetCharacterId: number) =>
+    callEndpoint<{ battle: BattleState }>('arenaChallenge', '/api/arena/challenge', {
+      method: 'POST',
+      body: { realmId, targetCharacterId },
+    }),
+  getMails: (realmId: string) =>
+    callEndpoint<{ mails: MailView[] }>('mailList', '/api/mail/list', {
+      query: { realmId },
+    }),
+  sendMail: (payload: {
+    realmId: string;
+    recipientName: string;
+    subject: string;
+    body: string;
+    attachSilver?: number;
+    attachGold?: number;
+  }) =>
+    callEndpoint<{ character: CharacterView; message: string }>('mailSend', '/api/mail/send', {
+      method: 'POST',
+      body: payload,
+    }),
+  readMail: (realmId: string, mailId: number) =>
+    callEndpoint<{ character: CharacterView }>('mailRead', '/api/mail/read', {
+      method: 'POST',
+      body: { realmId, mailId },
+    }),
+  claimMail: (realmId: string, mailId: number) =>
+    callEndpoint<{ character: CharacterView; message: string }>('mailClaim', '/api/mail/claim', {
+      method: 'POST',
+      body: { realmId, mailId },
+    }),
+  deleteMail: (realmId: string, mailId: number) =>
+    callEndpoint<{ character: CharacterView; message: string }>('mailDelete', '/api/mail/delete', {
+      method: 'POST',
+      body: { realmId, mailId },
+    }),
   gmGrant: (payload: {
     realmId: string;
     passcode?: string;

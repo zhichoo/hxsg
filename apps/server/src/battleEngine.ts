@@ -27,6 +27,7 @@ import {
   getCharacterById,
   grantEquipmentToCharacter,
   grantGeneralToCharacter,
+  recordArenaOutcome,
   recordQuestBattleVictory,
   recordTowerClear,
 } from './gameService.js';
@@ -45,6 +46,7 @@ function resolveEnemyGroup(enemyGroupId: string): EnemyGroupDef | undefined {
 interface ActiveBattle extends BattleState {
   characterId: number;
   enemyGroupId: string;
+  arenaTargetId?: number;
 }
 
 const activeBattles = new Map<number, ActiveBattle>();
@@ -201,6 +203,166 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
   return stripInternal(battle);
 }
 
+export function startArenaBattle(characterId: number, targetCharacterId: number): BattleState {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (characterId === targetCharacterId) throw new Error('不能挑战自己');
+  const target = getCharacterById(targetCharacterId);
+  if (!target || target.realmId !== ch.realmId) throw new Error('同区未找到该切磋对手');
+  if (ch.hp <= 0) throw new Error('气血不足，请先回客栈休息或吃药');
+
+  const meta = ROLE_CLASS_META[ch.roleClass];
+  const playerSprite = ch.gender === 'female' ? meta.femaleSprite : meta.maleSprite;
+  const targetMeta = ROLE_CLASS_META[target.roleClass];
+  const targetSprite = target.gender === 'female' ? targetMeta.femaleSprite : targetMeta.maleSprite;
+
+  const units: BattleUnit[] = [
+    {
+      uid: `p_main_${ch.id}`,
+      side: 'player',
+      isMainRole: true,
+      name: ch.name,
+      level: ch.level,
+      roleClass: ch.roleClass,
+      spriteKey: playerSprite,
+      hp: Math.max(1, ch.hp),
+      maxHp: ch.maxHp,
+      mp: ch.mp,
+      maxMp: ch.maxMp,
+      atk: ch.atk,
+      spd: ch.spd,
+      alive: true,
+      defending: false,
+      position: 0,
+      statuses: [],
+      resist: {
+        phys: ch.resist.phys,
+        chaos: ch.resist.chaos,
+        seal: ch.resist.seal,
+        trap: ch.resist.trap,
+        magic: ch.resist.magic,
+      },
+    },
+  ];
+
+  ch.generals
+    .filter((g) => g.slot !== null)
+    .sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9))
+    .forEach((g, idx) => {
+      units.push({
+        uid: `p_gen_${g.id}`,
+        side: 'player',
+        isMainRole: false,
+        name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
+        level: g.level,
+        roleClass: g.roleClass,
+        spriteKey: g.spriteKey,
+        skillId: g.skillId,
+        skill2Id: g.skill2Id ?? undefined,
+        intimacy: g.intimacy,
+        hp: Math.max(1, g.hp),
+        maxHp: g.maxHp,
+        mp: g.mp,
+        maxMp: g.maxMp,
+        atk: g.atk,
+        spd: g.spd,
+        alive: true,
+        defending: false,
+        position: idx + 1,
+        statuses: [],
+        resist: {
+          phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+          chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+        },
+      });
+    });
+
+  // Mirror enemy main character
+  units.push({
+    uid: `e_main_${target.id}`,
+    side: 'enemy',
+    isMainRole: false,
+    name: `【镜像】${target.name}`,
+    level: target.level,
+    roleClass: target.roleClass,
+    spriteKey: targetSprite,
+    hp: target.maxHp,
+    maxHp: target.maxHp,
+    mp: target.maxMp,
+    maxMp: target.maxMp,
+    atk: target.atk,
+    spd: target.spd,
+    alive: true,
+    defending: false,
+    position: 0,
+    statuses: [],
+    resist: {
+      phys: target.resist.phys,
+      chaos: target.resist.chaos,
+      seal: target.resist.seal,
+      trap: target.resist.trap,
+      magic: target.resist.magic,
+    },
+  });
+
+  // Mirror enemy active generals
+  target.generals
+    .filter((g) => g.slot !== null)
+    .sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9))
+    .forEach((g, idx) => {
+      units.push({
+        uid: `e_gen_${g.id}`,
+        side: 'enemy',
+        isMainRole: false,
+        name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
+        level: g.level,
+        roleClass: g.roleClass,
+        spriteKey: g.spriteKey,
+        skillId: g.skillId,
+        skill2Id: g.skill2Id ?? undefined,
+        hp: g.maxHp,
+        maxHp: g.maxHp,
+        mp: g.maxMp,
+        maxMp: g.maxMp,
+        atk: g.atk,
+        spd: g.spd,
+        alive: true,
+        defending: false,
+        position: idx + 1,
+        statuses: [],
+        resist: {
+          phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+          chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+          magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+        },
+      });
+    });
+
+  const battle: ActiveBattle = {
+    battleId: crypto.randomUUID(),
+    characterId,
+    enemyGroupId: 'arena',
+    arenaTargetId: target.id,
+    mapId: ch.mapId,
+    mapName: '许昌演武擂台',
+    battleBg: 'f_bg6',
+    enemyGroupName: `${target.name}（镜像）`,
+    round: 1,
+    status: 'ongoing',
+    deadlineAt: Date.now() + 60_000,
+    units,
+    lastLogs: [],
+  };
+
+  activeBattles.set(characterId, battle);
+  return stripInternal(battle);
+}
+
 export interface PlayerBattleCommand {
   action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
   targetUid?: string;
@@ -224,7 +386,7 @@ export function performBattleAction(
   for (const u of battle.units) u.defending = false;
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
-  const group = resolveEnemyGroup(battle.enemyGroupId)!;
+  const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId);
 
   const aliveActors = battle.units.filter((u) => u.alive).sort((a, b) => b.spd - a.spd);
 
@@ -331,7 +493,17 @@ export function performBattleAction(
 
       if (cmd.action === 'capture') {
         const target = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
-        const tplId = group.capturableTemplateId;
+        if (battle.arenaTargetId) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'capture',
+            targets: [{ uid: target.uid, name: target.name, damage: 0 }],
+            message: '擂台切磋点到为止，不可招降他人副将！',
+          });
+          continue;
+        }
+        const tplId = group?.capturableTemplateId;
         const hpRatio = target.hp / target.maxHp;
         const chance = tplId ? Math.min(0.78, 0.25 + (1 - hpRatio) * 0.55) : 0;
         if (tplId && Math.random() < chance && ch.generals.length < 12) {
@@ -729,78 +901,101 @@ export function performBattleAction(
     activeBattles.delete(characterId);
   } else if (enemiesLeft === 0) {
     battle.status = 'victory';
-    const exp = group.expReward;
-    const silver = group.silverReward;
-    const dropRoll = Math.random();
-    let droppedItem: { itemId: string; name: string; quantity: number } | undefined;
-    if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.35) {
-      const bookIds = Object.keys(GENERAL_SKILL_BOOKS);
-      const bookId = bookIds[Math.floor(Math.random() * bookIds.length)];
-      addItem(characterId, bookId, 1);
-      droppedItem = { itemId: bookId, name: ITEMS[bookId].name, quantity: 1 };
-    } else if (dropRoll < 0.42) {
-      const dropId =
-        dropRoll < 0.14 ? 'baotu' : dropRoll < 0.28 ? 'jinchuang' : 'ningshen';
-      addItem(characterId, dropId, 1);
-      droppedItem = { itemId: dropId, name: ITEMS[dropId].name, quantity: 1 };
-    }
-
-    // Classic equipment / mount drop roll
-    let droppedEquipment:
-      | { name: string; quality: 'common' | 'fine' | 'rare' | 'legend'; slot: 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount' }
-      | undefined;
-    if (Math.random() < 0.28 && ch.equipment.length < 30) {
-      let pool: string[];
-      if (
-        battle.enemyGroupId === 'luoyang_weidui' ||
-        battle.enemyGroupId === 'hulao_xiliang' ||
-        battle.enemyGroupId === 'boss_huaxiong' ||
-        battle.enemyGroupId === 'guandu_yuanjun' ||
-        battle.enemyGroupId === 'boss_yanliang' ||
-        battle.enemyGroupId === 'chibi_shuijun' ||
-        battle.enemyGroupId === 'boss_caojun'
-      ) {
-        pool = ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma', 'chitu_ma', 'longdan_qiang'];
-      } else if (
-        battle.enemyGroupId === 'changshe_daoshi' ||
-        battle.enemyGroupId === 'boss_zhangjiao'
-      ) {
-        pool = ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
-      } else {
-        pool = ['qingtong_qiang', 'taomu_jian', 'bujin_mao', 'cubu_yi', 'caoxie', 'huangbiao_ma'];
+    if (battle.arenaTargetId) {
+      const arenaRes = recordArenaOutcome(characterId, battle.arenaTargetId, true);
+      const res = applyExpAndSilver(
+        characterId,
+        arenaRes.exp,
+        arenaRes.silver,
+        Math.max(mainUnit.hp, Math.round(mainUnit.maxHp * 0.6)),
+        mainUnit.mp,
+      );
+      updatedChar = res.character;
+      battle.rewards = {
+        exp: arenaRes.exp,
+        silver: arenaRes.silver,
+        leveledUp: res.leveledUp,
+        newLevel: res.newLevel,
+        questUpdates: [arenaRes.summary],
+      };
+      activeBattles.delete(characterId);
+    } else {
+      const exp = group?.expReward ?? 60;
+      const silver = group?.silverReward ?? 60;
+      const dropRoll = Math.random();
+      let droppedItem: { itemId: string; name: string; quantity: number } | undefined;
+      if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.35) {
+        const bookIds = Object.keys(GENERAL_SKILL_BOOKS);
+        const bookId = bookIds[Math.floor(Math.random() * bookIds.length)];
+        addItem(characterId, bookId, 1);
+        droppedItem = { itemId: bookId, name: ITEMS[bookId].name, quantity: 1 };
+      } else if (dropRoll < 0.42) {
+        const dropId =
+          dropRoll < 0.14 ? 'baotu' : dropRoll < 0.28 ? 'jinchuang' : 'ningshen';
+        addItem(characterId, dropId, 1);
+        droppedItem = { itemId: dropId, name: ITEMS[dropId].name, quantity: 1 };
       }
-      const picked = pool[Math.floor(Math.random() * pool.length)];
-      const eq = grantEquipmentToCharacter(characterId, picked, true);
-      droppedEquipment = { name: eq.name, quality: eq.quality, slot: eq.slot };
-    }
 
-    addActiveGeneralsIntimacy(characterId, 2);
-    const questUpdates = recordQuestBattleVictory(characterId, battle.enemyGroupId);
-    if (battle.enemyGroupId.startsWith('tower_')) {
-      const floor = Number(battle.enemyGroupId.slice(6));
-      const towerMsg = recordTowerClear(characterId, floor);
-      if (towerMsg) questUpdates.push(towerMsg);
+      // Classic equipment / mount drop roll
+      let droppedEquipment:
+        | { name: string; quality: 'common' | 'fine' | 'rare' | 'legend'; slot: 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount' }
+        | undefined;
+      if (Math.random() < 0.28 && ch.equipment.length < 30) {
+        let pool: string[];
+        if (
+          battle.enemyGroupId === 'luoyang_weidui' ||
+          battle.enemyGroupId === 'hulao_xiliang' ||
+          battle.enemyGroupId === 'boss_huaxiong' ||
+          battle.enemyGroupId === 'guandu_yuanjun' ||
+          battle.enemyGroupId === 'boss_yanliang' ||
+          battle.enemyGroupId === 'chibi_shuijun' ||
+          battle.enemyGroupId === 'boss_caojun'
+        ) {
+          pool = ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma', 'chitu_ma', 'longdan_qiang'];
+        } else if (
+          battle.enemyGroupId === 'changshe_daoshi' ||
+          battle.enemyGroupId === 'boss_zhangjiao'
+        ) {
+          pool = ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
+        } else {
+          pool = ['qingtong_qiang', 'taomu_jian', 'bujin_mao', 'cubu_yi', 'caoxie', 'huangbiao_ma'];
+        }
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        const eq = grantEquipmentToCharacter(characterId, picked, true);
+        droppedEquipment = { name: eq.name, quality: eq.quality, slot: eq.slot };
+      }
+
+      addActiveGeneralsIntimacy(characterId, 2);
+      const questUpdates = recordQuestBattleVictory(characterId, battle.enemyGroupId);
+      if (battle.enemyGroupId.startsWith('tower_')) {
+        const floor = Number(battle.enemyGroupId.slice(6));
+        const towerMsg = recordTowerClear(characterId, floor);
+        if (towerMsg) questUpdates.push(towerMsg);
+      }
+      const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
+      updatedChar = res.character;
+      battle.rewards = {
+        exp,
+        silver,
+        leveledUp: res.leveledUp,
+        newLevel: res.newLevel,
+        droppedItem,
+        droppedEquipment,
+        capturedGeneral,
+        questUpdates: questUpdates.length > 0 ? questUpdates : undefined,
+      };
+      activeBattles.delete(characterId);
     }
-    const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
-    updatedChar = res.character;
-    battle.rewards = {
-      exp,
-      silver,
-      leveledUp: res.leveledUp,
-      newLevel: res.newLevel,
-      droppedItem,
-      droppedEquipment,
-      capturedGeneral,
-      questUpdates: questUpdates.length > 0 ? questUpdates : undefined,
-    };
-    activeBattles.delete(characterId);
   } else if (playersLeft === 0) {
     battle.status = 'defeat';
+    if (battle.arenaTargetId) {
+      recordArenaOutcome(characterId, battle.arenaTargetId, false);
+    }
     updatedChar = applyExpAndSilver(
       characterId,
       0,
       0,
-      Math.max(10, Math.round(mainUnit.maxHp * 0.25)),
+      Math.max(10, Math.round(mainUnit.maxHp * (battle.arenaTargetId ? 0.5 : 0.25))),
       mainUnit.mp,
     ).character;
     activeBattles.delete(characterId);
@@ -817,6 +1012,6 @@ export function performBattleAction(
 }
 
 function stripInternal(b: ActiveBattle): BattleState {
-  const { characterId: _c, enemyGroupId: _e, ...rest } = b;
+  const { characterId: _c, enemyGroupId: _e, arenaTargetId: _a, ...rest } = b;
   return rest;
 }

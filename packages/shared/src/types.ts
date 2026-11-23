@@ -179,6 +179,27 @@ export interface BankStateView {
   gold: number;
 }
 
+export interface ArenaStateView {
+  wins: number;
+  losses: number;
+  dailyRewardsLeft: number;
+}
+
+export interface MailView {
+  id: number;
+  senderId: number;
+  senderName: string;
+  recipientId: number;
+  recipientName: string;
+  subject: string;
+  body: string;
+  attachSilver: number;
+  attachGold: number;
+  claimed: boolean;
+  isRead: boolean;
+  createdAt: number;
+}
+
 export type MarketListingKind = 'item' | 'equipment' | 'general';
 
 export interface MarketListingView {
@@ -226,6 +247,8 @@ export interface CharacterView {
   inventory: InventoryItemView[];
   quests: CharacterQuestState;
   tower: TowerStateView;
+  arena: ArenaStateView;
+  unreadMailCount: number;
 }
 
 export interface GeneralView {

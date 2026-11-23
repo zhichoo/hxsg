@@ -14,6 +14,7 @@ import {
   type EquipmentQuality,
   type EquipmentSlot,
   type EquipmentView,
+  type MailView,
   type MarketListingKind,
   type MarketListingView,
   type RankEntry,
@@ -33,6 +34,7 @@ export type SubPanelType =
   | 'casino'
   | 'bank'
   | 'market'
+  | 'mail'
   | 'rank'
   | 'shop'
   | 'blacksmith'
@@ -102,7 +104,8 @@ const TITLES: Record<SubPanelType, string> = {
   casino: '许昌赌坊',
   bank: '许昌钱庄',
   market: '许昌集市',
-  rank: '排行榜',
+  mail: '飞鸽传书',
+  rank: '排行榜与擂台',
   shop: '回春药铺',
   blacksmith: '铁匠铺与马市',
   tavern: '许昌招贤馆',
@@ -139,6 +142,13 @@ export function SubPanels({
   const [sellKind, setSellKind] = useState<MarketListingKind>('equipment');
   const [sellCurrency, setSellCurrency] = useState<'silver' | 'gold'>('silver');
   const [sellPrice, setSellPrice] = useState<string>('500');
+  const [mailTab, setMailTab] = useState<'inbox' | 'compose'>('inbox');
+  const [mails, setMails] = useState<MailView[]>([]);
+  const [mailTo, setMailTo] = useState<string>('');
+  const [mailSubject, setMailSubject] = useState<string>('');
+  const [mailBody, setMailBody] = useState<string>('');
+  const [mailSilver, setMailSilver] = useState<string>('0');
+  const [mailGold, setMailGold] = useState<string>('0');
   const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
@@ -162,6 +172,12 @@ export function SubPanels({
       api
         .getMarketListings(realmId, marketTab === 'mine' ? 'all' : marketFilter)
         .then((r) => setListings(r.listings))
+        .catch((e: Error) => onNotify(e.message));
+    }
+    if (panel === 'mail') {
+      api
+        .getMails(realmId)
+        .then((r) => setMails(r.mails))
         .catch((e: Error) => onNotify(e.message));
     }
   }, [panel, realmId, rankSort, marketFilter, marketTab, onNotify]);
@@ -1003,9 +1019,17 @@ export function SubPanels({
             </div>
           )}
 
-          {/* RANKINGS (matches classic_5.jpg) */}
+          {/* RANKINGS & ASYNC ARENA */}
           {panel === 'rank' && (
             <div className="space-y-2.5">
+              <div className="p-2 bg-[#230629]/90 border border-[#e0b84e] text-xs flex items-center justify-between gap-2">
+                <span className="text-[#ffe478] font-bold">
+                  ⚔ 擂台战绩：{character.arena.wins}胜 {character.arena.losses}负
+                </span>
+                <span className="text-[#bfeec2] text-[11px]">
+                  今日有奖切磋剩余 {character.arena.dailyRewardsLeft}/5 次
+                </span>
+              </div>
               <div className="flex items-center gap-1.5 text-xs">
                 <span className="text-[#e8d0ee]">榜单：</span>
                 {(
@@ -1033,22 +1057,45 @@ export function SubPanels({
                 {rankings.map((r) => (
                   <div
                     key={r.id}
-                    className="py-1.5 px-1 flex items-center justify-between text-[13px]"
+                    className="py-1.5 px-1 flex items-center justify-between gap-1.5 text-[13px]"
                   >
-                    <div>
-                      <span className="text-[#ffd24d] font-bold mr-1.5">{r.rank}.</span>
+                    <div className="min-w-0 truncate">
+                      <span className="text-[#ffd24d] font-bold mr-1">{r.rank}.</span>
                       <span className="text-[#ff4f4f] font-bold hx-stroke">{r.name}</span>
-                      <span className="text-[#e5d2eb] text-xs ml-1.5">
-                        ({ROLE_CLASS_META[r.roleClass].label} · {r.level}级)
+                      <span className="text-[#e5d2eb] text-xs ml-1">
+                        ({ROLE_CLASS_META[r.roleClass].label}·{r.level}级)
                       </span>
                     </div>
-                    <span className="text-xs text-[#ffe685]">
-                      {rankSort === 'silver'
-                        ? `${r.silver}银`
-                        : rankSort === 'gold'
-                          ? `${r.gold}金`
-                          : `Lv.${r.level}`}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-xs text-[#ffe685]">
+                        {rankSort === 'silver'
+                          ? `${r.silver}银`
+                          : rankSort === 'gold'
+                            ? `${r.gold}金`
+                            : `Lv.${r.level}`}
+                      </span>
+                      {r.id !== character.id && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const res = await api.challengeArena(realmId, r.id);
+                              onEnterBattle?.(res.battle);
+                            } catch (err) {
+                              onNotify(err instanceof Error ? err.message : '发起切磋失败');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="hx-btn-red px-2 py-0.5 text-[11px]"
+                          title="挑战该玩家的离线镜像阵容"
+                        >
+                          切磋
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2478,6 +2525,238 @@ export function SubPanels({
                         你当前没有在售摊位，成交货款会自动存入「许昌钱庄」
                       </div>
                     )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* MAIL (飞鸽传书：收件箱/领附件/写信赠礼) */}
+          {panel === 'mail' && (() => {
+            const refreshMails = async () => {
+              const r = await api.getMails(realmId);
+              setMails(r.mails);
+            };
+            return (
+              <div className="space-y-2.5 text-xs">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setMailTab('inbox')}
+                    className={`py-1.5 font-bold border ${
+                      mailTab === 'inbox'
+                        ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                        : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                    }`}
+                  >
+                    收件箱 ({mails.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMailTab('compose')}
+                    className={`py-1.5 font-bold border ${
+                      mailTab === 'compose'
+                        ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                        : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                    }`}
+                  >
+                    ✉ 飞鸽写信
+                  </button>
+                </div>
+
+                {mailTab === 'inbox' && (
+                  <div className="space-y-2">
+                    {mails.map((m) => {
+                      const hasUnclaimed = !m.claimed && (m.attachSilver > 0 || m.attachGold > 0);
+                      return (
+                        <div
+                          key={m.id}
+                          className={`p-2 border space-y-1.5 ${
+                            !m.isRead
+                              ? 'bg-[#361142] border-[#ffe16b]'
+                              : 'bg-[#26072d]/90 border-[#8e6299]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-bold text-[#ffe678] truncate">
+                              {!m.isRead && (
+                                <span className="mr-1 px-1 bg-[#c41b1b] text-white text-[10px]">
+                                  新
+                                </span>
+                              )}
+                              {m.subject}
+                            </div>
+                            <span className="text-[10.5px] text-[#d6bce0] shrink-0">
+                              来自：{m.senderName}
+                            </span>
+                          </div>
+                          <div className="text-[#f5e7fa] leading-relaxed">{m.body}</div>
+                          {(m.attachSilver > 0 || m.attachGold > 0) && (
+                            <div className="text-[11px] text-[#9be8ff] font-bold">
+                              附件：
+                              {m.attachSilver > 0 ? `银两 ${m.attachSilver} ` : ''}
+                              {m.attachGold > 0 ? `金砖 ${m.attachGold}` : ''}
+                              {m.claimed ? '（已领取）' : ''}
+                            </div>
+                          )}
+                          <div className="flex justify-end gap-1.5 pt-0.5">
+                            {!m.isRead && !hasUnclaimed && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  try {
+                                    const res = await api.readMail(realmId, m.id);
+                                    onUpdateCharacter(res.character);
+                                    await refreshMails();
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                                className="px-2 py-0.5 bg-[#2a4a7a] border border-[#8cc8ff] text-white text-[11px]"
+                              >
+                                标为已读
+                              </button>
+                            )}
+                            {hasUnclaimed && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  try {
+                                    const res = await api.claimMail(realmId, m.id);
+                                    onUpdateCharacter(res.character);
+                                    onNotify(res.message);
+                                    await refreshMails();
+                                  } catch (err) {
+                                    onNotify(err instanceof Error ? err.message : '领取失败');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                                className="hx-btn-gold px-2.5 py-0.5 text-[11px]"
+                              >
+                                领取附件
+                              </button>
+                            )}
+                            {!hasUnclaimed && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  try {
+                                    const res = await api.deleteMail(realmId, m.id);
+                                    onUpdateCharacter(res.character);
+                                    onNotify(res.message);
+                                    await refreshMails();
+                                  } catch (err) {
+                                    onNotify(err instanceof Error ? err.message : '删除失败');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                                className="px-2 py-0.5 bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8] text-[11px]"
+                              >
+                                删除
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {mails.length === 0 && (
+                      <div className="text-center text-[#d8bedf] py-8">
+                        暂无飞鸽传书（集市成交、擂台切磋或好友来信会送达此处）
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {mailTab === 'compose' && (
+                  <div className="p-2.5 bg-[#2a082f] border border-[#b88b3d] space-y-2">
+                    <div className="text-[11px] text-[#ffe27a]">
+                      随身：银两 {character.silver} · 金砖 {character.gold}
+                    </div>
+                    <input
+                      type="text"
+                      value={mailTo}
+                      onChange={(e) => setMailTo(e.target.value)}
+                      placeholder="收件人角色名（同区）"
+                      className="w-full px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                    />
+                    <input
+                      type="text"
+                      value={mailSubject}
+                      onChange={(e) => setMailSubject(e.target.value)}
+                      placeholder="信件标题（选填）"
+                      className="w-full px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                    />
+                    <textarea
+                      rows={3}
+                      value={mailBody}
+                      onChange={(e) => setMailBody(e.target.value)}
+                      placeholder="写下想对好友说的话..."
+                      className="w-full px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="space-y-0.5">
+                        <span className="text-[11px] text-[#e7cfbb]">附寄银两（选填）</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={mailSilver}
+                          onChange={(e) => setMailSilver(e.target.value)}
+                          className="w-full px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                        />
+                      </label>
+                      <label className="space-y-0.5">
+                        <span className="text-[11px] text-[#e7cfbb]">附寄金砖（选填）</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={mailGold}
+                          onChange={(e) => setMailGold(e.target.value)}
+                          className="w-full px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        disabled={busy || !mailTo.trim() || !mailBody.trim()}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.sendMail({
+                              realmId,
+                              recipientName: mailTo,
+                              subject: mailSubject || '飞鸽传书',
+                              body: mailBody,
+                              attachSilver: Number(mailSilver) || 0,
+                              attachGold: Number(mailGold) || 0,
+                            });
+                            onUpdateCharacter(res.character);
+                            onNotify(res.message);
+                            setMailTo('');
+                            setMailSubject('');
+                            setMailBody('');
+                            setMailSilver('0');
+                            setMailGold('0');
+                            setMailTab('inbox');
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '发送失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="hx-btn-gold px-4 py-1.5 text-xs"
+                      >
+                        放飞信鸽
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
