@@ -859,7 +859,7 @@ export function performBattleAction(
       let enrageMult = 1;
       if (towerFloor >= 45 || battle.enemyGroupId === 'boss_simayi') {
         resPen = 32;
-        if (battle.round > 8) enrageMult = 1 + (battle.round - 8) * 0.28;
+        if (battle.round > 9) enrageMult = 1 + (battle.round - 9) * 0.26;
       } else if (
         towerFloor >= 35 ||
         battle.enemyGroupId === 'boss_luxun' ||
@@ -873,7 +873,7 @@ export function performBattleAction(
         battle.enemyGroupId === 'boss_caoren' ||
         battle.enemyGroupId === 'boss_zhangren'
       ) {
-        resPen = 14;
+        resPen = towerFloor === 20 ? 8 : 14;
         if (battle.round > 10) enrageMult = 1 + (battle.round - 10) * 0.2;
       } else if (battle.enemyGroupId.startsWith('world_boss:')) {
         resPen = actor.level >= 25 ? 18 : 10;

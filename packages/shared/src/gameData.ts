@@ -1535,10 +1535,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 8200,
     capturableTemplateId: 'machao',
     enemies: [
-      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 5800, mp: 200, atk: 435, spd: 112 },
-      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 7800, mp: 240, atk: 480, spd: 122 },
-      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 4800, mp: 320, atk: 410, spd: 118 },
-      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 4650, mp: 360, atk: 428, spd: 115 },
+      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 6800, mp: 200, atk: 485, spd: 112 },
+      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 240, atk: 535, spd: 122 },
+      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 5600, mp: 320, atk: 460, spd: 118 },
+      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 5500, mp: 360, atk: 475, spd: 115 },
     ],
   },
   yiling_wujun: {
@@ -1565,10 +1565,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 13500,
     capturableTemplateId: 'zhouyu',
     enemies: [
-      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7600, mp: 220, atk: 545, spd: 138 },
-      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 9600, mp: 420, atk: 580, spd: 152 },
-      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7200, mp: 200, atk: 525, spd: 134 },
-      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 6400, mp: 400, atk: 542, spd: 144 },
+      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 220, atk: 615, spd: 138 },
+      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 11800, mp: 420, atk: 660, spd: 152 },
+      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 8800, mp: 200, atk: 595, spd: 134 },
+      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 7800, mp: 400, atk: 615, spd: 144 },
     ],
   },
   wuzhang_sima: {
@@ -1595,10 +1595,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 22000,
     capturableTemplateId: 'zhugeliang',
     enemies: [
-      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9600, mp: 260, atk: 650, spd: 162 },
-      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 12800, mp: 520, atk: 695, spd: 178 },
-      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 260, atk: 638, spd: 166 },
-      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 8400, mp: 460, atk: 665, spd: 170 },
+      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 12400, mp: 260, atk: 745, spd: 162 },
+      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 16800, mp: 520, atk: 805, spd: 178 },
+      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 12000, mp: 260, atk: 730, spd: 166 },
+      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 11000, mp: 460, atk: 760, spd: 170 },
     ],
   },
 };
@@ -1678,20 +1678,16 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
   let atkBase: number;
   let spdBase: number;
   if (f <= 20) {
-    // Smooth curve through F20 (F20 combined HP ~16.7k, Lv Bu peak ATK ~408 — fair for Lv.20 T3/T4, hard for T1)
-    const lateBoost = f > 12 ? (f - 12) * (f - 12) * 4.5 : 0;
-    const lateAtkBoost = f > 12 ? (f - 12) * 5.5 : 0;
-    hpBase = Math.round(70 + f * 58 + f * f * 4.9 + lateBoost);
-    atkBase = Math.round(14 + f * 7.8 + f * f * 0.22 + lateAtkBoost);
-    spdBase = Math.round(14 + f * 2.6);
+    // Smooth curve through F20 (F20 combined HP ~11.1k, Lv Bu peak ATK ~278 — winnable by Lv.20 T3/T4, blocks T1)
+    hpBase = Math.round(70 + f * 48 + f * f * 3.2);
+    atkBase = Math.round(14 + f * 6.8 + f * f * 0.14);
+    spdBase = Math.round(14 + f * 2.4);
   } else {
-    // Smooth continuation from Floor 20 up to Floor 50 (F45-50 tuned for 1转 + 2转 generals)
+    // Smooth ramp F21 -> F50 (F45 ~57.5k HP, F50 ~71k HP — blocks T1 at 0%, T3/T4 1转 clear F50 in 7-10 rounds!)
     const over = f - 20;
-    const apexHp = f > 40 ? (f - 40) * 260 : 0;
-    const apexAtk = f > 40 ? (f - 40) * 8.5 : 0;
-    hpBase = Math.round(3480 + over * 220 + over * over * 3.6 + apexHp);
-    atkBase = Math.round(302 + over * 10.2 + apexAtk);
-    spdBase = Math.round(66 + over * 3.6);
+    hpBase = Math.round(2310 + over * 250 + over * over * 2.9);
+    atkBase = Math.round(206 + over * 14.0);
+    spdBase = Math.round(62 + over * 3.6);
   }
 
   let enemies: EnemyGroupDef['enemies'];
@@ -1757,10 +1753,10 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
     ];
   } else if (f === 50) {
     enemies = [
-      { name: '魔神·吕布', level: lv + 3, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.85), mp: 320, atk: Math.round(atkBase * 1.42), spd: spdBase + 18 },
-      { name: '倾城·貂蝉', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2n', hp: Math.round(hpBase * 1.25), mp: 460, atk: Math.round(atkBase * 1.22), spd: spdBase + 22 },
-      { name: '仙人·左慈', level: lv + 2, roleClass: 'yiren', spriteKey: 'r3', hp: Math.round(hpBase * 1.35), mp: 500, atk: Math.round(atkBase * 1.32), spd: spdBase + 15 },
-      { name: '陷阵统领·高顺', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.45), mp: 220, atk: Math.round(atkBase * 1.25), spd: spdBase + 8 },
+      { name: '魔神·吕布', level: lv + 3, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.65), mp: 320, atk: Math.round(atkBase * 1.3), spd: spdBase + 16 },
+      { name: '倾城·貂蝉', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2n', hp: Math.round(hpBase * 1.15), mp: 460, atk: Math.round(atkBase * 1.16), spd: spdBase + 20 },
+      { name: '仙人·左慈', level: lv + 2, roleClass: 'yiren', spriteKey: 'r3', hp: Math.round(hpBase * 1.25), mp: 500, atk: Math.round(atkBase * 1.24), spd: spdBase + 14 },
+      { name: '陷阵统领·高顺', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.32), mp: 220, atk: Math.round(atkBase * 1.18), spd: spdBase + 8 },
     ];
   } else {
     const count = f >= 12 ? 4 : 3;
