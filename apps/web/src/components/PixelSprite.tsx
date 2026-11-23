@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { loadAssetImage } from '../platform/host';
 
 interface PixelSpriteProps {
   spriteKey: string;
@@ -27,18 +28,10 @@ export function PixelSprite({
     let cancelled = false;
     let rafId = 0;
 
-    const load = (src: string) =>
-      new Promise<HTMLImageElement | null>((resolve) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = () => resolve(null);
-        img.src = src;
-      });
-
     Promise.all([
-      load(`/assets/hxsg/${spriteKey}_h.png`),
-      load(`/assets/hxsg/${spriteKey}_b.png`),
-      load(`/assets/hxsg/${spriteKey}_f.png`),
+      loadAssetImage(`${spriteKey}_h.png`),
+      loadAssetImage(`${spriteKey}_b.png`),
+      loadAssetImage(`${spriteKey}_f.png`),
     ]).then(([head, body, legs]) => {
       if (cancelled) return;
       const draw = (now: number) => {

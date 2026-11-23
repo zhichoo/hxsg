@@ -4,11 +4,7 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyRequest } from 'fastify';
-import {
-  REALMS,
-  type Gender,
-  type RoleClass,
-} from '@hxsg/shared';
+import { REALMS, type Gender, type RoleClass } from '@hxsg/shared';
 import { loginAccount, registerAccount, verifyToken, type AuthPayload } from './auth.js';
 import {
   getActiveBattle,
@@ -33,6 +29,12 @@ import {
   useInventoryItem,
 } from './gameService.js';
 import {
+  isJwtFormat,
+  mappConfig,
+  resolvePlatformAccount,
+  verifyMappHttpRequest,
+} from './mappAuth.js';
+import {
   attachSocketServer,
   broadcastSystemMessage,
   getMapOnlinePlayers,
@@ -45,20 +47,68 @@ const PORT = Number(process.env.PORT || 3001);
 const HOST = process.env.HOST || '0.0.0.0';
 const GM_PASSCODE = process.env.HXSG_GM_CODE || 'hxsg888';
 
-const app = Fastify({ logger: { level: 'info' } });
+const app = Fastify({
+  logger: {
+    level: 'info',
+    redact: ['req.headers.authorization'],
+  },
+});
 
-await app.register(cors, { origin: true, credentials: true });
+const explicitCorsOrigins = (process.env.HXSG_CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+if (mappConfig.issuerOrigin && !explicitCorsOrigins.includes(mappConfig.issuerOrigin)) {
+  explicitCorsOrigins.push(mappConfig.issuerOrigin);
+}
 
-function requireAuth(req: FastifyRequest): AuthPayload {
+await app.register(cors, {
+  origin: process.env.HXSG_CORS_STRICT === '1' && explicitCorsOrigins.length > 0
+    ? explicitCorsOrigins
+    : true,
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Authorization', 'Content-Type'],
+  credentials: false,
+});
+
+function unauthorizedError(message = '未登录或登录已过期'): Error & { statusCode: number } {
+  const err = new Error(message) as Error & { statusCode: number };
+  err.statusCode = 401;
+  return err;
+}
+
+async function requireAuth(req: FastifyRequest): Promise<AuthPayload> {
   const header = req.headers.authorization;
-  const token = header?.startsWith('Bearer ') ? header.slice(7) : undefined;
+  if (!header || !header.startsWith('Bearer ')) {
+    throw unauthorizedError();
+  }
+  const token = header.slice(7);
+
+  // Discourse Mini App platform ES256 JWT (3 segments)
+  if (isJwtFormat(token)) {
+    try {
+      const identity = await verifyMappHttpRequest(req.raw);
+      return resolvePlatformAccount(identity);
+    } catch {
+      throw unauthorizedError('平台身份验证失败，请刷新页面重试');
+    }
+  }
+
+  // Standalone Web HMAC token (2 segments)
   const auth = verifyToken(token);
   if (!auth) {
-    const err = new Error('未登录或登录已过期') as Error & { statusCode?: number };
-    err.statusCode = 401;
-    throw err;
+    throw unauthorizedError();
   }
   return auth;
+}
+
+/**
+ * For auth:"auto" endpoints: anonymous requests without Authorization are allowed,
+ * while requests carrying an invalid Authorization/JWT MUST still be rejected (401).
+ */
+async function verifyOptionalAuth(req: FastifyRequest): Promise<AuthPayload | null> {
+  if (!req.headers.authorization) return null;
+  return requireAuth(req);
 }
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
@@ -66,9 +116,15 @@ app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   reply.status(status).send({ error: err.message || '请求失败' });
 });
 
-app.get('/api/health', async () => ({ ok: true, dbPath }));
+app.get('/api/health', async () => ({
+  ok: true,
+  dbPath,
+  mappEnabled: mappConfig.enabled,
+  mappChannel: mappConfig.enabled ? mappConfig.channel : null,
+}));
 
-app.get('/api/realms', async () => {
+app.get('/api/realms', async (req) => {
+  await verifyOptionalAuth(req);
   return REALMS.map((r) => ({
     ...r,
     onlineCount: getOnlineCountByRealm(r.id),
@@ -86,13 +142,19 @@ app.post('/api/auth/login', async (req) => {
 });
 
 app.get('/api/me', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const realmId = ((req.query as { realmId?: string }).realmId || 'dingjunshan').trim();
   const character = getCharacterByAccountAndRealm(auth.accountId, realmId);
   const activeBattle = character ? getActiveBattle(character.id) : null;
   const mapPlayers = character ? getMapOnlinePlayers(realmId, character.mapId) : [];
   return {
-    account: { accountId: auth.accountId, username: auth.username, isGm: auth.isGm },
+    account: {
+      accountId: auth.accountId,
+      username: auth.username,
+      isGm: auth.isGm,
+      authSource: auth.authSource ?? 'local',
+      trustLevel: auth.trustLevel,
+    },
     character,
     activeBattle,
     mapPlayers,
@@ -100,7 +162,7 @@ app.get('/api/me', async (req) => {
 });
 
 app.post('/api/character', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as {
     realmId?: string;
     name?: string;
@@ -123,7 +185,7 @@ app.post('/api/character', async (req) => {
 });
 
 app.post('/api/character/allocate-stats', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as {
     realmId?: string;
     vit?: number;
@@ -137,7 +199,7 @@ app.post('/api/character/allocate-stats', async (req) => {
 });
 
 app.post('/api/character/reset-stats', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -145,7 +207,7 @@ app.post('/api/character/reset-stats', async (req) => {
 });
 
 app.post('/api/character/allocate-resist', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as {
     realmId?: string;
     phys?: number;
@@ -160,7 +222,7 @@ app.post('/api/character/allocate-resist', async (req) => {
 });
 
 app.post('/api/map/move', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; targetMapId?: string };
   const realmId = body.realmId || 'dingjunshan';
   const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
@@ -175,7 +237,7 @@ app.post('/api/map/move', async (req) => {
 });
 
 app.post('/api/facility/inn', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -183,7 +245,7 @@ app.post('/api/facility/inn', async (req) => {
 });
 
 app.post('/api/facility/shop/buy', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; itemId?: string; quantity?: number };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -191,7 +253,7 @@ app.post('/api/facility/shop/buy', async (req) => {
 });
 
 app.post('/api/inventory/use', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; itemId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -199,7 +261,7 @@ app.post('/api/inventory/use', async (req) => {
 });
 
 app.post('/api/generals/recruit', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; templateId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -207,7 +269,7 @@ app.post('/api/generals/recruit', async (req) => {
 });
 
 app.post('/api/generals/slot', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; generalId?: number; slot?: number | null };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -217,6 +279,7 @@ app.post('/api/generals/slot', async (req) => {
 });
 
 app.get('/api/rankings', async (req) => {
+  await verifyOptionalAuth(req);
   const q = req.query as { realmId?: string; sort?: 'level' | 'silver' | 'gold' };
   return {
     rankings: getRankings(q.realmId || 'dingjunshan', q.sort || 'level'),
@@ -224,7 +287,7 @@ app.get('/api/rankings', async (req) => {
 });
 
 app.post('/api/battle/start', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; enemyGroupId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -237,7 +300,7 @@ app.post('/api/battle/start', async (req) => {
 });
 
 app.post('/api/battle/action', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as PlayerBattleCommand & { realmId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
@@ -245,7 +308,7 @@ app.post('/api/battle/action', async (req) => {
 });
 
 app.post('/api/gm/grant', async (req) => {
-  const auth = requireAuth(req);
+  const auth = await requireAuth(req);
   const body = req.body as {
     realmId?: string;
     passcode?: string;
@@ -279,7 +342,7 @@ if (fs.existsSync(webDistDir)) {
     immutable: false,
   });
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/') || req.url.startsWith('/socket.io')) {
+    if (req.url.startsWith('/api/') || req.url.startsWith('/ws')) {
       return reply.status(404).send({ error: 'Not Found' });
     }
     return reply.sendFile('index.html');
@@ -289,4 +352,6 @@ if (fs.existsSync(webDistDir)) {
 attachSocketServer(app.server);
 
 await app.listen({ port: PORT, host: HOST });
-app.log.info(`HXSG Classic Server listening on http://${HOST}:${PORT}`);
+app.log.info(
+  `HXSG Classic Server listening on http://${HOST}:${PORT} (mapp=${mappConfig.enabled ? mappConfig.channel : 'disabled'})`,
+);

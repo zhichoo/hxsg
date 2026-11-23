@@ -7,41 +7,67 @@ import type {
   RoleClass,
   ServerRealm,
 } from '@hxsg/shared';
+import { isMappRuntime, platformHttpRequest, platformStorage } from './platform/host';
 
 const TOKEN_KEY = 'hxsg_token';
 const REALM_KEY = 'hxsg_realm';
 
+let cachedToken: string | null = (() => {
+  if (isMappRuntime()) return null;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+})();
+
+let cachedRealm: string = (() => {
+  if (isMappRuntime()) return 'dingjunshan';
+  try {
+    return window.localStorage.getItem(REALM_KEY) || 'dingjunshan';
+  } catch {
+    return 'dingjunshan';
+  }
+})();
+
 export function getSavedToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return cachedToken;
 }
 
 export function setSavedToken(token: string | null) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
+  cachedToken = token;
+  if (token) void platformStorage.setItem(TOKEN_KEY, token);
+  else void platformStorage.removeItem(TOKEN_KEY);
 }
 
 export function getSavedRealm(): string {
-  return localStorage.getItem(REALM_KEY) || 'dingjunshan';
+  return cachedRealm;
+}
+
+export async function loadSavedRealm(): Promise<string> {
+  const val = await platformStorage.getItem(REALM_KEY);
+  if (val) cachedRealm = val;
+  return cachedRealm;
 }
 
 export function setSavedRealm(realmId: string) {
-  localStorage.setItem(REALM_KEY, realmId);
+  cachedRealm = realmId;
+  void platformStorage.setItem(REALM_KEY, realmId);
 }
 
-async function request<T>(url: string, opts: RequestInit = {}): Promise<T> {
-  const token = getSavedToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(opts.headers as Record<string, string> | undefined),
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-
-  const res = await fetch(url, { ...opts, headers });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error((data as { error?: string }).error || `请求失败 (${res.status})`);
-  }
-  return data as T;
+function callEndpoint<T>(
+  endpointName: string,
+  webPath: string,
+  opts: {
+    method?: 'GET' | 'POST';
+    query?: Record<string, string>;
+    body?: unknown;
+  } = {},
+): Promise<T> {
+  return platformHttpRequest<T>(endpointName, webPath, {
+    ...opts,
+    token: cachedToken,
+  });
 }
 
 export interface RealmWithOnline extends ServerRealm {
@@ -56,34 +82,43 @@ export interface AuthResponse {
 }
 
 export interface MeResponse {
-  account: { accountId: number; username: string; isGm: boolean };
+  account: {
+    accountId: number;
+    username: string;
+    isGm: boolean;
+    authSource?: 'local' | 'platform';
+    trustLevel?: number;
+  };
   character: CharacterView | null;
   activeBattle: BattleState | null;
   mapPlayers: OnlinePlayerSummary[];
 }
 
 export const api = {
-  getRealms: () => request<RealmWithOnline[]>('/api/realms'),
+  getRealms: () => callEndpoint<RealmWithOnline[]>('realms', '/api/realms'),
   register: (username: string, password: string) =>
-    request<AuthResponse>('/api/auth/register', {
+    callEndpoint<AuthResponse>('authRegister', '/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: { username, password },
     }),
   login: (username: string, password: string) =>
-    request<AuthResponse>('/api/auth/login', {
+    callEndpoint<AuthResponse>('authLogin', '/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: { username, password },
     }),
-  me: (realmId: string) => request<MeResponse>(`/api/me?realmId=${encodeURIComponent(realmId)}`),
+  me: (realmId: string) =>
+    callEndpoint<MeResponse>('me', '/api/me', {
+      query: { realmId },
+    }),
   createCharacter: (payload: {
     realmId: string;
     name: string;
     roleClass: RoleClass;
     gender: Gender;
   }) =>
-    request<{ character: CharacterView }>('/api/character', {
+    callEndpoint<{ character: CharacterView }>('characterCreate', '/api/character', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: payload,
     }),
   allocateStats: (payload: {
     realmId: string;
@@ -92,15 +127,23 @@ export const api = {
     int?: number;
     agi?: number;
   }) =>
-    request<{ character: CharacterView }>('/api/character/allocate-stats', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    callEndpoint<{ character: CharacterView }>(
+      'characterAllocateStats',
+      '/api/character/allocate-stats',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
   resetStats: (realmId: string) =>
-    request<{ character: CharacterView }>('/api/character/reset-stats', {
-      method: 'POST',
-      body: JSON.stringify({ realmId }),
-    }),
+    callEndpoint<{ character: CharacterView }>(
+      'characterResetStats',
+      '/api/character/reset-stats',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
   allocateResist: (payload: {
     realmId: string;
     phys?: number;
@@ -109,48 +152,56 @@ export const api = {
     trap?: number;
     magic?: number;
   }) =>
-    request<{ character: CharacterView }>('/api/character/allocate-resist', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    callEndpoint<{ character: CharacterView }>(
+      'characterAllocateResist',
+      '/api/character/allocate-resist',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
   moveMap: (realmId: string, targetMapId: string) =>
-    request<{ character: CharacterView; mapPlayers: OnlinePlayerSummary[] }>('/api/map/move', {
-      method: 'POST',
-      body: JSON.stringify({ realmId, targetMapId }),
-    }),
+    callEndpoint<{ character: CharacterView; mapPlayers: OnlinePlayerSummary[] }>(
+      'mapMove',
+      '/api/map/move',
+      {
+        method: 'POST',
+        body: { realmId, targetMapId },
+      },
+    ),
   restInn: (realmId: string) =>
-    request<{ character: CharacterView }>('/api/facility/inn', {
+    callEndpoint<{ character: CharacterView }>('facilityInn', '/api/facility/inn', {
       method: 'POST',
-      body: JSON.stringify({ realmId }),
+      body: { realmId },
     }),
   buyItem: (realmId: string, itemId: string, quantity = 1) =>
-    request<{ character: CharacterView }>('/api/facility/shop/buy', {
+    callEndpoint<{ character: CharacterView }>('shopBuy', '/api/facility/shop/buy', {
       method: 'POST',
-      body: JSON.stringify({ realmId, itemId, quantity }),
+      body: { realmId, itemId, quantity },
     }),
   useItem: (realmId: string, itemId: string) =>
-    request<{ character: CharacterView }>('/api/inventory/use', {
+    callEndpoint<{ character: CharacterView }>('inventoryUse', '/api/inventory/use', {
       method: 'POST',
-      body: JSON.stringify({ realmId, itemId }),
+      body: { realmId, itemId },
     }),
   recruitGeneral: (realmId: string, templateId: string) =>
-    request<{ character: CharacterView }>('/api/generals/recruit', {
+    callEndpoint<{ character: CharacterView }>('generalsRecruit', '/api/generals/recruit', {
       method: 'POST',
-      body: JSON.stringify({ realmId, templateId }),
+      body: { realmId, templateId },
     }),
   setGeneralSlot: (realmId: string, generalId: number, slot: number | null) =>
-    request<{ character: CharacterView }>('/api/generals/slot', {
+    callEndpoint<{ character: CharacterView }>('generalsSlot', '/api/generals/slot', {
       method: 'POST',
-      body: JSON.stringify({ realmId, generalId, slot }),
+      body: { realmId, generalId, slot },
     }),
   getRankings: (realmId: string, sort: 'level' | 'silver' | 'gold' = 'level') =>
-    request<{ rankings: RankEntry[] }>(
-      `/api/rankings?realmId=${encodeURIComponent(realmId)}&sort=${sort}`,
-    ),
+    callEndpoint<{ rankings: RankEntry[] }>('rankings', '/api/rankings', {
+      query: { realmId, sort },
+    }),
   startBattle: (realmId: string, enemyGroupId: string) =>
-    request<{ battle: BattleState }>('/api/battle/start', {
+    callEndpoint<{ battle: BattleState }>('battleStart', '/api/battle/start', {
       method: 'POST',
-      body: JSON.stringify({ realmId, enemyGroupId }),
+      body: { realmId, enemyGroupId },
     }),
   battleAction: (payload: {
     realmId: string;
@@ -159,10 +210,14 @@ export const api = {
     skillId?: string;
     itemId?: string;
   }) =>
-    request<{ battle: BattleState; character: CharacterView }>('/api/battle/action', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    }),
+    callEndpoint<{ battle: BattleState; character: CharacterView }>(
+      'battleAction',
+      '/api/battle/action',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
   gmGrant: (payload: {
     realmId: string;
     passcode?: string;
@@ -173,8 +228,8 @@ export const api = {
     grantGeneralId?: string;
     announce?: string;
   }) =>
-    request<{ character: CharacterView }>('/api/gm/grant', {
+    callEndpoint<{ character: CharacterView }>('gmGrant', '/api/gm/grant', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: payload,
     }),
 };

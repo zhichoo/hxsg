@@ -9,6 +9,8 @@
     "dev:server": "pnpm --filter @hxsg/server dev",
     "dev:web": "pnpm --filter @hxsg/web dev",
     "build": "pnpm --filter @hxsg/shared build && pnpm --filter @hxsg/server build && pnpm --filter @hxsg/web build",
+    "build:mapp": "pnpm --filter @hxsg/shared build && pnpm --filter @hxsg/web build:mapp",
+    "build:mapp:debug": "pnpm --filter @hxsg/shared build && pnpm --filter @hxsg/web build:mapp:debug",
     "typecheck": "pnpm -r typecheck"
   },
   "engines": {

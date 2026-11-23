@@ -1,30 +1,55 @@
-import type { Server as HttpServer } from 'node:http';
-import { Server as SocketIOServer } from 'socket.io';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
+import { WebSocket, WebSocketServer } from 'ws';
 import {
   ROLE_CLASS_META,
   type ChatChannel,
   type ChatMessage,
   type OnlinePlayerSummary,
 } from '@hxsg/shared';
-import { verifyToken } from './auth.js';
+import { verifyToken, type AuthPayload } from './auth.js';
 import { db } from './db.js';
 import { getCharacterByAccountAndRealm } from './gameService.js';
+import { resolvePlatformAccount, verifyMappWsUpgrade } from './mappAuth.js';
 
 interface ConnectedPlayer {
-  socketId: string;
+  ws: WebSocket;
   accountId: number;
   characterId: number;
   realmId: string;
   mapId: string;
   summary: OnlinePlayerSummary;
+  alive: boolean;
 }
 
-const onlineBySocket = new Map<string, ConnectedPlayer>();
-let ioInstance: SocketIOServer | null = null;
+const onlineBySocket = new Map<WebSocket, ConnectedPlayer>();
 
 function formatHHMM(ts: number): string {
   const d = new Date(ts);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function sendJson(ws: WebSocket, payload: unknown) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(payload));
+  }
+}
+
+function broadcastToRealm(realmId: string, payload: unknown) {
+  const encoded = JSON.stringify(payload);
+  for (const p of onlineBySocket.values()) {
+    if (p.realmId === realmId && p.ws.readyState === WebSocket.OPEN) {
+      p.ws.send(encoded);
+    }
+  }
+}
+
+function broadcastToMap(realmId: string, mapId: string, payload: unknown) {
+  const encoded = JSON.stringify(payload);
+  for (const p of onlineBySocket.values()) {
+    if (p.realmId === realmId && p.mapId === mapId && p.ws.readyState === WebSocket.OPEN) {
+      p.ws.send(encoded);
+    }
+  }
 }
 
 export function getOnlineCountByRealm(realmId: string): number {
@@ -45,7 +70,11 @@ export function getMapOnlinePlayers(realmId: string, mapId: string): OnlinePlaye
   return Array.from(seen.values());
 }
 
-export function broadcastSystemMessage(realmId: string, content: string, channel: ChatChannel = 'shi') {
+export function broadcastSystemMessage(
+  realmId: string,
+  content: string,
+  channel: ChatChannel = 'shi',
+) {
   const now = Date.now();
   const info = db
     .prepare(
@@ -62,146 +91,221 @@ export function broadcastSystemMessage(realmId: string, content: string, channel
     time: formatHHMM(now),
     timestamp: now,
   };
-  ioInstance?.to(`realm:${realmId}`).emit('chat:message', msg);
+  broadcastToRealm(realmId, { type: 'chat:message', data: msg });
 }
 
 export function syncPlayerMap(characterId: number, realmId: string, newMapId: string) {
-  if (!ioInstance) return;
+  const affectedMaps = new Set<string>();
   for (const p of onlineBySocket.values()) {
     if (p.characterId === characterId && p.realmId === realmId) {
       const oldMap = p.mapId;
       p.mapId = newMapId;
       p.summary.mapId = newMapId;
-      const sock = ioInstance.sockets.sockets.get(p.socketId);
-      if (sock) {
-        sock.leave(`map:${realmId}:${oldMap}`);
-        sock.join(`map:${realmId}:${newMapId}`);
-      }
-      ioInstance
-        .to(`map:${realmId}:${oldMap}`)
-        .emit('map:players', getMapOnlinePlayers(realmId, oldMap));
-      ioInstance
-        .to(`map:${realmId}:${newMapId}`)
-        .emit('map:players', getMapOnlinePlayers(realmId, newMapId));
+      affectedMaps.add(oldMap);
+      affectedMaps.add(newMapId);
     }
+  }
+  for (const mapId of affectedMaps) {
+    broadcastToMap(realmId, mapId, {
+      type: 'map:players',
+      data: getMapOnlinePlayers(realmId, mapId),
+    });
   }
 }
 
+function rejectUpgrade(socket: import('node:stream').Duplex, status: number, text: string) {
+  socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+async function authenticateUpgrade(
+  req: IncomingMessage,
+): Promise<{ auth: AuthPayload; realmId: string } | null> {
+  const rawUrl = req.url || '';
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl, 'http://localhost');
+  } catch {
+    return null;
+  }
+
+  const realmId = (parsed.searchParams.get('realmId') || 'dingjunshan').trim();
+
+  // Discourse Mini App platform JWT handshake (sole mini_app_token query)
+  if (parsed.searchParams.has('mini_app_token')) {
+    try {
+      const identity = await verifyMappWsUpgrade(req);
+      return { auth: resolvePlatformAccount(identity), realmId };
+    } catch {
+      return null;
+    }
+  }
+
+  // Standalone Web token handshake
+  const localToken = parsed.searchParams.get('token');
+  const auth = verifyToken(localToken);
+  if (!auth) return null;
+  return { auth, realmId };
+}
+
 export function attachSocketServer(httpServer: HttpServer) {
-  const io = new SocketIOServer(httpServer, {
-    cors: { origin: true, credentials: true },
-  });
-  ioInstance = io;
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
 
-  io.on('connection', (socket) => {
-    const token = socket.handshake.auth?.token as string | undefined;
-    const realmId = (socket.handshake.auth?.realmId as string | undefined) || 'dingjunshan';
-    const auth = verifyToken(token);
-    if (!auth) {
-      socket.disconnect(true);
-      return;
-    }
-
-    const ch = getCharacterByAccountAndRealm(auth.accountId, realmId);
-    if (!ch) {
-      socket.disconnect(true);
-      return;
-    }
-
-    const meta = ROLE_CLASS_META[ch.roleClass];
-    const sprite = ch.gender === 'female' ? meta.femaleSprite : meta.maleSprite;
-    const player: ConnectedPlayer = {
-      socketId: socket.id,
-      accountId: auth.accountId,
-      characterId: ch.id,
-      realmId,
-      mapId: ch.mapId,
-      summary: {
-        id: ch.id,
-        name: ch.name,
-        level: ch.level,
-        roleClass: ch.roleClass,
-        gender: ch.gender,
-        mapId: ch.mapId,
-        avatarSprite: `${sprite}_h.png`,
-      },
-    };
-
-    onlineBySocket.set(socket.id, player);
-    socket.join(`realm:${realmId}`);
-    socket.join(`map:${realmId}:${ch.mapId}`);
-
-    // Send recent chat history
-    const historyRows = db
-      .prepare(
-        `SELECT id, channel, sender_id, sender_name, is_system, content, created_at
-         FROM chat_messages WHERE realm_id = ? ORDER BY created_at DESC LIMIT 40`,
-      )
-      .all(realmId) as unknown as Array<{
-      id: number;
-      channel: ChatChannel;
-      sender_id: number;
-      sender_name: string;
-      is_system: number;
-      content: string;
-      created_at: number;
-    }>;
-
-    const history: ChatMessage[] = historyRows.reverse().map((r) => ({
-      id: String(r.id),
-      channel: r.channel,
-      senderId: r.sender_id,
-      senderName: r.sender_name,
-      isSystem: Boolean(r.is_system),
-      content: r.content,
-      time: formatHHMM(r.created_at),
-      timestamp: r.created_at,
-    }));
-    socket.emit('chat:history', history);
-
-    // Broadcast updated map players
-    io.to(`map:${realmId}:${ch.mapId}`).emit(
-      'map:players',
-      getMapOnlinePlayers(realmId, ch.mapId),
-    );
-
-    socket.on('chat:send', (payload: { channel: ChatChannel; content: string }) => {
-      const content = String(payload?.content ?? '').trim().slice(0, 120);
-      if (!content) return;
-      const channel: ChatChannel = ['qu', 'pai', 'shang', 'shi'].includes(payload?.channel)
-        ? payload.channel
-        : 'qu';
-      const now = Date.now();
-      const info = db
-        .prepare(
-          `INSERT INTO chat_messages (realm_id, channel, sender_id, sender_name, is_system, content, created_at)
-           VALUES (?, ?, ?, ?, 0, ?, ?)`,
-        )
-        .run(realmId, channel, ch.id, ch.name, content, now);
-
-      const msg: ChatMessage = {
-        id: String(info.lastInsertRowid),
-        channel,
-        senderId: ch.id,
-        senderName: ch.name,
-        content,
-        time: formatHHMM(now),
-        timestamp: now,
-      };
-      io.to(`realm:${realmId}`).emit('chat:message', msg);
-    });
-
-    socket.on('disconnect', () => {
-      const existing = onlineBySocket.get(socket.id);
-      if (existing) {
-        onlineBySocket.delete(socket.id);
-        io.to(`map:${existing.realmId}:${existing.mapId}`).emit(
-          'map:players',
-          getMapOnlinePlayers(existing.realmId, existing.mapId),
-        );
+  // Clean up dead connections periodically
+  const heartbeat = setInterval(() => {
+    for (const [ws, player] of onlineBySocket.entries()) {
+      if (!player.alive) {
+        ws.terminate();
+        continue;
       }
-    });
+      player.alive = false;
+      ws.ping();
+    }
+  }, 30_000);
+  heartbeat.unref();
+
+  httpServer.on('upgrade', (req, socket, head) => {
+    const pathname = (req.url || '').split('?')[0];
+    if (pathname !== '/ws') {
+      rejectUpgrade(socket, 404, 'Not Found');
+      return;
+    }
+
+    void (async () => {
+      const result = await authenticateUpgrade(req);
+      if (!result) {
+        rejectUpgrade(socket, 401, 'Unauthorized');
+        return;
+      }
+
+      const { auth, realmId } = result;
+      const ch = getCharacterByAccountAndRealm(auth.accountId, realmId);
+      if (!ch) {
+        rejectUpgrade(socket, 403, 'Forbidden');
+        return;
+      }
+
+      wss.handleUpgrade(req, socket, head, (ws) => {
+        const meta = ROLE_CLASS_META[ch.roleClass];
+        const sprite = ch.gender === 'female' ? meta.femaleSprite : meta.maleSprite;
+        const player: ConnectedPlayer = {
+          ws,
+          accountId: auth.accountId,
+          characterId: ch.id,
+          realmId,
+          mapId: ch.mapId,
+          alive: true,
+          summary: {
+            id: ch.id,
+            name: ch.name,
+            level: ch.level,
+            roleClass: ch.roleClass,
+            gender: ch.gender,
+            mapId: ch.mapId,
+            avatarSprite: `${sprite}_h.png`,
+          },
+        };
+
+        onlineBySocket.set(ws, player);
+
+        ws.on('pong', () => {
+          player.alive = true;
+        });
+
+        // Send recent chat history
+        const historyRows = db
+          .prepare(
+            `SELECT id, channel, sender_id, sender_name, is_system, content, created_at
+             FROM chat_messages WHERE realm_id = ? ORDER BY created_at DESC LIMIT 40`,
+          )
+          .all(realmId) as unknown as Array<{
+          id: number;
+          channel: ChatChannel;
+          sender_id: number;
+          sender_name: string;
+          is_system: number;
+          content: string;
+          created_at: number;
+        }>;
+
+        const history: ChatMessage[] = historyRows.reverse().map((r) => ({
+          id: String(r.id),
+          channel: r.channel,
+          senderId: r.sender_id,
+          senderName: r.sender_name,
+          isSystem: Boolean(r.is_system),
+          content: r.content,
+          time: formatHHMM(r.created_at),
+          timestamp: r.created_at,
+        }));
+        sendJson(ws, { type: 'chat:history', data: history });
+
+        // Broadcast updated map players
+        broadcastToMap(realmId, ch.mapId, {
+          type: 'map:players',
+          data: getMapOnlinePlayers(realmId, ch.mapId),
+        });
+
+        ws.on('message', (raw) => {
+          player.alive = true;
+          let payload: { type?: string; channel?: ChatChannel; content?: string };
+          try {
+            payload = JSON.parse(raw.toString('utf8')) as {
+              type?: string;
+              channel?: ChatChannel;
+              content?: string;
+            };
+          } catch {
+            return;
+          }
+
+          if (payload.type === 'ping') {
+            sendJson(ws, { type: 'pong' });
+            return;
+          }
+
+          if (payload.type === 'chat:send') {
+            const content = String(payload.content ?? '').trim().slice(0, 120);
+            if (!content) return;
+            const channel: ChatChannel = ['qu', 'pai', 'shang', 'shi'].includes(
+              payload.channel as ChatChannel,
+            )
+              ? (payload.channel as ChatChannel)
+              : 'qu';
+            const now = Date.now();
+            const info = db
+              .prepare(
+                `INSERT INTO chat_messages (realm_id, channel, sender_id, sender_name, is_system, content, created_at)
+                 VALUES (?, ?, ?, ?, 0, ?, ?)`,
+              )
+              .run(realmId, channel, ch.id, ch.name, content, now);
+
+            const msg: ChatMessage = {
+              id: String(info.lastInsertRowid),
+              channel,
+              senderId: ch.id,
+              senderName: ch.name,
+              content,
+              time: formatHHMM(now),
+              timestamp: now,
+            };
+            broadcastToRealm(realmId, { type: 'chat:message', data: msg });
+          }
+        });
+
+        ws.on('close', () => {
+          const existing = onlineBySocket.get(ws);
+          if (existing) {
+            onlineBySocket.delete(ws);
+            broadcastToMap(existing.realmId, existing.mapId, {
+              type: 'map:players',
+              data: getMapOnlinePlayers(existing.realmId, existing.mapId),
+            });
+          }
+        });
+      });
+    })();
   });
 
-  return io;
+  return wss;
 }

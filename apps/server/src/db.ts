@@ -5,7 +5,9 @@ import { DatabaseSync } from 'node:sqlite';
 const dataDir = process.env.HXSG_DATA_DIR || path.resolve(process.cwd(), '../../data');
 fs.mkdirSync(dataDir, { recursive: true });
 
-export const dbPath = path.join(dataDir, 'hxsg.db');
+const defaultDbFile =
+  process.env.HXSG_MAPP_CHANNEL === 'sandbox' ? 'hxsg-sandbox.db' : 'hxsg.db';
+export const dbPath = path.join(dataDir, process.env.HXSG_DB_FILE || defaultDbFile);
 export const db = new DatabaseSync(dbPath);
 
 // Tuned for 200+ players on a 2C4G server
@@ -144,3 +146,28 @@ for (const [col, def] of newCols) {
     db.exec(`ALTER TABLE characters ADD COLUMN ${col} ${def}`);
   }
 }
+
+// Safe online schema migration for Discourse Mini App platform-linked accounts
+const existingAccountCols = new Set(
+  (db.prepare('PRAGMA table_info(accounts)').all() as unknown as Array<{ name: string }>).map(
+    (c) => c.name,
+  ),
+);
+
+const newAccountCols: Array<[string, string]> = [
+  ['platform_iss', 'TEXT'],
+  ['platform_sub', 'TEXT'],
+  ['platform_channel', 'TEXT'],
+];
+
+for (const [col, def] of newAccountCols) {
+  if (!existingAccountCols.has(col)) {
+    db.exec(`ALTER TABLE accounts ADD COLUMN ${col} ${def}`);
+  }
+}
+
+db.exec(`
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_platform
+  ON accounts(platform_iss, platform_sub, platform_channel)
+  WHERE platform_iss IS NOT NULL;
+`);

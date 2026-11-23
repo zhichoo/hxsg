@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ROLE_CLASS_META, type CharacterView, type Gender, type RoleClass } from '@hxsg/shared';
 import { api } from '../api';
+import { AssetBg, AssetImg } from './AssetImg';
 import { PixelSprite } from './PixelSprite';
 
 interface CreateRoleProps {
@@ -45,12 +46,12 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
 
   return (
     <div className="flex-1 flex flex-col bg-[#1b0820] overflow-hidden">
-      <div
-        className="h-[40px] flex items-center justify-center border-b border-[#5b6a6c]"
-        style={{ backgroundImage: 'url(/assets/hxsg/tit_bg.png)', backgroundSize: 'cover' }}
+      <AssetBg
+        path="tit_bg.png"
+        className="h-[40px] border-b border-[#5b6a6c] shrink-0"
       >
         <span className="text-[17px] font-bold tracking-widest hx-stroke">创建角色</span>
-      </div>
+      </AssetBg>
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-[14px] hx-cloud-pillar shrink-0 border-r border-black" />
@@ -111,8 +112,8 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
 
               <div className="flex-1 text-xs space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <img
-                    src={`/assets/hxsg/portraits/${meta.portrait}`}
+                  <AssetImg
+                    path={`portraits/${meta.portrait}`}
                     alt={meta.label}
                     className="w-11 h-11 border border-[#e0b84f] pixelated"
                   />

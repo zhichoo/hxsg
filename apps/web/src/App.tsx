@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { io, type Socket } from 'socket.io-client';
 import type {
   BattleState,
   CharacterView,
@@ -11,6 +10,7 @@ import {
   api,
   getSavedRealm,
   getSavedToken,
+  loadSavedRealm,
   setSavedRealm,
   setSavedToken,
   type AuthResponse,
@@ -21,10 +21,25 @@ import { GameShell } from './components/GameShell';
 import { MainCity } from './components/MainCity';
 import { ServerSelect } from './components/ServerSelect';
 import { SubPanels, type SubPanelType } from './components/SubPanels';
+import {
+  connectPlatformRealtime,
+  disposePlatform,
+  initPlatform,
+  isMappRuntime,
+  signalPlatformReady,
+  type PlatformTheme,
+  type PlatformUser,
+  type RealtimeHandle,
+} from './platform/host';
 
 type Screen = 'server' | 'create' | 'play';
 
 export default function App() {
+  const [isMapp, setIsMapp] = useState<boolean>(() => isMappRuntime());
+  const [platformReady, setPlatformReady] = useState<boolean>(() => !isMappRuntime());
+  const [mappUser, setMappUser] = useState<PlatformUser | null>(null);
+  const [theme, setTheme] = useState<PlatformTheme | null>(null);
+
   const [screen, setScreen] = useState<Screen>('server');
   const [realmId, setRealmId] = useState<string>(getSavedRealm());
   const [account, setAccount] = useState<{ username: string; isGm: boolean } | null>(null);
@@ -35,7 +50,7 @@ export default function App() {
   const [subPanel, setSubPanel] = useState<SubPanelType | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  const socketRef = useRef<Socket | null>(null);
+  const realtimeRef = useRef<RealtimeHandle | null>(null);
   const toastTimerRef = useRef<number | null>(null);
 
   const notify = useCallback((msg: string) => {
@@ -62,57 +77,99 @@ export default function App() {
           setScreen('play');
         }
       } catch (err) {
-        setSavedToken(null);
-        setAccount(null);
+        if (!isMapp) {
+          setSavedToken(null);
+          setAccount(null);
+        }
         setScreen('server');
         notify(err instanceof Error ? err.message : '请重新登录');
       }
     },
-    [notify],
+    [isMapp, notify],
   );
 
-  // Restore session if token exists
+  // Initialize Discourse Mini App host (or standalone Web session)
   useEffect(() => {
-    const token = getSavedToken();
-    if (!token) return;
-    api
-      .me(realmId)
-      .then((res) => {
-        setAccount(res.account);
-      })
-      .catch(() => {
-        setSavedToken(null);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const init = await initPlatform((nextTheme) => {
+          if (!cancelled) setTheme(nextTheme);
+        });
+        if (cancelled) return;
+        setIsMapp(init.isMapp);
+        setMappUser(init.user);
+        if (init.theme) setTheme(init.theme);
 
-  // Connect Socket.IO once playing with a character
-  useEffect(() => {
-    if (screen !== 'play' || !character) {
-      socketRef.current?.disconnect();
-      socketRef.current = null;
-      return;
-    }
-    const token = getSavedToken();
-    if (!token) return;
+        const savedRealm = await loadSavedRealm();
+        if (!cancelled) setRealmId(savedRealm);
 
-    const sock = io({
-      auth: { token, realmId },
-      transports: ['websocket', 'polling'],
-    });
-    socketRef.current = sock;
-
-    sock.on('chat:history', (hist: ChatMessage[]) => setMessages(hist));
-    sock.on('chat:message', (msg: ChatMessage) =>
-      setMessages((prev) => [...prev.slice(-60), msg]),
-    );
-    sock.on('map:players', (players: OnlinePlayerSummary[]) => setMapPlayers(players));
+        if (init.isMapp) {
+          if (init.user) {
+            // In MAPP mode, verify session eagerly if logged in on community
+            api
+              .me(savedRealm)
+              .then((res) => {
+                if (!cancelled) setAccount(res.account);
+              })
+              .catch(() => {
+                // Backend may be unavailable or guest mode; user can retry on click
+              });
+          }
+        } else {
+          const token = getSavedToken();
+          if (token) {
+            api
+              .me(savedRealm)
+              .then((res) => {
+                if (!cancelled) setAccount(res.account);
+              })
+              .catch(() => {
+                setSavedToken(null);
+              });
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          notify(err instanceof Error ? err.message : '初始化运行环境失败');
+        }
+      } finally {
+        if (!cancelled) setPlatformReady(true);
+        await signalPlatformReady();
+      }
+    })();
 
     return () => {
-      sock.disconnect();
-      socketRef.current = null;
+      cancelled = true;
+      disposePlatform();
     };
-  }, [screen, character?.id, realmId]);
+  }, [notify]);
+
+  // Connect native WebSocket (or MAPP SDK WebSocket) once playing with a character
+  useEffect(() => {
+    if (screen !== 'play' || !character) {
+      realtimeRef.current?.close();
+      realtimeRef.current = null;
+      return;
+    }
+
+    const token = getSavedToken();
+    if (!isMapp && !token) return;
+
+    const handle = connectPlatformRealtime(realmId, token, {
+      onHistory: (hist) => setMessages(hist),
+      onMessage: (msg) => setMessages((prev) => [...prev.slice(-60), msg]),
+      onMapPlayers: (players) => setMapPlayers(players),
+    });
+    realtimeRef.current = handle;
+
+    return () => {
+      handle.close();
+      if (realtimeRef.current === handle) {
+        realtimeRef.current = null;
+      }
+    };
+  }, [screen, character?.id, realmId, isMapp]);
 
   const handleAuthSuccess = (auth: AuthResponse, targetRealm: string) => {
     setSavedToken(auth.token);
@@ -121,18 +178,20 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    socketRef.current?.disconnect();
-    setSavedToken(null);
-    setAccount(null);
+    realtimeRef.current?.close();
+    if (!isMapp) {
+      setSavedToken(null);
+      setAccount(null);
+    }
     setCharacter(null);
     setBattle(null);
     setSubPanel(null);
     setScreen('server');
-    notify('已退出登录');
+    notify(isMapp ? '已返回选区' : '已退出登录');
   };
 
   const handleSendChat = (channel: ChatChannel, content: string) => {
-    socketRef.current?.emit('chat:send', { channel, content });
+    realtimeRef.current?.sendChat(channel, content);
   };
 
   const handleMoveMap = async (targetMapId: string) => {
@@ -177,7 +236,7 @@ export default function App() {
   };
 
   return (
-    <GameShell toast={toast}>
+    <GameShell toast={toast} isMapp={isMapp} theme={theme}>
       {screen === 'server' && (
         <ServerSelect
           selectedRealm={realmId}
@@ -185,6 +244,9 @@ export default function App() {
             setRealmId(r);
             setSavedRealm(r);
           }}
+          isMapp={isMapp}
+          platformReady={platformReady}
+          mappUser={mappUser}
           account={account}
           onAuthSuccess={handleAuthSuccess}
           onEnterGame={(r) => void enterRealm(r)}

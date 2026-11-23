@@ -8,6 +8,7 @@ import {
   type MapNpc,
   type OnlinePlayerSummary,
 } from '@hxsg/shared';
+import { AssetBg, AssetImg } from './AssetImg';
 import { ChatDock } from './ChatDock';
 import type { SubPanelType } from './SubPanels';
 
@@ -93,13 +94,13 @@ export function MainCity({
   return (
     <div className="flex-1 flex flex-col bg-[#1b0c0c] overflow-hidden">
       {/* 1. Top Classic Location Header (matches classic_3.jpg) */}
-      <div
-        className="relative h-[38px] flex items-center justify-center border-b border-[#4c6165] shrink-0"
-        style={{ backgroundImage: 'url(/assets/hxsg/tit_bg.png)', backgroundSize: 'cover' }}
+      <AssetBg
+        path="tit_bg.png"
+        className="h-[38px] border-b border-[#4c6165] shrink-0"
       >
         <div className="absolute left-0 top-0 bottom-0 w-[96px] overflow-hidden border-r border-black/60">
-          <img
-            src={`/assets/hxsg/${currentMap.battleBg}_5.png`}
+          <AssetImg
+            path={`${currentMap.battleBg}_5.png`}
             alt={currentMap.name}
             className="w-full h-full object-cover pixelated opacity-90"
           />
@@ -110,7 +111,7 @@ export function MainCity({
         <span className="absolute right-2 text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80]">
           {currentMap.recommendedLevel}
         </span>
-      </div>
+      </AssetBg>
 
       {/* 2. Main Split Panel: Left Hero Info + Right Function/NPC/Move/Facility */}
       <div className="grid grid-cols-[44%_56%] bg-[#2d0c09] border-b border-[#5e3b1b] shrink-0">
@@ -119,14 +120,14 @@ export function MainCity({
           {/* Avatar + Name + HP/MP bars over real sc_bg_1.png */}
           <div className="flex flex-col">
             <div className="relative w-full aspect-[482/205]">
-              <img
-                src="/assets/hxsg/sc_bg_1.png"
+              <AssetImg
+                path="sc_bg_1.png"
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover object-top pixelated"
               />
               {/* Character Portrait inside golden circle */}
-              <img
-                src={`/assets/hxsg/portraits/${character.portrait}`}
+              <AssetImg
+                path={`portraits/${character.portrait}`}
                 alt={character.name}
                 className="absolute left-[9%] top-[27%] w-[21%] aspect-square rounded-full object-cover pixelated border border-[#734a13]"
               />
@@ -162,8 +163,8 @@ export function MainCity({
             className="relative w-full aspect-[441/117] group"
             title="点击管理出战副将"
           >
-            <img
-              src="/assets/hxsg/sc_fjbg.png"
+            <AssetImg
+              path="sc_fjbg.png"
               alt="副将槽位"
               className="w-full h-full object-contain pixelated"
             />
@@ -174,8 +175,8 @@ export function MainCity({
                   className="w-full h-full flex items-center justify-center overflow-hidden"
                 >
                   {g && (
-                    <img
-                      src={`/assets/hxsg/${g.spriteKey}_h.png`}
+                    <AssetImg
+                      path={`${g.spriteKey}_h.png`}
                       alt={g.name}
                       className="w-6 h-6 pixelated drop-shadow-[0_1px_1px_#000]"
                     />
@@ -272,8 +273,8 @@ export function MainCity({
                     }}
                     className="w-full flex items-center gap-2 px-1.5 py-1.5 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5b1d12] text-left"
                   >
-                    <img
-                      src={`/assets/hxsg/${fac.icon}`}
+                    <AssetImg
+                      path={fac.icon}
                       alt={fac.name}
                       className="w-9 h-8 object-contain pixelated shrink-0"
                     />
@@ -306,8 +307,8 @@ export function MainCity({
                       className="w-full flex items-center justify-between px-2 py-1.5 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5c1e12]"
                     >
                       <div className="flex items-center gap-2">
-                        <img
-                          src={`/assets/hxsg/${target.thumb}`}
+                        <AssetImg
+                          path={target.thumb}
                           alt=""
                           className="w-6 h-5 object-contain pixelated"
                         />
@@ -374,8 +375,8 @@ export function MainCity({
               onClick={() => setTab(t.id)}
               className="relative h-[46px] bg-black overflow-hidden active:brightness-90"
             >
-              <img
-                src={`/assets/hxsg/${active ? t.active : t.normal}`}
+              <AssetImg
+                path={active ? t.active : t.normal}
                 alt={t.alt}
                 className="w-full h-full object-fill pixelated"
               />
@@ -393,8 +394,8 @@ export function MainCity({
               title={`${p.name} (Lv.${p.level})`}
               className="flex items-center gap-0.5 bg-[#1b191d] border border-[#5c4e32] px-1 py-0.5"
             >
-              <img
-                src={`/assets/hxsg/${p.avatarSprite}`}
+              <AssetImg
+                path={p.avatarSprite}
                 alt={p.name}
                 className="w-5 h-5 pixelated"
               />

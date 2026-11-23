@@ -5,6 +5,7 @@ RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 COPY package.json pnpm-workspace.yaml tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/mapp-sdk packages/mapp-sdk
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 
@@ -26,6 +27,7 @@ RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
 COPY package.json pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/mapp-sdk packages/mapp-sdk
 COPY apps/server/package.json apps/server/
 COPY apps/web/package.json apps/web/
 

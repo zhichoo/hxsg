@@ -1,0 +1,110 @@
+{
+  "format": 1,
+  "id": "019a2a58-0000-7000-8000-000000000001",
+  "name": "幻想三国 · 经典版",
+  "version": "0.1.0",
+  "tags": ["游戏", "三国", "回合制", "rpg"],
+  "entry": "index.html",
+  "script": "app.js",
+  "style": "app.css",
+  "permissions": [
+    "user.read",
+    "theme.read",
+    "storage.read",
+    "storage.write",
+    "network.request",
+    "network.websocket"
+  ],
+  "endpoints": {
+    "realms": {
+      "url": "__API_BASE__/api/realms",
+      "method": "GET",
+      "auth": "auto"
+    },
+    "me": {
+      "url": "__API_BASE__/api/me",
+      "method": "GET",
+      "query": ["realmId"],
+      "auth": "platform"
+    },
+    "characterCreate": {
+      "url": "__API_BASE__/api/character",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "characterAllocateStats": {
+      "url": "__API_BASE__/api/character/allocate-stats",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "characterResetStats": {
+      "url": "__API_BASE__/api/character/reset-stats",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "characterAllocateResist": {
+      "url": "__API_BASE__/api/character/allocate-resist",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "mapMove": {
+      "url": "__API_BASE__/api/map/move",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "facilityInn": {
+      "url": "__API_BASE__/api/facility/inn",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "shopBuy": {
+      "url": "__API_BASE__/api/facility/shop/buy",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "inventoryUse": {
+      "url": "__API_BASE__/api/inventory/use",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsRecruit": {
+      "url": "__API_BASE__/api/generals/recruit",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsSlot": {
+      "url": "__API_BASE__/api/generals/slot",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "rankings": {
+      "url": "__API_BASE__/api/rankings",
+      "method": "GET",
+      "query": ["realmId", "sort"],
+      "auth": "auto"
+    },
+    "battleStart": {
+      "url": "__API_BASE__/api/battle/start",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "battleAction": {
+      "url": "__API_BASE__/api/battle/action",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "gmGrant": {
+      "url": "__API_BASE__/api/gm/grant",
+      "method": "POST",
+      "auth": "platform"
+    }
+  },
+  "websockets": {
+    "realtime": {
+      "url": "__WS_BASE__/ws",
+      "query": ["realmId"],
+      "auth": "platform"
+    }
+  },
+  "media": {}
+}

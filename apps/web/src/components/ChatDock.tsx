@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatChannel, ChatMessage } from '@hxsg/shared';
+import { AssetImg } from './AssetImg';
 
 interface ChatDockProps {
   messages: ChatMessage[];
@@ -67,15 +68,17 @@ export function ChatDock({ messages, onSend, compact = false }: ChatDockProps) {
 
       {/* Scrolling chat body + vertical 发言 button */}
       <div
-        className={`relative flex ${compact ? 'h-[98px]' : 'flex-1 min-h-[110px]'}`}
-        style={{
-          backgroundImage: 'url(/assets/hxsg/chat_bgb.png)',
-          backgroundSize: 'cover',
-        }}
+        className={`relative flex overflow-hidden ${compact ? 'h-[98px]' : 'flex-1 min-h-[110px]'}`}
       >
+        <AssetImg
+          path="chat_bgb.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none select-none absolute inset-0 w-full h-full object-cover pixelated"
+        />
         <div
           ref={listRef}
-          className="flex-1 overflow-y-auto hx-scroll px-2 py-1 space-y-0.5 text-[13px] leading-[1.4] bg-[#141c1e]/88"
+          className="relative z-10 flex-1 overflow-y-auto hx-scroll px-2 py-1 space-y-0.5 text-[13px] leading-[1.4] bg-[#141c1e]/88"
         >
           {filtered.length === 0 ? (
             <div className="text-[#c8dcde] text-xs py-1">
@@ -106,10 +109,10 @@ export function ChatDock({ messages, onSend, compact = false }: ChatDockProps) {
           type="button"
           onClick={() => setInputOpen((v) => !v)}
           title="发送消息"
-          className="w-[42px] shrink-0 bg-[#1a2426]/80 flex items-center justify-center border-l border-[#475d61] hover:brightness-110 active:scale-95"
+          className="relative z-10 w-[42px] shrink-0 bg-[#1a2426]/80 flex items-center justify-center border-l border-[#475d61] hover:brightness-110 active:scale-95"
         >
-          <img
-            src="/assets/hxsg/chat_fy.png"
+          <AssetImg
+            path="chat_fy.png"
             alt="发言"
             className="w-[34px] h-auto pixelated"
           />

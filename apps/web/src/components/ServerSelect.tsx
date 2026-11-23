@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api, type AuthResponse, type RealmWithOnline } from '../api';
+import type { PlatformUser } from '../platform/host';
+import { AssetBg, AssetImg } from './AssetImg';
 
 interface ServerSelectProps {
   selectedRealm: string;
   onSelectRealm: (realmId: string) => void;
+  isMapp: boolean;
+  platformReady: boolean;
+  mappUser: PlatformUser | null;
   account: { username: string; isGm: boolean } | null;
   onAuthSuccess: (auth: AuthResponse, realmId: string) => void;
   onEnterGame: (realmId: string) => void;
@@ -14,6 +19,9 @@ interface ServerSelectProps {
 export function ServerSelect({
   selectedRealm,
   onSelectRealm,
+  isMapp,
+  platformReady,
+  mappUser,
   account,
   onAuthSuccess,
   onEnterGame,
@@ -27,13 +35,15 @@ export function ServerSelect({
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
+    if (!platformReady) return;
     api
       .getRealms()
       .then(setRealms)
       .catch((e: Error) => onNotify(e.message));
-  }, [onNotify]);
+  }, [onNotify, platformReady]);
 
   const activeRealmObj = realms.find((r) => r.id === selectedRealm) ?? realms[0];
+  const canEnter = isMapp ? Boolean(mappUser) : Boolean(account);
 
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,7 +75,7 @@ export function ServerSelect({
           </span>
         </div>
         <div className="mt-1 text-[12px] text-[#bfd2ff] tracking-wide font-medium">
-          幻想三国 · 经典版 Web
+          {isMapp ? '幻想三国 · 社区微应用版' : '幻想三国 · 经典版 Web'}
         </div>
       </div>
 
@@ -97,8 +107,8 @@ export function ServerSelect({
                 </span>
               </div>
               <div className="relative w-[108px] h-[38px] overflow-hidden shrink-0 border-l border-black/50">
-                <img
-                  src={`/assets/hxsg/${realm.bgImg}`}
+                <AssetImg
+                  path={realm.bgImg}
                   alt=""
                   className="w-full h-full object-cover pixelated"
                 />
@@ -118,9 +128,51 @@ export function ServerSelect({
           </div>
         )}
 
-        {/* Account Login / Register Panel */}
+        {/* Account Panel: Community Identity in MAPP mode vs Local Login in Standalone Web */}
         <div className="mt-1 p-3 bg-[#09123b]/90 border border-[#4a66a8]">
-          {account ? (
+          {isMapp ? (
+            mappUser ? (
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  {mappUser.avatarUrl ? (
+                    <img
+                      src={mappUser.avatarUrl}
+                      alt={mappUser.name || mappUser.username}
+                      className="w-9 h-9 rounded-full border border-[#e6be53] object-cover shrink-0"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 rounded-full border border-[#e6be53] bg-[#1e316e] flex items-center justify-center font-bold text-[#ffe97d] shrink-0">
+                      {mappUser.initials}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[#ffe97d] font-bold truncate">
+                        {mappUser.name || mappUser.username}
+                      </span>
+                      {mappUser.trustLevel !== null && (
+                        <span className="px-1 py-0.5 bg-[#1a3e7a] border border-[#6ca4ff] text-[10px] text-[#d6e9ff] shrink-0">
+                          TL{mappUser.trustLevel}
+                        </span>
+                      )}
+                      {account?.isGm && (
+                        <span className="px-1 py-0.5 bg-[#8a1414] border border-[#f5c84c] text-[10px] text-[#ffe97d] shrink-0">
+                          服主GM
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-[#a9c2ff] truncate">
+                      已通过社区账号免密授权，选区直接进入
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-[#ffdca0] leading-relaxed">
+                当前为社区访客模式，无法建立联机角色。请先登录社区账号后刷新本应用即可免密游玩。
+              </div>
+            )
+          ) : account ? (
             <div className="flex items-center justify-between text-xs">
               <div>
                 <span className="text-[#9cb6f5]">当前账号：</span>
@@ -197,24 +249,21 @@ export function ServerSelect({
       </div>
 
       {/* Bottom Cloud Bar with Enter Game Button (classic_4.jpg) */}
-      <div
-        className="relative h-[62px] flex items-center justify-center px-4 border-t border-[#4b6064]"
-        style={{
-          backgroundImage: 'url(/assets/hxsg/tit_bg.png)',
-          backgroundSize: 'cover',
-        }}
+      <AssetBg
+        path="tit_bg.png"
+        className="h-[62px] px-4 border-t border-[#4b6064] shrink-0"
       >
         <button
           type="button"
-          disabled={!account}
+          disabled={!canEnter}
           onClick={() => onEnterGame(selectedRealm)}
           className={`hx-btn-gold px-7 py-1.5 text-[16px] tracking-wider ${
-            !account ? 'opacity-50 cursor-not-allowed' : ''
+            !canEnter ? 'opacity-50 cursor-not-allowed' : ''
           }`}
         >
           进入游戏
         </button>
-      </div>
+      </AssetBg>
     </div>
   );
 }

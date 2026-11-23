@@ -7,6 +7,7 @@ import {
   type RankEntry,
 } from '@hxsg/shared';
 import { api } from '../api';
+import { AssetBg, AssetImg } from './AssetImg';
 import { PixelSprite } from './PixelSprite';
 
 export type SubPanelType =
@@ -82,12 +83,12 @@ export function SubPanels({
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-[#1b0820]">
       {/* Classic Top Header */}
-      <div
-        className="h-[38px] flex items-center justify-center border-b border-[#5b6a6c] shrink-0"
-        style={{ backgroundImage: 'url(/assets/hxsg/tit_bg.png)', backgroundSize: 'cover' }}
+      <AssetBg
+        path="tit_bg.png"
+        className="h-[38px] border-b border-[#5b6a6c] shrink-0"
       >
         <span className="text-[17px] font-bold tracking-widest hx-stroke">{TITLES[panel]}</span>
-      </div>
+      </AssetBg>
 
       {/* Classic Deep-Purple Body with Silver Cloud Pillars (classic_5.jpg) */}
       <div className="flex-1 flex overflow-hidden">
@@ -350,8 +351,8 @@ export function SubPanels({
                   className="p-2 bg-[#26072d]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2">
-                    <img
-                      src={`/assets/hxsg/${g.spriteKey}_h.png`}
+                    <AssetImg
+                      path={`${g.spriteKey}_h.png`}
                       alt={g.name}
                       className="w-8 h-8 pixelated bg-[#1d2b18] border border-[#d6ab48] p-0.5"
                     />
@@ -503,11 +504,11 @@ export function SubPanels({
                   className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
                 >
                   <div className="flex items-center gap-2">
-                    <img
-                      src={
+                    <AssetImg
+                      path={
                         tpl.avatarKey.startsWith('f')
-                          ? `/assets/hxsg/${tpl.avatarKey}`
-                          : `/assets/hxsg/portraits/${tpl.avatarKey}`
+                          ? tpl.avatarKey
+                          : `portraits/${tpl.avatarKey}`
                       }
                       alt={tpl.name}
                       className="w-10 h-10 pixelated border border-[#d6ab48]"

@@ -8,6 +8,8 @@ import {
   type ChatChannel,
   type ChatMessage,
 } from '@hxsg/shared';
+import { getCachedAssetImage, loadAssetImage } from '../platform/host';
+import { AssetBg, AssetImg } from './AssetImg';
 import { ChatDock } from './ChatDock';
 
 interface BattleStageProps {
@@ -244,14 +246,14 @@ export function BattleStage({
     if (!ctx) return;
 
     const getImg = (name: string): HTMLImageElement | null => {
+      const globalCached = getCachedAssetImage(name);
+      if (globalCached !== undefined) return globalCached;
       const cache = imgCacheRef.current;
       if (cache.has(name)) return cache.get(name) ?? null;
       cache.set(name, null);
-      const img = new Image();
-      img.onload = () => {
+      void loadAssetImage(name).then((img) => {
         cache.set(name, img);
-      };
-      img.src = `/assets/hxsg/${name}`;
+      });
       return null;
     };
 
@@ -529,32 +531,34 @@ export function BattleStage({
   return (
     <div className="flex-1 flex flex-col bg-[#1e2628] overflow-hidden">
       {/* 1. Classic Top Bar */}
-      <div
-        className="h-[34px] flex items-center justify-center relative border-b border-[#4c6165] shrink-0"
-        style={{ backgroundImage: 'url(/assets/hxsg/tit_bg.png)', backgroundSize: 'cover' }}
+      <AssetBg
+        path="tit_bg.png"
+        className="h-[34px] border-b border-[#4c6165] shrink-0"
       >
         <div className="absolute left-0 top-0 bottom-0 w-[86px] overflow-hidden border-r border-black/60">
-          <img
-            src={`/assets/hxsg/${battle.battleBg}_5.png`}
+          <AssetImg
+            path={`${battle.battleBg}_5.png`}
             alt=""
             className="w-full h-full object-cover pixelated"
           />
         </div>
         <span className="text-[16px] font-bold text-white hx-stroke">{battle.mapName}</span>
-      </div>
+      </AssetBg>
 
-      <div
-        className="h-[30px] px-3 flex items-center justify-between border-b border-black shrink-0"
-        style={{ backgroundImage: 'url(/assets/hxsg/fig_tit.png)', backgroundSize: 'cover' }}
+      <AssetBg
+        path="fig_tit.png"
+        className="h-[30px] border-b border-black shrink-0"
       >
-        <span className="text-[14px] font-bold text-[#ff6b6b] hx-stroke">
-          {battle.enemyGroupName}
-        </span>
-        <span className="text-[13px] font-bold text-[#9be0ff] hx-stroke">
-          第{battle.round}回合 · 对阵
-        </span>
-        <span className="text-[14px] font-bold text-[#ffdf70] hx-stroke">{character.name}</span>
-      </div>
+        <div className="w-full px-3 flex items-center justify-between">
+          <span className="text-[14px] font-bold text-[#ff6b6b] hx-stroke">
+            {battle.enemyGroupName}
+          </span>
+          <span className="text-[13px] font-bold text-[#9be0ff] hx-stroke">
+            第{battle.round}回合 · 对阵
+          </span>
+          <span className="text-[14px] font-bold text-[#ffdf70] hx-stroke">{character.name}</span>
+        </div>
+      </AssetBg>
 
       {/* 2. Pixel Battlefield Canvas + Staggered 7 Golden Diamond Buttons */}
       <div className="relative flex-1 min-h-[260px] bg-[#bca96b] overflow-hidden flex flex-col">
@@ -734,15 +738,15 @@ export function BattleStage({
         {battle.status !== 'ongoing' && (
           <div className="absolute inset-0 z-30 bg-black/78 flex flex-col items-center justify-center p-4 gap-3">
             {battle.status === 'victory' && (
-              <img
-                src="/assets/hxsg/f_sl.png"
+              <AssetImg
+                path="f_sl.png"
                 alt="胜利"
                 className="w-[240px] h-auto pixelated drop-shadow-[0_4px_12px_#000]"
               />
             )}
             {battle.status === 'defeat' && (
-              <img
-                src="/assets/hxsg/f_bb.png"
+              <AssetImg
+                path="f_bb.png"
                 alt="败北"
                 className="w-[240px] h-auto pixelated drop-shadow-[0_4px_12px_#000]"
               />

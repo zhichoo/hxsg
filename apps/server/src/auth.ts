@@ -8,6 +8,8 @@ export interface AuthPayload {
   username: string;
   isGm: boolean;
   exp: number;
+  authSource?: 'local' | 'platform';
+  trustLevel?: number;
 }
 
 export function hashPassword(password: string): string {
