@@ -56,6 +56,7 @@ import {
   moveCharacter,
   playCasinoChibi,
   playCasinoDice,
+  rebirthCharacter,
   rebirthGeneral,
   recruitGeneral,
   resetCharacterStats,
@@ -260,6 +261,17 @@ app.post('/api/character/allocate-resist', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return { character: allocateCharacterResist(current.id, body) };
+});
+
+app.post('/api/character/rebirth', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const res = rebirthCharacter(current.id);
+  broadcastSystemMessage(realmId, res.broadcast, 'shi');
+  return { character: res.character, message: res.message };
 });
 
 app.post('/api/map/move', async (req) => {

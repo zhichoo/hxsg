@@ -168,6 +168,15 @@ export const api = {
         body: payload,
       },
     ),
+  rebirthCharacter: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'characterRebirth',
+      '/api/character/rebirth',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
   moveMap: (realmId: string, targetMapId: string) =>
     callEndpoint<{ character: CharacterView; mapPlayers: OnlinePlayerSummary[] }>(
       'mapMove',

@@ -271,7 +271,14 @@ export function SubPanels({
                       <PixelSprite spriteKey={mySprite} scale={2} />
                     </div>
                     <div className="flex-1 min-w-0 space-y-0.5 text-xs">
-                      <div className="text-base font-bold text-[#ffe678] truncate">{character.name}</div>
+                      <div className="text-base font-bold text-[#ffe678] truncate flex items-center gap-1">
+                        <span>{character.name}</span>
+                        {character.rebirth > 0 && (
+                          <span className="px-1 py-0.5 text-[10px] bg-[#9b5b08] border border-[#ffe678] text-[#fff8cc] shrink-0">
+                            {character.rebirth}转
+                          </span>
+                        )}
+                      </div>
                       <div>
                         职业：{character.level}级 {classMeta.label}（
                         {character.gender === 'female' ? '女' : '男'}）
@@ -389,13 +396,61 @@ export function SubPanels({
                       </div>
                     ))}
                   </div>
+
+                  {/* 主角 60 级一转破境 */}
+                  <div className="p-2.5 bg-[#2a0b24]/95 border-2 border-[#e0b84e] space-y-1.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-black text-[#ffe678]">
+                        {character.rebirth > 0
+                          ? `🌟 已破境【${character.rebirth}转重生】`
+                          : '🔥 主角 60 级一转破境'}
+                      </span>
+                      <span className="text-[11px] text-[#9ee0ff]">
+                        {character.rebirth > 0 ? '首期最高境界' : `进度 Lv.${character.level}/60`}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-[#e7cfbb] leading-relaxed">
+                      满 60 级可一转重练（等级回 1 级，保留全部装备/副将/熟练度/主线，且无视装备等级限制），永久获得
+                      <span className="text-[#ffcf54] font-bold">
+                        {' '}+30 自由属性点、+10 抗性点、全属性成长 +15%、抗性上限 85% 及专属一转外观
+                      </span>
+                      ！
+                    </div>
+                    {character.rebirth === 0 && (
+                      <button
+                        type="button"
+                        disabled={busy || character.level < 60}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.rebirthCharacter(realmId);
+                            onUpdateCharacter(res.character);
+                            onNotify(res.message);
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '一转失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className={`w-full py-1.5 font-bold border ${
+                          character.level >= 60
+                            ? 'hx-btn-red'
+                            : 'bg-[#361c3d] border-[#6a4c73] text-[#9f82a8]'
+                        }`}
+                      >
+                        {character.level >= 60 ? '⚡ 立即 60 级一转重生' : `需达到 60 级（还差 ${60 - character.level} 级）`}
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
-              {statusTab === 'resist' && (
+              {statusTab === 'resist' && (() => {
+                const resCap = 75 + (character.rebirth ?? 0) * 10;
+                return (
                 <div className="p-2.5 bg-[#230629]/90 border border-[#b68d3a] space-y-2">
                   <div className="text-xs text-[#ffea84] font-bold">
-                    剩余抗性点：{character.resist.freePoints}（每点 +3%，单项上限 75%）
+                    剩余抗性点：{character.resist.freePoints}（每点 +3%，单项上限 {resCap}%）
                   </div>
                   {(
                     [
@@ -417,11 +472,11 @@ export function SubPanels({
                       </div>
                       <button
                         type="button"
-                        disabled={busy || character.resist.freePoints < 1 || pct >= 75}
+                        disabled={busy || character.resist.freePoints < 1 || pct >= resCap}
                         onClick={() =>
                           run(
                             () => api.allocateResist({ realmId, [key]: 1 }),
-                            `${label} 提升至 ${pct + 3}%`,
+                            `${label} 提升至 ${Math.min(resCap, pct + 3)}%`,
                           )
                         }
                         className="hx-btn-gold px-2.5 py-1 text-[11px] shrink-0 disabled:opacity-40"
@@ -431,7 +486,8 @@ export function SubPanels({
                     </div>
                   ))}
                 </div>
-              )}
+                );
+              })()}
 
               {statusTab === 'skills' && (
                 <div className="space-y-2">
@@ -1070,6 +1126,11 @@ export function SubPanels({
                     <div className="min-w-0 truncate">
                       <span className="text-[#ffd24d] font-bold mr-1">{r.rank}.</span>
                       <span className="text-[#ff4f4f] font-bold hx-stroke">{r.name}</span>
+                      {r.rebirth > 0 && (
+                        <span className="ml-1 px-1 py-0.5 text-[10px] bg-[#9b5b08] border border-[#ffe678] text-[#fff8cc]">
+                          {r.rebirth}转
+                        </span>
+                      )}
                       <span className="text-[#e5d2eb] text-xs ml-1">
                         ({ROLE_CLASS_META[r.roleClass].label}·{r.level}级)
                       </span>
@@ -1211,7 +1272,7 @@ export function SubPanels({
                 <div>
                   <div className="font-bold text-[#ffea7a] text-sm">名将寻访（消耗 1 招贤令）</div>
                   <div className="text-[11px] text-[#f5dccc]">
-                    有机会直接寻得 <span className="text-[#ffbe47] font-bold">吕布 / 关羽 / 貂蝉 / 赵云</span>
+                    有机会直接寻得 <span className="text-[#ffbe47] font-bold">吕布 / 诸葛亮 / 司马懿 / 周瑜 / 马超 / 关羽 / 貂蝉 / 赵云</span>
                     ，随机刷出极品成长率！
                   </div>
                   <div className="text-[11px] text-[#9de6ff] mt-0.5">

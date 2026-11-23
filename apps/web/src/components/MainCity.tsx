@@ -201,14 +201,25 @@ export function MainCity({
                 alt=""
                 className="absolute inset-0 w-full h-full object-cover object-top pixelated"
               />
-              {/* Character Portrait inside golden circle */}
+              {/* Character Portrait inside golden circle (switches to official rebirth head icon after 1转!) */}
               <AssetImg
-                path={`portraits/${character.portrait}`}
+                path={
+                  character.rebirth > 0
+                    ? `${
+                        character.roleClass === 'wushi'
+                          ? 'r1z'
+                          : character.roleClass === 'wenren'
+                            ? 'r2z'
+                            : 'r3z'
+                      }${character.gender === 'female' ? 'n' : ''}_h.png`
+                    : `portraits/${character.portrait}`
+                }
                 alt={character.name}
                 className="absolute left-[9%] top-[27%] w-[21%] aspect-square rounded-full object-cover pixelated border border-[#734a13]"
               />
               {/* Name */}
               <div className="absolute left-[35%] top-[5%] right-[4%] text-[13px] font-bold text-[#fff8cc] truncate hx-stroke">
+                {character.rebirth > 0 ? `[${character.rebirth}转]` : ''}
                 {character.name}
               </div>
               {/* HP Bar */}

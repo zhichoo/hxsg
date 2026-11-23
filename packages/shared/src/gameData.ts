@@ -1460,10 +1460,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 1350,
     capturableTemplateId: 'zhangfei',
     enemies: [
-      { name: '江陵铁甲卫', level: 24, roleClass: 'wushi', spriteKey: 'n1', hp: 1850, mp: 90, atk: 205, spd: 62 },
-      { name: '荆北弓弩手', level: 24, roleClass: 'wenren', spriteKey: 'n2', hp: 1520, mp: 180, atk: 192, spd: 68 },
-      { name: '曹魏校尉', level: 25, roleClass: 'wushi', spriteKey: 'n1', hp: 2100, mp: 100, atk: 222, spd: 65 },
-      { name: '军中道士', level: 25, roleClass: 'yiren', spriteKey: 'n3', hp: 1580, mp: 220, atk: 208, spd: 67 },
+      { name: '江陵铁甲卫', level: 24, roleClass: 'wushi', spriteKey: 'n1', hp: 1620, mp: 90, atk: 185, spd: 58 },
+      { name: '荆北弓弩手', level: 24, roleClass: 'wenren', spriteKey: 'n2', hp: 1380, mp: 180, atk: 174, spd: 64 },
+      { name: '曹魏校尉', level: 25, roleClass: 'wushi', spriteKey: 'n1', hp: 1820, mp: 100, atk: 198, spd: 61 },
+      { name: '军中道士', level: 25, roleClass: 'yiren', spriteKey: 'n3', hp: 1440, mp: 220, atk: 188, spd: 63 },
     ],
   },
   boss_caoren: {
@@ -1475,10 +1475,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 2750,
     capturableTemplateId: 'zhangfei',
     enemies: [
-      { name: '八门金锁卫', level: 26, roleClass: 'wushi', spriteKey: 'n1', hp: 2950, mp: 120, atk: 235, spd: 68 },
-      { name: '征南大将·曹仁', level: 27, roleClass: 'wushi', spriteKey: 'r1', hp: 4200, mp: 180, atk: 278, spd: 76 },
-      { name: '骁将·牛金', level: 26, roleClass: 'wushi', spriteKey: 'r1', hp: 3150, mp: 120, atk: 248, spd: 72 },
-      { name: '满宠参军', level: 26, roleClass: 'wenren', spriteKey: 'n2', hp: 2350, mp: 280, atk: 222, spd: 80 },
+      { name: '八门金锁卫', level: 26, roleClass: 'wushi', spriteKey: 'n1', hp: 2450, mp: 120, atk: 215, spd: 64 },
+      { name: '征南大将·曹仁', level: 27, roleClass: 'wushi', spriteKey: 'r1', hp: 3500, mp: 180, atk: 248, spd: 72 },
+      { name: '骁将·牛金', level: 26, roleClass: 'wushi', spriteKey: 'r1', hp: 2650, mp: 120, atk: 226, spd: 68 },
+      { name: '满宠参军', level: 26, roleClass: 'wenren', spriteKey: 'n2', hp: 2050, mp: 280, atk: 206, spd: 76 },
     ],
   },
   yizhou_chuanjun: {
@@ -1490,10 +1490,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 2400,
     capturableTemplateId: 'huangzhong',
     enemies: [
-      { name: '东州铁卫', level: 31, roleClass: 'wushi', spriteKey: 'n1', hp: 2650, mp: 100, atk: 272, spd: 80 },
-      { name: '蜀中连弩手', level: 31, roleClass: 'wenren', spriteKey: 'n2n', hp: 2220, mp: 220, atk: 256, spd: 88 },
-      { name: '川军都伯', level: 32, roleClass: 'wushi', spriteKey: 'n1', hp: 2980, mp: 120, atk: 292, spd: 84 },
-      { name: '青城方士', level: 32, roleClass: 'yiren', spriteKey: 'n3', hp: 2340, mp: 260, atk: 278, spd: 86 },
+      { name: '东州铁卫', level: 31, roleClass: 'wushi', spriteKey: 'n1', hp: 2300, mp: 100, atk: 242, spd: 76 },
+      { name: '蜀中连弩手', level: 31, roleClass: 'wenren', spriteKey: 'n2n', hp: 1960, mp: 220, atk: 230, spd: 84 },
+      { name: '川军都伯', level: 32, roleClass: 'wushi', spriteKey: 'n1', hp: 2560, mp: 120, atk: 258, spd: 80 },
+      { name: '青城方士', level: 32, roleClass: 'yiren', spriteKey: 'n3', hp: 2080, mp: 260, atk: 246, spd: 82 },
     ],
   },
   boss_zhangren: {
@@ -1505,10 +1505,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 4800,
     capturableTemplateId: 'huangzhong',
     enemies: [
-      { name: '伏兵弓将', level: 34, roleClass: 'wenren', spriteKey: 'n2', hp: 3400, mp: 240, atk: 298, spd: 96 },
-      { name: '益州名将·张任', level: 35, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 220, atk: 355, spd: 102 },
-      { name: '老将·严颜', level: 34, roleClass: 'wushi', spriteKey: 'r1', hp: 4600, mp: 180, atk: 325, spd: 92 },
-      { name: '川中谋士', level: 34, roleClass: 'yiren', spriteKey: 'n3', hp: 3300, mp: 320, atk: 310, spd: 98 },
+      { name: '伏兵弓将', level: 34, roleClass: 'wenren', spriteKey: 'n2', hp: 2950, mp: 240, atk: 272, spd: 90 },
+      { name: '益州名将·张任', level: 35, roleClass: 'wushi', spriteKey: 'r1', hp: 4650, mp: 220, atk: 315, spd: 96 },
+      { name: '老将·严颜', level: 34, roleClass: 'wushi', spriteKey: 'r1', hp: 3850, mp: 180, atk: 292, spd: 86 },
+      { name: '川中谋士', level: 34, roleClass: 'yiren', spriteKey: 'n3', hp: 2850, mp: 320, atk: 282, spd: 92 },
     ],
   },
   hanzhong_weijun: {
@@ -1520,10 +1520,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 4100,
     capturableTemplateId: 'machao',
     enemies: [
-      { name: '虎豹重骑', level: 39, roleClass: 'wushi', spriteKey: 'n1', hp: 3750, mp: 120, atk: 355, spd: 102 },
-      { name: '定军弓将', level: 39, roleClass: 'wenren', spriteKey: 'n2', hp: 3150, mp: 260, atk: 338, spd: 112 },
-      { name: '征西校尉', level: 40, roleClass: 'wushi', spriteKey: 'n1', hp: 4150, mp: 140, atk: 378, spd: 106 },
-      { name: '魏营术师', level: 40, roleClass: 'yiren', spriteKey: 'n3', hp: 3250, mp: 300, atk: 362, spd: 109 },
+      { name: '虎豹重骑', level: 39, roleClass: 'wushi', spriteKey: 'n1', hp: 3150, mp: 120, atk: 308, spd: 96 },
+      { name: '定军弓将', level: 39, roleClass: 'wenren', spriteKey: 'n2', hp: 2700, mp: 260, atk: 294, spd: 105 },
+      { name: '征西校尉', level: 40, roleClass: 'wushi', spriteKey: 'n1', hp: 3480, mp: 140, atk: 328, spd: 100 },
+      { name: '魏营术师', level: 40, roleClass: 'yiren', spriteKey: 'n3', hp: 2820, mp: 300, atk: 316, spd: 102 },
     ],
   },
   boss_xiahouyuan: {
@@ -1535,10 +1535,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 8200,
     capturableTemplateId: 'machao',
     enemies: [
-      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 200, atk: 410, spd: 118 },
-      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 7400, mp: 240, atk: 458, spd: 128 },
-      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 4500, mp: 320, atk: 382, spd: 124 },
-      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 4350, mp: 360, atk: 402, spd: 120 },
+      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 4550, mp: 200, atk: 356, spd: 112 },
+      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 6050, mp: 240, atk: 392, spd: 120 },
+      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 3750, mp: 320, atk: 336, spd: 116 },
+      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 3650, mp: 360, atk: 348, spd: 114 },
     ],
   },
   yiling_wujun: {
@@ -1550,10 +1550,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 6800,
     capturableTemplateId: 'zhouyu',
     enemies: [
-      { name: '江东解烦卫', level: 47, roleClass: 'wushi', spriteKey: 'n1', hp: 5100, mp: 140, atk: 450, spd: 128 },
-      { name: '火攻都尉', level: 47, roleClass: 'wenren', spriteKey: 'n2', hp: 4350, mp: 300, atk: 432, spd: 138 },
-      { name: '锦帆悍将', level: 48, roleClass: 'wushi', spriteKey: 'n1', hp: 5650, mp: 160, atk: 478, spd: 132 },
-      { name: '东吴术士', level: 48, roleClass: 'yiren', spriteKey: 'n3', hp: 4450, mp: 340, atk: 462, spd: 135 },
+      { name: '江东解烦卫', level: 47, roleClass: 'wushi', spriteKey: 'n1', hp: 4150, mp: 140, atk: 382, spd: 120 },
+      { name: '火攻都尉', level: 47, roleClass: 'wenren', spriteKey: 'n2', hp: 3620, mp: 300, atk: 368, spd: 128 },
+      { name: '锦帆悍将', level: 48, roleClass: 'wushi', spriteKey: 'n1', hp: 4580, mp: 160, atk: 404, spd: 124 },
+      { name: '东吴术士', level: 48, roleClass: 'yiren', spriteKey: 'n3', hp: 3750, mp: 340, atk: 392, spd: 126 },
     ],
   },
   boss_luxun: {
@@ -1565,10 +1565,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 13500,
     capturableTemplateId: 'zhouyu',
     enemies: [
-      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7200, mp: 220, atk: 515, spd: 148 },
-      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 8600, mp: 420, atk: 535, spd: 162 },
-      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 6900, mp: 200, atk: 495, spd: 142 },
-      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 5800, mp: 400, atk: 512, spd: 152 },
+      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 220, atk: 438, spd: 136 },
+      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 7100, mp: 420, atk: 462, spd: 148 },
+      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 5400, mp: 200, atk: 424, spd: 132 },
+      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 4750, mp: 400, atk: 436, spd: 140 },
     ],
   },
   wuzhang_sima: {
@@ -1580,10 +1580,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 10800,
     capturableTemplateId: 'simayi',
     enemies: [
-      { name: '死士重甲兵', level: 55, roleClass: 'wushi', spriteKey: 'n1', hp: 6800, mp: 180, atk: 560, spd: 154 },
-      { name: '司马参谋', level: 55, roleClass: 'wenren', spriteKey: 'n2', hp: 5800, mp: 360, atk: 540, spd: 166 },
-      { name: '大魏虎将', level: 56, roleClass: 'wushi', spriteKey: 'n1', hp: 7450, mp: 200, atk: 590, spd: 158 },
-      { name: '太史玄士', level: 56, roleClass: 'yiren', spriteKey: 'n3', hp: 5950, mp: 400, atk: 575, spd: 162 },
+      { name: '死士重甲兵', level: 55, roleClass: 'wushi', spriteKey: 'n1', hp: 5300, mp: 180, atk: 458, spd: 142 },
+      { name: '司马参谋', level: 55, roleClass: 'wenren', spriteKey: 'n2', hp: 4650, mp: 360, atk: 444, spd: 152 },
+      { name: '大魏虎将', level: 56, roleClass: 'wushi', spriteKey: 'n1', hp: 5850, mp: 200, atk: 482, spd: 146 },
+      { name: '太史玄士', level: 56, roleClass: 'yiren', spriteKey: 'n3', hp: 4800, mp: 400, atk: 470, spd: 148 },
     ],
   },
   boss_simayi: {
@@ -1595,10 +1595,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 22000,
     capturableTemplateId: 'zhugeliang',
     enemies: [
-      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 260, atk: 625, spd: 174 },
-      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 11800, mp: 520, atk: 668, spd: 192 },
-      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 8900, mp: 260, atk: 615, spd: 178 },
-      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 7800, mp: 460, atk: 640, spd: 182 },
+      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 6900, mp: 260, atk: 508, spd: 158 },
+      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 9100, mp: 520, atk: 542, spd: 172 },
+      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 6600, mp: 260, atk: 498, spd: 162 },
+      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 6050, mp: 460, atk: 518, spd: 166 },
     ],
   },
 };
@@ -1684,11 +1684,11 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
     atkBase = Math.round(14 + f * 8.2 + f * f * 0.25 + lateAtkBoost);
     spdBase = Math.round(14 + f * 2.8);
   } else {
-    // Smooth continuation from Floor 20 (hpBase≈5302, atkBase≈390, spdBase≈70) up to Floor 50
+    // Smooth continuation from Floor 20 up to Floor 50 (tuned for Lv.22->60 & 1转 squads)
     const over = f - 20;
-    hpBase = Math.round(5300 + over * 260 + over * over * 5.5);
-    atkBase = Math.round(390 + over * 13.5 + over * over * 0.12);
-    spdBase = Math.round(70 + over * 4.4);
+    hpBase = Math.round(4800 + over * 165 + over * over * 2.2);
+    atkBase = Math.round(355 + over * 7.8);
+    spdBase = Math.round(68 + over * 3.6);
   }
 
   let enemies: EnemyGroupDef['enemies'];
@@ -2747,9 +2747,9 @@ export function getCurrentWorldBoss(now = new Date()): {
 
 export function buildEscortBanditGroup(level: number): EnemyGroupDef {
   const lv = Math.max(3, Math.min(60, Math.floor(level)));
-  const hpBase = Math.round(130 + lv * 95 + lv * lv * 1.15);
-  const atkBase = Math.round(22 + lv * 8.5 + (lv > 20 ? (lv - 20) * 1.6 : 0));
-  const spdBase = Math.round(16 + lv * 2.5);
+  const hpBase = Math.round(40 + lv * 32 + lv * lv * 1.35);
+  const atkBase = Math.round(8 + lv * 5.8 + (lv > 15 ? (lv - 15) * 3.0 : 0));
+  const spdBase = Math.round(10 + lv * 2.2);
   return {
     id: 'escort_bandit',
     name: '劫镖黑风寨匪徒',
@@ -2758,19 +2758,36 @@ export function buildEscortBanditGroup(level: number): EnemyGroupDef {
     silverReward: Math.round(180 + lv * 35),
     expReward: Math.round(220 + lv * 95),
     enemies: [
-      { name: '劫镖山贼', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.95), mp: 60, atk: atkBase, spd: spdBase },
-      { name: '黑风大当家', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.35), mp: 100, atk: Math.round(atkBase * 1.15), spd: spdBase + 4 },
-      { name: '山寨狗头军师', level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.82), mp: 180, atk: Math.round(atkBase * 0.96), spd: spdBase + 6 },
+      { name: '劫镖山贼', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.9), mp: 60, atk: atkBase, spd: spdBase },
+      { name: '黑风大当家', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.28), mp: 100, atk: Math.round(atkBase * 1.12), spd: spdBase + 3 },
+      { name: '山寨狗头军师', level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.78), mp: 160, atk: Math.round(atkBase * 0.92), spd: spdBase + 5 },
     ],
   };
 }
 
 export function buildWorldBossEnemyGroup(bossId: string, level: number): EnemyGroupDef {
   const boss = WORLD_BOSS_ROSTER.find((b) => b.id === bossId) ?? WORLD_BOSS_ROSTER[0];
-  const lv = Math.max(6, Math.min(60, Math.floor(level)));
-  const hpBase = Math.round(220 + lv * 125 + lv * lv * 1.55);
-  const atkBase = Math.round(32 + lv * 9.8 + (lv > 20 ? (lv - 20) * 2.1 : 0));
-  const spdBase = Math.round(20 + lv * 2.8);
+  const lv = Math.max(5, Math.min(60, Math.floor(level)));
+  const hpBase = Math.round(55 + lv * 42 + lv * lv * 1.6);
+  const atkBase = Math.round(10 + lv * 6.4 + (lv > 15 ? (lv - 15) * 3.4 : 0));
+  const spdBase = Math.round(12 + lv * 2.4);
+  const enemies: EnemyGroupDef['enemies'] = [
+    { name: `${boss.title}·先锋护卫`, level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.88), mp: 80, atk: Math.round(atkBase * 0.92), spd: spdBase + 2 },
+    { name: boss.name, level: lv + 1, roleClass: boss.roleClass, spriteKey: boss.spriteKey, hp: Math.round(hpBase * 1.42), mp: 260, atk: Math.round(atkBase * 1.15), spd: spdBase + 6 },
+    { name: `${boss.title}·随军谋士`, level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.76), mp: 200, atk: Math.round(atkBase * 0.9), spd: spdBase + 8 },
+  ];
+  if (lv >= 15) {
+    enemies.push({
+      name: `${boss.title}·道法护法`,
+      level: lv,
+      roleClass: 'yiren',
+      spriteKey: 'n3',
+      hp: Math.round(hpBase * 0.84),
+      mp: 220,
+      atk: Math.round(atkBase * 0.96),
+      spd: spdBase + 4,
+    });
+  }
   return {
     id: `world_boss:${boss.id}`,
     name: `【${boss.title}】${boss.name}`,
@@ -2778,11 +2795,6 @@ export function buildWorldBossEnemyGroup(bossId: string, level: number): EnemyGr
     minLevel: lv,
     silverReward: Math.round(260 + lv * 45),
     expReward: Math.round(320 + lv * 120),
-    enemies: [
-      { name: `${boss.title}·先锋护卫`, level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.95), mp: 80, atk: Math.round(atkBase * 0.96), spd: spdBase + 2 },
-      { name: boss.name, level: lv + 2, roleClass: boss.roleClass, spriteKey: boss.spriteKey, hp: Math.round(hpBase * 1.6), mp: 300, atk: Math.round(atkBase * 1.24), spd: spdBase + 8 },
-      { name: `${boss.title}·随军谋士`, level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.82), mp: 220, atk: Math.round(atkBase * 0.94), spd: spdBase + 10 },
-      { name: `${boss.title}·道法护法`, level: lv, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 0.88), mp: 240, atk: Math.round(atkBase * 1.02), spd: spdBase + 5 },
-    ],
+    enemies,
   };
 }

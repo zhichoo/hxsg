@@ -91,6 +91,7 @@ interface CharacterRow {
   escort_origin_map_id?: string | null;
   escort_target_map_id?: string | null;
   world_boss_date?: string | null;
+  rebirth?: number;
 }
 
 interface GeneralRow {
@@ -128,11 +129,12 @@ function calcGeneralStatsAtLevel(
   level: number,
 ) {
   const lv = Math.max(1, level);
+  const lateLv = Math.max(0, lv - 20);
   return {
-    maxHp: Math.round(base.hp + (lv - 1) * 20 * growth),
-    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth),
-    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth),
-    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth),
+    maxHp: Math.round(base.hp + (lv - 1) * 22 * growth + lateLv * 38 * growth),
+    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth + lateLv * 8 * growth),
+    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth + lateLv * 5.2 * growth),
+    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth + lateLv * 1.6 * growth),
   };
 }
 
@@ -287,7 +289,9 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     int: row.pt_int ?? 0,
     agi: row.pt_agi ?? 0,
   };
-  const baseStats = calcRoleStats(row.role_class, row.level, alloc);
+  const rebirth = Math.max(0, row.rebirth ?? 0);
+  const resCap = 75 + rebirth * 10;
+  const baseStats = calcRoleStats(row.role_class, row.level, alloc, rebirth);
   const effectiveMaxHp = baseStats.maxHp + bonus.hp;
   const effectiveMaxMp = baseStats.maxMp + bonus.mp;
   const effectiveAtk = baseStats.atk + bonus.atk;
@@ -397,6 +401,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     gender: row.gender,
     portrait: row.portrait,
     level: row.level,
+    rebirth,
     exp: row.exp,
     expToNext: expRequiredForLevel(row.level),
     hp: Math.min(row.hp, effectiveMaxHp),
@@ -417,11 +422,11 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     alloc,
     resist: {
       freePoints: row.res_points ?? 0,
-      phys: Math.min(75, (row.res_phys ?? 0) + bonus.resPhys),
-      chaos: Math.min(75, (row.res_chaos ?? 0) + bonus.resChaos),
-      seal: Math.min(75, (row.res_seal ?? 0) + bonus.resSeal),
-      trap: Math.min(75, (row.res_trap ?? 0) + bonus.resTrap),
-      magic: Math.min(75, (row.res_magic ?? 0) + bonus.resMagic),
+      phys: Math.min(resCap, (row.res_phys ?? 0) + bonus.resPhys),
+      chaos: Math.min(resCap, (row.res_chaos ?? 0) + bonus.resChaos),
+      seal: Math.min(resCap, (row.res_seal ?? 0) + bonus.resSeal),
+      trap: Math.min(resCap, (row.res_trap ?? 0) + bonus.resTrap),
+      magic: Math.min(resCap, (row.res_magic ?? 0) + bonus.resMagic),
     },
     equipBonus: bonus,
     equipment,
@@ -717,9 +722,11 @@ export function allocateCharacterStats(
     int: ch.alloc.int + dInt,
     agi: ch.alloc.agi + dAgi,
   };
-  const stats = calcRoleStats(ch.roleClass, ch.level, nextAlloc);
-  const nextHp = Math.min(stats.maxHp, ch.hp + dVit * 18);
-  const nextMp = Math.min(stats.maxMp, ch.mp + dInt * 16);
+  const stats = calcRoleStats(ch.roleClass, ch.level, nextAlloc, ch.rebirth);
+  const effMaxHp = stats.maxHp + ch.equipBonus.hp;
+  const effMaxMp = stats.maxMp + ch.equipBonus.mp;
+  const nextHp = Math.min(effMaxHp, ch.hp + dVit * 18);
+  const nextMp = Math.min(effMaxMp, ch.mp + dInt * 16);
 
   db.prepare(
     `UPDATE characters
@@ -734,12 +741,12 @@ export function allocateCharacterStats(
     nextAlloc.int,
     nextAlloc.agi,
     nextHp,
-    stats.maxHp,
+    effMaxHp,
     nextMp,
-    stats.maxMp,
-    stats.atk,
-    stats.def,
-    stats.spd,
+    effMaxMp,
+    stats.atk + ch.equipBonus.atk,
+    stats.def + ch.equipBonus.def,
+    stats.spd + ch.equipBonus.spd,
     Date.now(),
     characterId,
   );
@@ -751,7 +758,9 @@ export function resetCharacterStats(characterId: number): CharacterView {
   if (!ch) throw new Error('角色不存在');
   const refunded = ch.alloc.vit + ch.alloc.str + ch.alloc.int + ch.alloc.agi;
   if (refunded <= 0) throw new Error('尚未分配任何属性点');
-  const stats = calcRoleStats(ch.roleClass, ch.level, { vit: 0, str: 0, int: 0, agi: 0 });
+  const stats = calcRoleStats(ch.roleClass, ch.level, { vit: 0, str: 0, int: 0, agi: 0 }, ch.rebirth);
+  const effMaxHp = stats.maxHp + ch.equipBonus.hp;
+  const effMaxMp = stats.maxMp + ch.equipBonus.mp;
   db.prepare(
     `UPDATE characters
      SET free_points = free_points + ?,
@@ -760,13 +769,13 @@ export function resetCharacterStats(characterId: number): CharacterView {
      WHERE id = ?`,
   ).run(
     refunded,
-    stats.maxHp,
-    stats.maxHp,
-    stats.maxMp,
-    stats.maxMp,
-    stats.atk,
-    stats.def,
-    stats.spd,
+    effMaxHp,
+    effMaxHp,
+    effMaxMp,
+    effMaxMp,
+    stats.atk + ch.equipBonus.atk,
+    stats.def + ch.equipBonus.def,
+    stats.spd + ch.equipBonus.spd,
     Date.now(),
     characterId,
   );
@@ -789,14 +798,24 @@ export function allocateCharacterResist(
   if (total <= 0) throw new Error('请选择要分配的抗性点');
   if (total > ch.resist.freePoints) throw new Error('剩余抗性点不足');
 
-  const nextPhys = ch.resist.phys + dPhys * 3;
-  const nextChaos = ch.resist.chaos + dChaos * 3;
-  const nextSeal = ch.resist.seal + dSeal * 3;
-  const nextTrap = ch.resist.trap + dTrap * 3;
-  const nextMagic = ch.resist.magic + dMagic * 3;
+  const rawRow = db
+    .prepare('SELECT res_phys, res_chaos, res_seal, res_trap, res_magic FROM characters WHERE id = ?')
+    .get(characterId) as unknown as {
+    res_phys: number;
+    res_chaos: number;
+    res_seal: number;
+    res_trap: number;
+    res_magic: number;
+  };
+  const resCap = 75 + ch.rebirth * 10;
+  const nextPhys = (rawRow.res_phys ?? 0) + dPhys * 3;
+  const nextChaos = (rawRow.res_chaos ?? 0) + dChaos * 3;
+  const nextSeal = (rawRow.res_seal ?? 0) + dSeal * 3;
+  const nextTrap = (rawRow.res_trap ?? 0) + dTrap * 3;
+  const nextMagic = (rawRow.res_magic ?? 0) + dMagic * 3;
 
-  if (Math.max(nextPhys, nextChaos, nextSeal, nextTrap, nextMagic) > 75) {
-    throw new Error('单项抗性上限为 75%');
+  if (Math.max(nextPhys, nextChaos, nextSeal, nextTrap, nextMagic) > resCap) {
+    throw new Error(`单项抗性上限为 ${resCap}%`);
   }
 
   db.prepare(
@@ -807,6 +826,51 @@ export function allocateCharacterResist(
   ).run(total, nextPhys, nextChaos, nextSeal, nextTrap, nextMagic, Date.now(), characterId);
 
   return getCharacterById(characterId)!;
+}
+
+export function rebirthCharacter(characterId: number): {
+  character: CharacterView;
+  message: string;
+  broadcast: string;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.rebirth >= 1) throw new Error('首期版本已达最高 1 转境界！');
+  if (ch.level < 60) throw new Error('主角需达到 60 级方可破境一转！');
+
+  const nextRebirth = ch.rebirth + 1;
+  const baseStats = calcRoleStats(ch.roleClass, 1, { vit: 0, str: 0, int: 0, agi: 0 }, nextRebirth);
+  const effMaxHp = baseStats.maxHp + ch.equipBonus.hp;
+  const effMaxMp = baseStats.maxMp + ch.equipBonus.mp;
+  const bonusFreePoints = 4 + nextRebirth * 30;
+
+  db.prepare(
+    `UPDATE characters
+     SET level = 1, exp = 0, rebirth = ?,
+         free_points = ?, pt_vit = 0, pt_str = 0, pt_int = 0, pt_agi = 0,
+         res_points = res_points + 10,
+         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, def = ?, spd = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    nextRebirth,
+    bonusFreePoints,
+    effMaxHp,
+    effMaxHp,
+    effMaxMp,
+    effMaxMp,
+    baseStats.atk + ch.equipBonus.atk,
+    baseStats.def + ch.equipBonus.def,
+    baseStats.spd + ch.equipBonus.spd,
+    Date.now(),
+    characterId,
+  );
+
+  const updated = getCharacterById(characterId)!;
+  return {
+    character: updated,
+    message: `🌟 恭喜破境【一转重生】！永久获赠 +30 自由属性点、+10 抗性点、成长属性 +15%、全抗上限 85%，并保留全部装备/副将/熟练度！`,
+    broadcast: `【大道一转】绝世豪杰 ${ch.name} 功德圆满，于 60 级成功破境【一转重生】，威震三国！`,
+  };
 }
 
 export function addItem(characterId: number, itemId: string, delta: number) {
@@ -1361,7 +1425,7 @@ export function equipItem(characterId: number, equipId: number): CharacterView {
   if (!ch) throw new Error('角色不存在');
   const target = ch.equipment.find((e) => e.id === equipId);
   if (!target) throw new Error('装备不存在');
-  if (ch.level < target.levelReq) {
+  if (ch.rebirth === 0 && ch.level < target.levelReq) {
     throw new Error(`需要 ${target.levelReq} 级才能穿戴【${target.name}】`);
   }
 
@@ -1926,7 +1990,7 @@ export function applyExpAndSilver(
   const leveledUp = levelsGained > 0;
   const freePointsGain = levelsGained * 4;
   const resPointsGain = levelsGained * 1;
-  const stats = calcRoleStats(ch.roleClass, level, ch.alloc);
+  const stats = calcRoleStats(ch.roleClass, level, ch.alloc, ch.rebirth);
   const effMaxHp = stats.maxHp + ch.equipBonus.hp;
   const effMaxMp = stats.maxMp + ch.equipBonus.mp;
   const finalHp = leveledUp ? effMaxHp : Math.max(1, Math.min(effMaxHp, hpAfter ?? ch.hp));
@@ -1983,19 +2047,20 @@ export function applyExpAndSilver(
 export function getRankings(realmId: string, sort: 'level' | 'silver' | 'gold'): RankEntry[] {
   const orderSql =
     sort === 'silver'
-      ? 'silver DESC, level DESC'
+      ? 'silver DESC, rebirth DESC, level DESC'
       : sort === 'gold'
-        ? 'gold DESC, level DESC'
-        : 'level DESC, exp DESC';
+        ? 'gold DESC, rebirth DESC, level DESC'
+        : 'rebirth DESC, level DESC, exp DESC';
   const rows = db
     .prepare(
-      `SELECT id, name, role_class, level, silver, gold FROM characters WHERE realm_id = ? ORDER BY ${orderSql} LIMIT 30`,
+      `SELECT id, name, role_class, level, rebirth, silver, gold FROM characters WHERE realm_id = ? ORDER BY ${orderSql} LIMIT 30`,
     )
     .all(realmId) as unknown as Array<{
     id: number;
     name: string;
     role_class: RoleClass;
     level: number;
+    rebirth: number;
     silver: number;
     gold: number;
   }>;
@@ -2006,6 +2071,7 @@ export function getRankings(realmId: string, sort: 'level' | 'silver' | 'gold'):
     name: r.name,
     roleClass: r.role_class,
     level: r.level,
+    rebirth: r.rebirth ?? 0,
     silver: r.silver,
     gold: r.gold,
   }));

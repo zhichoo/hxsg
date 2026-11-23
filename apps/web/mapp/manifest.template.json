@@ -47,6 +47,11 @@
       "method": "POST",
       "auth": "platform"
     },
+    "characterRebirth": {
+      "url": "__API_BASE__/api/character/rebirth",
+      "method": "POST",
+      "auth": "platform"
+    },
     "mapMove": {
       "url": "__API_BASE__/api/map/move",
       "method": "POST",

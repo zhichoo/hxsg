@@ -39,6 +39,7 @@ export function calcRoleStats(
   roleClass: RoleClass,
   level: number,
   alloc: { vit?: number; str?: number; int?: number; agi?: number } = {},
+  rebirth = 0,
 ) {
   const m = ROLE_CLASS_META[roleClass];
   const lv = Math.max(1, level);
@@ -52,13 +53,17 @@ export function calcRoleStats(
   const atkGain = roleClass === 'wushi' ? 6 : roleClass === 'yiren' ? 5 : 4;
   const defGain = roleClass === 'wushi' ? 3 : 2;
   const spdGain = roleClass === 'wenren' ? 4 : roleClass === 'yiren' ? 3 : 2;
+  const rebirthMult = 1 + Math.max(0, rebirth) * 0.15;
 
   return {
-    maxHp: m.baseHp + (lv - 1) * hpGain + vit * 18,
-    maxMp: m.baseMp + (lv - 1) * mpGain + intel * 16,
-    atk: m.baseAtk + (lv - 1) * atkGain + str * 3 + (roleClass !== 'wushi' ? Math.round(intel * 1.5) : 0),
-    def: m.baseDef + (lv - 1) * defGain + vit * 1,
-    spd: m.baseSpd + (lv - 1) * spdGain + agi * 3,
+    maxHp: Math.round((m.baseHp + (lv - 1) * hpGain + vit * 18) * rebirthMult),
+    maxMp: Math.round((m.baseMp + (lv - 1) * mpGain + intel * 16) * rebirthMult),
+    atk: Math.round(
+      (m.baseAtk + (lv - 1) * atkGain + str * 3 + (roleClass !== 'wushi' ? Math.round(intel * 1.5) : 0)) *
+        rebirthMult,
+    ),
+    def: Math.round((m.baseDef + (lv - 1) * defGain + vit * 1) * rebirthMult),
+    spd: Math.round((m.baseSpd + (lv - 1) * spdGain + agi * 3) * rebirthMult),
   };
 }
 
@@ -77,7 +82,7 @@ export function calcDamage(
   if (opts.targetTrapped) {
     dmg *= 1.25;
   }
-  const resist = Math.max(0, Math.min(75, opts.resistPct ?? 0));
+  const resist = Math.max(0, Math.min(85, opts.resistPct ?? 0));
   dmg *= 1 - resist / 100;
   return {
     damage: Math.max(1, Math.round(dmg)),

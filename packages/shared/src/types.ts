@@ -268,6 +268,7 @@ export interface CharacterView {
   gender: Gender;
   portrait: string;
   level: number;
+  rebirth: number;
   exp: number;
   expToNext: number;
   hp: number;
@@ -497,6 +498,7 @@ export interface RankEntry {
   name: string;
   roleClass: RoleClass;
   level: number;
+  rebirth: number;
   silver: number;
   gold: number;
 }
