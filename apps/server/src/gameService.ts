@@ -74,8 +74,62 @@ interface GeneralRow {
   max_mp: number;
   atk: number;
   spd: number;
+  base_hp: number;
+  base_mp: number;
+  base_atk: number;
+  base_spd: number;
   growth: number;
+  rebirth: number;
+  rarity: EquipmentQuality;
+  skill_id: string;
   slot: number | null;
+}
+
+function calcGeneralStatsAtLevel(
+  base: { hp: number; mp: number; atk: number; spd: number },
+  growth: number,
+  level: number,
+) {
+  const lv = Math.max(1, level);
+  return {
+    maxHp: Math.round(base.hp + (lv - 1) * 20 * growth),
+    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth),
+    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth),
+    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth),
+  };
+}
+
+function rollGeneralBuild(templateId: string, rebirth = 0) {
+  const tpl = GENERAL_TEMPLATES[templateId];
+  if (!tpl) throw new Error('副将模板不存在');
+  const gMin = tpl.growthMin;
+  const gMax = tpl.growthMax;
+  const gRatio = Math.random();
+  const baseGrowth = gMin + gRatio * (gMax - gMin);
+  const growth = Math.round((baseGrowth + rebirth * 0.1) * 100) / 100;
+
+  const rebirthMult = 1 + rebirth * 0.15;
+  const rollBase = (val: number) =>
+    Math.max(10, Math.round(val * rebirthMult * (0.88 + Math.random() * 0.26)));
+
+  const baseHp = rollBase(tpl.baseHp);
+  const baseMp = rollBase(tpl.baseMp);
+  const baseAtk = rollBase(tpl.baseAtk);
+  const baseSpd = rollBase(tpl.baseSpd);
+
+  const avgBaseScore =
+    (baseHp / (tpl.baseHp * rebirthMult) +
+      baseAtk / (tpl.baseAtk * rebirthMult) +
+      baseSpd / (tpl.baseSpd * rebirthMult)) /
+    3;
+  const score = gRatio * 0.65 + Math.max(0, Math.min(1, (avgBaseScore - 0.88) / 0.26)) * 0.35;
+
+  let rarity: EquipmentQuality = 'common';
+  if (score >= 0.86 || rebirth >= 2) rarity = 'legend';
+  else if (score >= 0.65 || rebirth >= 1) rarity = 'rare';
+  else if (score >= 0.38) rarity = 'fine';
+
+  return { tpl, baseHp, baseMp, baseAtk, baseSpd, growth, rarity };
 }
 
 export function getCharacterByAccountAndRealm(
@@ -207,24 +261,38 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     .prepare('SELECT * FROM generals WHERE character_id = ? ORDER BY slot IS NULL, slot ASC, id ASC')
     .all(row.id) as unknown as GeneralRow[];
 
-  const generals: GeneralView[] = generalRows.map((g) => ({
-    id: g.id,
-    templateId: g.template_id,
-    name: g.name,
-    roleClass: g.role_class,
-    spriteKey: g.sprite_key,
-    avatarKey: g.avatar_key,
-    level: g.level,
-    exp: g.exp,
-    hp: g.hp,
-    maxHp: g.max_hp,
-    mp: g.mp,
-    maxMp: g.max_mp,
-    atk: g.atk,
-    spd: g.spd,
-    growth: g.growth,
-    slot: g.slot,
-  }));
+  const generals: GeneralView[] = generalRows.map((g) => {
+    const tpl = GENERAL_TEMPLATES[g.template_id];
+    const skillId = g.skill_id || tpl?.skillId || 'liandao';
+    const skillDef = SKILLS.find((s) => s.id === skillId);
+    return {
+      id: g.id,
+      templateId: g.template_id,
+      name: g.name,
+      roleClass: g.role_class,
+      spriteKey: g.sprite_key,
+      avatarKey: g.avatar_key,
+      level: g.level,
+      exp: g.exp,
+      expToNext: expRequiredForLevel(g.level),
+      hp: g.hp,
+      maxHp: g.max_hp,
+      mp: g.mp,
+      maxMp: g.max_mp,
+      atk: g.atk,
+      spd: g.spd,
+      baseHp: g.base_hp || tpl?.baseHp || g.max_hp,
+      baseMp: g.base_mp || tpl?.baseMp || g.max_mp,
+      baseAtk: g.base_atk || tpl?.baseAtk || g.atk,
+      baseSpd: g.base_spd || tpl?.baseSpd || g.spd,
+      growth: g.growth,
+      rebirth: g.rebirth ?? 0,
+      rarity: (g.rarity as EquipmentQuality) || 'common',
+      skillId,
+      skillName: skillDef?.name ?? '力劈华山',
+      slot: g.slot,
+    };
+  });
 
   const invRows = db
     .prepare('SELECT item_id, quantity FROM inventory WHERE character_id = ? AND quantity > 0')
@@ -391,6 +459,8 @@ export function createCharacter(params: {
   addItem(characterId, 'jinchuang', 5);
   addItem(characterId, 'ningshen', 3);
   addItem(characterId, 'baotu', 1);
+  addItem(characterId, 'jingyandan', 1);
+  addItem(characterId, 'xisuidan', 1);
 
   return getCharacterById(characterId)!;
 }
@@ -851,8 +921,8 @@ export function grantGeneralToCharacter(
   templateId: string,
   level = 1,
 ): GeneralView {
-  const tpl = GENERAL_TEMPLATES[templateId];
-  if (!tpl) throw new Error('副将模板不存在');
+  const rolled = rollGeneralBuild(templateId, 0);
+  const { tpl, baseHp, baseMp, baseAtk, baseSpd, growth, rarity } = rolled;
   const existingSlots = db
     .prepare('SELECT slot FROM generals WHERE character_id = ? AND slot IS NOT NULL')
     .all(characterId) as unknown as Array<{ slot: number }>;
@@ -865,17 +935,21 @@ export function grantGeneralToCharacter(
     }
   }
   const lv = Math.max(1, level);
-  const maxHp = Math.round(tpl.baseHp + (lv - 1) * 20 * tpl.growth);
-  const maxMp = Math.round(tpl.baseMp + (lv - 1) * 12 * tpl.growth);
-  const atk = Math.round(tpl.baseAtk + (lv - 1) * 5.5 * tpl.growth);
-  const spd = Math.round(tpl.baseSpd + (lv - 1) * 3 * tpl.growth);
+  const stats = calcGeneralStatsAtLevel(
+    { hp: baseHp, mp: baseMp, atk: baseAtk, spd: baseSpd },
+    growth,
+    lv,
+  );
+  const skillDef = SKILLS.find((s) => s.id === tpl.skillId);
 
   const info = db
     .prepare(
       `INSERT INTO generals (
         character_id, template_id, name, role_class, sprite_key, avatar_key,
-        level, exp, hp, max_hp, mp, max_mp, atk, spd, growth, slot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        level, exp, hp, max_hp, mp, max_mp, atk, spd,
+        base_hp, base_mp, base_atk, base_spd, growth, rebirth, rarity, skill_id,
+        slot, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
     )
     .run(
       characterId,
@@ -885,13 +959,19 @@ export function grantGeneralToCharacter(
       tpl.spriteKey,
       tpl.avatarKey,
       lv,
-      maxHp,
-      maxHp,
-      maxMp,
-      maxMp,
-      atk,
-      spd,
-      tpl.growth,
+      stats.maxHp,
+      stats.maxHp,
+      stats.maxMp,
+      stats.maxMp,
+      stats.atk,
+      stats.spd,
+      baseHp,
+      baseMp,
+      baseAtk,
+      baseSpd,
+      growth,
+      rarity,
+      tpl.skillId,
       freeSlot,
       Date.now(),
     );
@@ -905,20 +985,32 @@ export function grantGeneralToCharacter(
     avatarKey: tpl.avatarKey,
     level: lv,
     exp: 0,
-    hp: maxHp,
-    maxHp,
-    mp: maxMp,
-    maxMp,
-    atk,
-    spd,
-    growth: tpl.growth,
+    expToNext: expRequiredForLevel(lv),
+    hp: stats.maxHp,
+    maxHp: stats.maxHp,
+    mp: stats.maxMp,
+    maxMp: stats.maxMp,
+    atk: stats.atk,
+    spd: stats.spd,
+    baseHp,
+    baseMp,
+    baseAtk,
+    baseSpd,
+    growth,
+    rebirth: 0,
+    rarity,
+    skillId: tpl.skillId,
+    skillName: skillDef?.name ?? '力劈华山',
     slot: freeSlot,
   };
 }
 
-export function recruitGeneral(characterId: number, templateId: string): CharacterView {
+export function recruitGeneral(characterId: number, templateId: string): {
+  general: GeneralView;
+  character: CharacterView;
+} {
   const tpl = GENERAL_TEMPLATES[templateId];
-  if (!tpl) throw new Error('无效的副将');
+  if (!tpl || tpl.tavernDirect === false) throw new Error('该名将需使用「招贤令」寻访获得');
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
   if (ch.generals.length >= 12) throw new Error('副将栏位已满（最多 12 名）');
@@ -929,8 +1021,169 @@ export function recruitGeneral(characterId: number, templateId: string): Charact
     Date.now(),
     characterId,
   );
-  grantGeneralToCharacter(characterId, templateId, Math.max(1, ch.level - 1));
+  const general = grantGeneralToCharacter(characterId, templateId, Math.max(1, ch.level - 1));
+  return { general, character: getCharacterById(characterId)! };
+}
+
+export function drawGeneralWithToken(characterId: number): {
+  general: GeneralView;
+  character: CharacterView;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.generals.length >= 12) throw new Error('副将栏位已满（最多 12 名），请先解雇多余副将');
+  const owned = ch.inventory.find((i) => i.itemId === 'jiangling');
+  if (!owned || owned.quantity <= 0) throw new Error('行囊中没有招贤令（可在药铺购买或挖宝获得）');
+
+  addItem(characterId, 'jiangling', -1);
+
+  const roll = Math.random();
+  let templateId: string;
+  if (roll < 0.08) templateId = 'lvbu';
+  else if (roll < 0.22) templateId = 'zhaoyun';
+  else if (roll < 0.36) templateId = 'guanyu';
+  else if (roll < 0.5) templateId = 'diaochan';
+  else if (roll < 0.68) templateId = 'yuji';
+  else if (roll < 0.84) templateId = 'huangyueying';
+  else templateId = Math.random() < 0.5 ? 'guanping' : 'zhoucang';
+
+  const general = grantGeneralToCharacter(characterId, templateId, Math.max(1, ch.level - 1));
+  return { general, character: getCharacterById(characterId)! };
+}
+
+export function feedGeneralExpPill(characterId: number, generalId: number): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  const pill = ch.inventory.find((i) => i.itemId === 'jingyandan');
+  if (!pill || pill.quantity <= 0) throw new Error('行囊中没有副将经验丹');
+
+  addItem(characterId, 'jingyandan', -1);
+  let lv = g.level;
+  let exp = g.exp + 360;
+  const maxLv = Math.max(20, ch.level + 5);
+  while (exp >= expRequiredForLevel(lv) && lv < maxLv) {
+    exp -= expRequiredForLevel(lv);
+    lv++;
+  }
+  const stats = calcGeneralStatsAtLevel(
+    { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
+    g.growth,
+    lv,
+  );
+  db.prepare(
+    'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ? WHERE id = ?',
+  ).run(lv, exp, stats.maxHp, stats.maxHp, stats.maxMp, stats.maxMp, stats.atk, stats.spd, g.id);
   return getCharacterById(characterId)!;
+}
+
+export function washGeneral(characterId: number, generalId: number): {
+  general: GeneralView;
+  character: CharacterView;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  const pill = ch.inventory.find((i) => i.itemId === 'xisuidan');
+  if (!pill || pill.quantity <= 0) throw new Error('行囊中没有洗髓丹');
+
+  addItem(characterId, 'xisuidan', -1);
+  const rolled = rollGeneralBuild(g.templateId, g.rebirth);
+  const stats = calcGeneralStatsAtLevel(
+    { hp: rolled.baseHp, mp: rolled.baseMp, atk: rolled.baseAtk, spd: rolled.baseSpd },
+    rolled.growth,
+    g.level,
+  );
+  db.prepare(
+    `UPDATE generals
+     SET base_hp = ?, base_mp = ?, base_atk = ?, base_spd = ?, growth = ?, rarity = ?,
+         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?
+     WHERE id = ?`,
+  ).run(
+    rolled.baseHp,
+    rolled.baseMp,
+    rolled.baseAtk,
+    rolled.baseSpd,
+    rolled.growth,
+    rolled.rarity,
+    stats.maxHp,
+    stats.maxHp,
+    stats.maxMp,
+    stats.maxMp,
+    stats.atk,
+    stats.spd,
+    g.id,
+  );
+  const updated = getCharacterById(characterId)!;
+  return {
+    general: updated.generals.find((x) => x.id === generalId)!,
+    character: updated,
+  };
+}
+
+export function rebirthGeneral(characterId: number, generalId: number): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  if (g.rebirth >= 2) throw new Error('该副将已达最高 2 转境界');
+  const reqLv = g.rebirth === 0 ? 10 : 20;
+  if (g.level < reqLv) throw new Error(`需达到 ${reqLv} 级才可进行 ${g.rebirth + 1} 转`);
+
+  const nextRebirth = g.rebirth + 1;
+  const nextGrowth = Math.round((g.growth + 0.1) * 100) / 100;
+  const nextBaseHp = Math.round(g.baseHp * 1.15);
+  const nextBaseMp = Math.round(g.baseMp * 1.15);
+  const nextBaseAtk = Math.round(g.baseAtk * 1.15);
+  const nextBaseSpd = Math.round(g.baseSpd * 1.15);
+  const nextRarity: EquipmentQuality = nextRebirth >= 2 ? 'legend' : 'rare';
+
+  db.prepare(
+    `UPDATE generals
+     SET level = 1, exp = 0, rebirth = ?, growth = ?, rarity = ?,
+         base_hp = ?, base_mp = ?, base_atk = ?, base_spd = ?,
+         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?
+     WHERE id = ?`,
+  ).run(
+    nextRebirth,
+    nextGrowth,
+    nextRarity,
+    nextBaseHp,
+    nextBaseMp,
+    nextBaseAtk,
+    nextBaseSpd,
+    nextBaseHp,
+    nextBaseHp,
+    nextBaseMp,
+    nextBaseMp,
+    nextBaseAtk,
+    nextBaseSpd,
+    g.id,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function dismissGeneral(characterId: number, generalId: number): {
+  refundSilver: number;
+  character: CharacterView;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  if (g.slot !== null) throw new Error('请先将该副将卸下出战槽位再解雇');
+
+  const tpl = GENERAL_TEMPLATES[g.templateId];
+  const refundSilver = Math.max(80, Math.round((tpl?.recruitCostSilver ?? 300) * 0.25));
+  db.prepare('DELETE FROM generals WHERE id = ? AND character_id = ?').run(generalId, characterId);
+  db.prepare('UPDATE characters SET silver = silver + ?, updated_at = ? WHERE id = ?').run(
+    refundSilver,
+    Date.now(),
+    characterId,
+  );
+  return { refundSilver, character: getCharacterById(characterId)! };
 }
 
 export function setGeneralSlot(
@@ -1008,21 +1261,20 @@ export function applyExpAndSilver(
 
   const activeGenerals = ch.generals.filter((g) => g.slot !== null);
   for (const g of activeGenerals) {
-    const tpl = GENERAL_TEMPLATES[g.templateId];
-    if (!tpl) continue;
     let gLv = g.level;
-    let gExp = g.exp + Math.round(expGain * 0.8);
-    while (gExp >= expRequiredForLevel(gLv) && gLv < level + 2) {
+    let gExp = g.exp + Math.round(expGain * 0.85);
+    while (gExp >= expRequiredForLevel(gLv) && gLv < level + 3) {
       gExp -= expRequiredForLevel(gLv);
       gLv++;
     }
-    const maxHp = Math.round(tpl.baseHp + (gLv - 1) * 20 * g.growth);
-    const maxMp = Math.round(tpl.baseMp + (gLv - 1) * 12 * g.growth);
-    const atk = Math.round(tpl.baseAtk + (gLv - 1) * 5.5 * g.growth);
-    const spd = Math.round(tpl.baseSpd + (gLv - 1) * 3 * g.growth);
+    const gStats = calcGeneralStatsAtLevel(
+      { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
+      g.growth,
+      gLv,
+    );
     db.prepare(
       `UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ? WHERE id = ?`,
-    ).run(gLv, gExp, maxHp, maxHp, maxMp, maxMp, atk, spd, g.id);
+    ).run(gLv, gExp, gStats.maxHp, gStats.maxHp, gStats.maxMp, gStats.maxMp, gStats.atk, gStats.spd, g.id);
   }
 
   return {

@@ -20,11 +20,15 @@ import {
   buyShopItem,
   createCharacter,
   digTreasureMap,
+  dismissGeneral,
+  drawGeneralWithToken,
   equipItem,
+  feedGeneralExpPill,
   getCharacterByAccountAndRealm,
   getRankings,
   gmGrant,
   moveCharacter,
+  rebirthGeneral,
   recruitGeneral,
   resetCharacterStats,
   restAtInn,
@@ -32,6 +36,7 @@ import {
   setGeneralSlot,
   unequipSlot,
   useInventoryItem,
+  washGeneral,
 } from './gameService.js';
 import {
   isJwtFormat,
@@ -310,7 +315,47 @@ app.post('/api/generals/recruit', async (req) => {
   const body = req.body as { realmId?: string; templateId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
-  return { character: recruitGeneral(current.id, body.templateId || '') };
+  return recruitGeneral(current.id, body.templateId || '');
+});
+
+app.post('/api/generals/draw', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return drawGeneralWithToken(current.id);
+});
+
+app.post('/api/generals/feed', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: feedGeneralExpPill(current.id, Number(body.generalId)) };
+});
+
+app.post('/api/generals/wash', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return washGeneral(current.id, Number(body.generalId));
+});
+
+app.post('/api/generals/rebirth', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: rebirthGeneral(current.id, Number(body.generalId)) };
+});
+
+app.post('/api/generals/dismiss', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return dismissGeneral(current.id, Number(body.generalId));
 });
 
 app.post('/api/generals/slot', async (req) => {

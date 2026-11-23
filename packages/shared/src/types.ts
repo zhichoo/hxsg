@@ -127,13 +127,22 @@ export interface GeneralView {
   avatarKey: string;
   level: number;
   exp: number;
+  expToNext: number;
   hp: number;
   maxHp: number;
   mp: number;
   maxMp: number;
   atk: number;
   spd: number;
+  baseHp: number;
+  baseMp: number;
+  baseAtk: number;
+  baseSpd: number;
   growth: number;
+  rebirth: number;
+  rarity: EquipmentQuality;
+  skillId: string;
+  skillName: string;
   slot: number | null; // 0, 1, 2 for active battle slots; null for bench
 }
 
@@ -210,6 +219,7 @@ export interface BattleUnit {
   level: number;
   roleClass: RoleClass;
   spriteKey: string;
+  skillId?: string;
   hp: number;
   maxHp: number;
   mp: number;

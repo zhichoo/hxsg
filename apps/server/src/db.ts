@@ -198,3 +198,26 @@ db.exec(`
   ON accounts(platform_iss, platform_sub, platform_channel)
   WHERE platform_iss IS NOT NULL;
 `);
+
+// Safe online schema migration for generals depth (Module C)
+const existingGeneralCols = new Set(
+  (db.prepare('PRAGMA table_info(generals)').all() as unknown as Array<{ name: string }>).map(
+    (c) => c.name,
+  ),
+);
+
+const newGeneralCols: Array<[string, string]> = [
+  ['base_hp', 'INTEGER NOT NULL DEFAULT 0'],
+  ['base_mp', 'INTEGER NOT NULL DEFAULT 0'],
+  ['base_atk', 'INTEGER NOT NULL DEFAULT 0'],
+  ['base_spd', 'INTEGER NOT NULL DEFAULT 0'],
+  ['rebirth', 'INTEGER NOT NULL DEFAULT 0'],
+  ['rarity', "TEXT NOT NULL DEFAULT 'common'"],
+  ['skill_id', "TEXT NOT NULL DEFAULT 'liandao'"],
+];
+
+for (const [col, def] of newGeneralCols) {
+  if (!existingGeneralCols.has(col)) {
+    db.exec(`ALTER TABLE generals ADD COLUMN ${col} ${def}`);
+  }
+}

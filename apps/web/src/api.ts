@@ -3,6 +3,7 @@ import type {
   CharacterView,
   EquipmentSlot,
   Gender,
+  GeneralView,
   OnlinePlayerSummary,
   RankEntry,
   RoleClass,
@@ -216,10 +217,51 @@ export const api = {
       },
     ),
   recruitGeneral: (realmId: string, templateId: string) =>
-    callEndpoint<{ character: CharacterView }>('generalsRecruit', '/api/generals/recruit', {
+    callEndpoint<{ general: GeneralView; character: CharacterView }>(
+      'generalsRecruit',
+      '/api/generals/recruit',
+      {
+        method: 'POST',
+        body: { realmId, templateId },
+      },
+    ),
+  drawGeneral: (realmId: string) =>
+    callEndpoint<{ general: GeneralView; character: CharacterView }>(
+      'generalsDraw',
+      '/api/generals/draw',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
+  feedGeneral: (realmId: string, generalId: number) =>
+    callEndpoint<{ character: CharacterView }>('generalsFeed', '/api/generals/feed', {
       method: 'POST',
-      body: { realmId, templateId },
+      body: { realmId, generalId },
     }),
+  washGeneral: (realmId: string, generalId: number) =>
+    callEndpoint<{ general: GeneralView; character: CharacterView }>(
+      'generalsWash',
+      '/api/generals/wash',
+      {
+        method: 'POST',
+        body: { realmId, generalId },
+      },
+    ),
+  rebirthGeneral: (realmId: string, generalId: number) =>
+    callEndpoint<{ character: CharacterView }>('generalsRebirth', '/api/generals/rebirth', {
+      method: 'POST',
+      body: { realmId, generalId },
+    }),
+  dismissGeneral: (realmId: string, generalId: number) =>
+    callEndpoint<{ refundSilver: number; character: CharacterView }>(
+      'generalsDismiss',
+      '/api/generals/dismiss',
+      {
+        method: 'POST',
+        body: { realmId, generalId },
+      },
+    ),
   setGeneralSlot: (realmId: string, generalId: number, slot: number | null) =>
     callEndpoint<{ character: CharacterView }>('generalsSlot', '/api/generals/slot', {
       method: 'POST',

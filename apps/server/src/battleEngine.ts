@@ -108,10 +108,11 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       uid: `p_gen_${g.id}`,
       side: 'player',
       isMainRole: false,
-      name: g.name,
+      name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
       level: g.level,
       roleClass: g.roleClass,
       spriteKey: g.spriteKey,
+      skillId: g.skillId,
       hp: Math.max(1, g.hp),
       maxHp: g.maxHp,
       mp: g.mp,
@@ -122,7 +123,13 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       defending: false,
       position: idx + 1,
       statuses: [],
-      resist: { phys: 5, chaos: 10, seal: 10, trap: 10, magic: 5 },
+      resist: {
+        phys: 5 + g.rebirth * 6,
+        chaos: 10 + g.rebirth * 8,
+        seal: 10 + g.rebirth * 8,
+        trap: 10 + g.rebirth * 8,
+        magic: 5 + g.rebirth * 6,
+      },
     });
   });
 
@@ -494,6 +501,62 @@ export function performBattleAction(
         message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
+      // Allied general: 45% chance to cast signature skill if enough MP
+      const sigSkill = actor.skillId ? SKILLS.find((s) => s.id === actor.skillId) : undefined;
+      if (sigSkill && actor.mp >= sigSkill.mpCost && Math.random() < 0.48) {
+        actor.mp -= sigSkill.mpCost;
+        if (sigSkill.kind === 'control' && sigSkill.controlKind) {
+          const kind = sigSkill.controlKind;
+          const targets = aliveEnemies.slice(0, 2);
+          const targetResults = targets.map((t) => {
+            const hit = Math.random() < calcControlChance(sigSkill.baseControlRate ?? 0.65, 200, t.resist?.[kind] ?? 0);
+            if (hit) applyStatus(t, kind, sigSkill.controlTurns ?? 2);
+            return { uid: t.uid, name: t.name, damage: 0, appliedStatus: hit ? kind : undefined, resisted: !hit };
+          });
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'skill',
+            skillId: sigSkill.id,
+            skillName: sigSkill.name,
+            effect: sigSkill.effect,
+            targets: targetResults,
+            message: `副将 ${actor.name} 施展专属技【${sigSkill.name}】控场！`,
+          });
+          continue;
+        }
+        const targets = sigSkill.aoe
+          ? aliveEnemies.slice(0, 3)
+          : [aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)]];
+        const hits = sigSkill.kind === 'multi_hit' ? sigSkill.hitCount ?? 2 : 1;
+        const targetResults = targets.map((t) => {
+          let totalDmg = 0;
+          let anyCrit = false;
+          for (let h = 0; h < hits && t.alive; h++) {
+            const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+              resistPct: sigSkill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys,
+              targetTrapped: hasStatus(t, 'trap'),
+            });
+            t.hp = Math.max(0, t.hp - damage);
+            if (t.hp === 0) t.alive = false;
+            totalDmg += damage;
+            anyCrit = anyCrit || crit;
+          }
+          return { uid: t.uid, name: t.name, damage: totalDmg, crit: anyCrit, killed: !t.alive };
+        });
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'skill',
+          skillId: sigSkill.id,
+          skillName: sigSkill.name,
+          effect: sigSkill.effect,
+          targets: targetResults,
+          message: `副将 ${actor.name} 施展【${sigSkill.name}】，造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害！`,
+        });
+        continue;
+      }
+
       if (hasStatus(actor, 'trap')) {
         logs.push({
           actorUid: actor.uid,

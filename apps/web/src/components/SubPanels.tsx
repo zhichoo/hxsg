@@ -694,73 +694,191 @@ export function SubPanels({
             </div>
           )}
 
-          {/* GENERALS */}
+          {/* GENERALS (副将深度培养：成长率/初值/专属技能/喂丹/洗髓/转生/解雇) */}
           {panel === 'generals' && (
-            <div className="space-y-2">
-              <div className="text-xs text-[#ffde7d] mb-1">
-                最多同时出战 3 名副将（对应主城左侧三个「将」槽位）：
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
+                <span className="text-[#ffde7d] font-bold">
+                  副将营 ({character.generals.length}/12) · 最多出战 3 名
+                </span>
+                <span className="text-[#d9c1e0] text-[11px]">
+                  经验丹×{character.inventory.find((i) => i.itemId === 'jingyandan')?.quantity ?? 0}{' '}
+                  · 洗髓丹×{character.inventory.find((i) => i.itemId === 'xisuidan')?.quantity ?? 0}
+                </span>
               </div>
-              {character.generals.map((g) => (
-                <div
-                  key={g.id}
-                  className="p-2 bg-[#26072d]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <AssetImg
-                      path={`${g.spriteKey}_h.png`}
-                      alt={g.name}
-                      className="w-8 h-8 pixelated bg-[#1d2b18] border border-[#d6ab48] p-0.5"
-                    />
-                    <div className="text-xs">
-                      <div className="font-bold text-[#ffe678]">
-                        {g.name} Lv.{g.level}{' '}
-                        {g.slot !== null && (
-                          <span className="ml-1 px-1 bg-[#b82018] text-white text-[10px]">
-                            出战{g.slot + 1}
-                          </span>
+
+              {character.generals.map((g) => {
+                const rebirthReq = g.rebirth === 0 ? 10 : g.rebirth === 1 ? 20 : 999;
+                const canRebirth = g.rebirth < 2 && g.level >= rebirthReq;
+                return (
+                  <div
+                    key={g.id}
+                    className="p-2.5 bg-[#26072d]/90 border border-[#9d6fa8] space-y-2 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AssetImg
+                          path={
+                            g.avatarKey.startsWith('f')
+                              ? g.avatarKey
+                              : `portraits/${g.avatarKey}`
+                          }
+                          alt={g.name}
+                          className="w-10 h-10 pixelated bg-[#1d2b18] border border-[#d6ab48] shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center flex-wrap gap-1 font-bold">
+                            <span className={QUALITY_COLOR[g.rarity]}>
+                              [{QUALITY_LABEL[g.rarity]}] {g.name}
+                            </span>
+                            <span className="text-white">Lv.{g.level}</span>
+                            {g.rebirth > 0 && (
+                              <span className="px-1 bg-[#a6670a] border border-[#ffdf75] text-[#fff6b8] text-[10px]">
+                                {g.rebirth}转
+                              </span>
+                            )}
+                            {g.slot !== null && (
+                              <span className="px-1 bg-[#b82018] text-white text-[10px]">
+                                出战{g.slot + 1}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#9be8ff]">
+                            成长 {g.growth.toFixed(2)} · 专属技【{g.skillName}】
+                          </div>
+                          <div className="text-[11px] text-[#e8d2ee]">
+                            当前：血{g.maxHp} · 精{g.maxMp} · 攻{g.atk} · 速{g.spd}
+                          </div>
+                          <div className="text-[10.5px] text-[#cbb0d4]">
+                            初值：血{g.baseHp} / 精{g.baseMp} / 攻{g.baseAtk} / 速{g.baseSpd} · 经验
+                            {g.exp}/{g.expToNext}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Slot buttons */}
+                      <div className="flex flex-col gap-1 shrink-0">
+                        {g.slot !== null ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                () => api.setGeneralSlot(realmId, g.id, null),
+                                `已让 ${g.name} 休息`,
+                              )
+                            }
+                            className="px-2 py-0.5 text-[11px] bg-[#52245c] border border-[#c095cc] text-white"
+                          >
+                            卸下
+                          </button>
+                        ) : (
+                          <div className="flex gap-1">
+                            {[0, 1, 2].map((slot) => (
+                              <button
+                                key={slot}
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  run(
+                                    () => api.setGeneralSlot(realmId, g.id, slot),
+                                    `${g.name} 已出战到槽位 ${slot + 1}`,
+                                  )
+                                }
+                                className="hx-btn-gold px-1.5 py-0.5 text-[10.5px]"
+                              >
+                                位{slot + 1}
+                              </button>
+                            ))}
+                          </div>
                         )}
                       </div>
-                      <div className="text-[11px] text-[#e5cde9]">
-                        血{g.maxHp} · 攻{g.atk} · 速{g.spd} · 成长{g.growth}
-                      </div>
                     </div>
-                  </div>
-                  <div className="flex gap-1 shrink-0">
-                    {g.slot !== null ? (
+
+                    {/* Cultivation actions: 喂经验丹 / 洗髓 / 转生 / 解雇 */}
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-white/10">
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() =>
-                          run(() => api.setGeneralSlot(realmId, g.id, null), `已让 ${g.name} 休息`)
+                          run(
+                            () => api.feedGeneral(realmId, g.id),
+                            `${g.name} 服下经验丹，实力大增！`,
+                          )
                         }
-                        className="px-2 py-1 text-[11px] bg-[#52245c] border border-[#c095cc] text-white"
+                        className="hx-btn-gold px-2 py-0.5 text-[11px]"
                       >
-                        卸下
+                        喂经验丹
                       </button>
-                    ) : (
-                      [0, 1, 2].map((slot) => (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.washGeneral(realmId, g.id);
+                            onUpdateCharacter(res.character);
+                            onNotify(
+                              `洗髓完成！${res.general.name} 现为[${QUALITY_LABEL[res.general.rarity]}] 成长 ${res.general.growth.toFixed(2)}`,
+                            );
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '洗髓失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="px-2 py-0.5 text-[11px] bg-[#1a4a7a] border border-[#7cc8ff] text-white font-bold"
+                      >
+                        洗髓重洗
+                      </button>
+                      {g.rebirth < 2 && (
                         <button
-                          key={slot}
                           type="button"
-                          disabled={busy}
+                          disabled={busy || !canRebirth}
                           onClick={() =>
                             run(
-                              () => api.setGeneralSlot(realmId, g.id, slot),
-                              `${g.name} 已出战到槽位 ${slot + 1}`,
+                              () => api.rebirthGeneral(realmId, g.id),
+                              `恭喜！${g.name} 成功 ${g.rebirth + 1} 转，成长率与初值大幅飞跃！`,
                             )
                           }
-                          className="hx-btn-gold px-1.5 py-0.5 text-[11px]"
+                          className={`px-2 py-0.5 text-[11px] font-bold border ${
+                            canRebirth
+                              ? 'hx-btn-red'
+                              : 'bg-[#361c3d] border-[#6a4c73] text-[#9f82a8]'
+                          }`}
                         >
-                          位{slot + 1}
+                          {g.rebirth + 1}转(需{rebirthReq}级)
                         </button>
-                      ))
-                    )}
+                      )}
+                      {g.slot === null && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const res = await api.dismissGeneral(realmId, g.id);
+                              onUpdateCharacter(res.character);
+                              onNotify(`已解雇 ${g.name}，收回遣散银 ${res.refundSilver} 两`);
+                            } catch (err) {
+                              onNotify(err instanceof Error ? err.message : '解雇失败');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="ml-auto px-2 py-0.5 text-[10.5px] bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8]"
+                        >
+                          解雇
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+
               {character.generals.length === 0 && (
                 <div className="text-center text-[#d8bedf] py-8">
-                  暂无副将，可在许昌「设施 → 招贤馆」招募或在战斗中使用「招降」！
+                  暂无副将，可在许昌「设施 → 招贤馆」招募/寻访，或在战斗中使用「招降」！
                 </div>
               )}
             </div>
@@ -849,51 +967,99 @@ export function SubPanels({
             </div>
           )}
 
-          {/* TAVERN (RECRUIT GENERALS) */}
+          {/* TAVERN (RECRUIT & DRAW GENERALS) */}
           {panel === 'tavern' && (
-            <div className="space-y-2">
-              <div className="text-xs text-[#ffe27a]">当前银两：{character.silver} 两</div>
-              {Object.values(GENERAL_TEMPLATES).map((tpl) => (
-                <div
-                  key={tpl.templateId}
-                  className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
-                >
-                  <div className="flex items-center gap-2">
-                    <AssetImg
-                      path={
-                        tpl.avatarKey.startsWith('f')
-                          ? tpl.avatarKey
-                          : `portraits/${tpl.avatarKey}`
-                      }
-                      alt={tpl.name}
-                      className="w-10 h-10 pixelated border border-[#d6ab48]"
-                    />
-                    <div>
-                      <div className="font-bold text-[#ffe678]">
-                        {tpl.name}{' '}
-                        <span className="text-xs text-[#9ce5ff]">成长 {tpl.growth}</span>
-                      </div>
-                      <div className="text-[11px] text-[#e0c7e8]">{tpl.desc}</div>
-                      <div className="text-[11px] text-[#ffd46b]">
-                        身价：{tpl.recruitCostSilver} 银
-                      </div>
-                    </div>
+            <div className="space-y-2.5">
+              {/* Token Draw Banner */}
+              <div className="p-2.5 bg-[#36110e] border-2 border-[#e5b642] flex items-center justify-between gap-2 text-xs">
+                <div>
+                  <div className="font-bold text-[#ffea7a] text-sm">名将寻访（消耗 1 招贤令）</div>
+                  <div className="text-[11px] text-[#f5dccc]">
+                    有机会直接寻得 <span className="text-[#ffbe47] font-bold">吕布 / 关羽 / 貂蝉 / 赵云</span>
+                    ，随机刷出极品成长率！
                   </div>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      run(
-                        () => api.recruitGeneral(realmId, tpl.templateId),
-                        `成功招募副将【${tpl.name}】！`,
-                      )
-                    }
-                    className="hx-btn-gold px-3 py-1 text-xs shrink-0"
-                  >
-                    招募
-                  </button>
+                  <div className="text-[11px] text-[#9de6ff] mt-0.5">
+                    当前招贤令：{character.inventory.find((i) => i.itemId === 'jiangling')?.quantity ?? 0} 枚 · 银两：{character.silver} 两
+                  </div>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      const res = await api.drawGeneral(realmId);
+                      onUpdateCharacter(res.character);
+                      onNotify(
+                        `寻访大喜！获得[${QUALITY_LABEL[res.general.rarity]}]【${res.general.name}】（成长 ${res.general.growth.toFixed(2)}，技：${res.general.skillName}）`,
+                      );
+                    } catch (err) {
+                      onNotify(err instanceof Error ? err.message : '寻访失败');
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                  className="hx-btn-red px-3 py-1.5 text-xs shrink-0"
+                >
+                  令寻名将
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {Object.values(GENERAL_TEMPLATES)
+                  .filter((tpl) => tpl.tavernDirect !== false)
+                  .map((tpl) => (
+                    <div
+                      key={tpl.templateId}
+                      className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AssetImg
+                          path={
+                            tpl.avatarKey.startsWith('f')
+                              ? tpl.avatarKey
+                              : `portraits/${tpl.avatarKey}`
+                          }
+                          alt={tpl.name}
+                          className="w-10 h-10 pixelated border border-[#d6ab48] shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#ffe678] text-xs">
+                            {tpl.name}{' '}
+                            <span className="text-[#9ce5ff]">
+                              成长 {tpl.growthMin.toFixed(2)}~{tpl.growthMax.toFixed(2)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#e0c7e8]">{tpl.desc}</div>
+                          <div className="text-[11px] text-[#ffd46b]">
+                            身价：{tpl.recruitCostSilver} 银
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.recruitGeneral(realmId, tpl.templateId);
+                            onUpdateCharacter(res.character);
+                            onNotify(
+                              `成功招募[${QUALITY_LABEL[res.general.rarity]}]【${res.general.name}】（成长 ${res.general.growth.toFixed(2)}）！`,
+                            );
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '招募失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                      >
+                        招募
+                      </button>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
 

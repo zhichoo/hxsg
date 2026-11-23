@@ -97,6 +97,31 @@
       "method": "POST",
       "auth": "platform"
     },
+    "generalsDraw": {
+      "url": "__API_BASE__/api/generals/draw",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsFeed": {
+      "url": "__API_BASE__/api/generals/feed",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsWash": {
+      "url": "__API_BASE__/api/generals/wash",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsRebirth": {
+      "url": "__API_BASE__/api/generals/rebirth",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsDismiss": {
+      "url": "__API_BASE__/api/generals/dismiss",
+      "method": "POST",
+      "auth": "platform"
+    },
     "generalsSlot": {
       "url": "__API_BASE__/api/generals/slot",
       "method": "POST",
