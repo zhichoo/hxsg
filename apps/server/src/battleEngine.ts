@@ -60,6 +60,7 @@ interface ActiveBattle extends BattleState {
   enemyGroupId: string;
   arenaTargetId?: number;
   worldBroadcast?: string;
+  healCooldownUntilRound?: number;
 }
 
 const activeBattles = new Map<number, ActiveBattle>();
@@ -556,8 +557,30 @@ export function performBattleAction(
           const { tier } = getSkillTier(curProf);
 
           if (skill.kind === 'heal') {
-            const healMult = getSkillPowerMultiplier(0.4, curProf, ch.alloc.int);
-            const healVal = Math.round(actor.maxHp * Math.min(0.85, healMult));
+            if (battle.round < (battle.healCooldownUntilRound ?? 0)) {
+              // On cooldown: refund MP and fall back to basic attack so player cannot infinite-heal solo
+              actor.mp += skill.mpCost;
+              const waitRounds = (battle.healCooldownUntilRound ?? 0) - battle.round;
+              const fallbackTarget = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
+              const { damage, crit } = calcDamage(actor.atk, fallbackTarget.defending, 1.0, {
+                resistPct: fallbackTarget.resist?.phys,
+                targetTrapped: hasStatus(fallbackTarget, 'trap'),
+              });
+              fallbackTarget.hp = Math.max(0, fallbackTarget.hp - damage);
+              if (fallbackTarget.hp === 0) fallbackTarget.alive = false;
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'attack',
+                effect: 'slash',
+                targets: [{ uid: fallbackTarget.uid, name: fallbackTarget.name, damage, crit, killed: !fallbackTarget.alive }],
+                message: `【${skill.name}】调息中（剩余 ${waitRounds} 回合），${actor.name} 改以普攻攻击 ${fallbackTarget.name}，造成 ${damage} 点伤害！`,
+              });
+              continue;
+            }
+            battle.healCooldownUntilRound = battle.round + 3;
+            const healMult = getSkillPowerMultiplier(0.36, curProf, ch.alloc.int);
+            const healVal = Math.round(actor.maxHp * Math.min(0.55, healMult));
             actor.hp = Math.min(actor.maxHp, actor.hp + healVal);
             logs.push({
               actorUid: actor.uid,
@@ -568,7 +591,7 @@ export function performBattleAction(
               effect: 'heal',
               proficiencyGain: profGain,
               targets: [{ uid: actor.uid, name: actor.name, damage: 0, heal: healVal }],
-              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${healVal}（熟练度 +${profGain}）！`,
+              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${healVal}（调息 3 回合，熟练度 +${profGain}）！`,
             });
             continue;
           }
@@ -824,9 +847,39 @@ export function performBattleAction(
         message: `副将 ${actor.name} 出击 ${target.name}，造成 ${damage} 点伤害！`,
       });
     } else {
-      // Enemy AI (smarter high-level & boss AOE / control / heavy cleave)
+      // Enemy AI (smarter high-level & boss AOE / control / heavy cleave + endgame armor-pierce & enrage)
       const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-      const isStrong = actor.level >= 10 || battle.enemyGroupId.startsWith('boss_') || battle.enemyGroupId.startsWith('tower_');
+      const towerFloor = battle.enemyGroupId.startsWith('tower_') ? Number(battle.enemyGroupId.slice(6)) : 0;
+      const isBossEncounter = battle.enemyGroupId.startsWith('boss_') || towerFloor >= 20 || battle.enemyGroupId.startsWith('world_boss:');
+      const isStrong = actor.level >= 10 || isBossEncounter || towerFloor >= 10;
+
+      // Endgame bosses pierce part of target's phys/magic resist and enrage on long stalls,
+      // preventing solo-hero or 3x low-tier-general cheese while rewarding strong 2转 general lineups!
+      let resPen = 0;
+      let enrageMult = 1;
+      if (towerFloor >= 45 || battle.enemyGroupId === 'boss_simayi') {
+        resPen = 32;
+        if (battle.round > 8) enrageMult = 1 + (battle.round - 8) * 0.28;
+      } else if (
+        towerFloor >= 35 ||
+        battle.enemyGroupId === 'boss_luxun' ||
+        battle.enemyGroupId === 'boss_xiahouyuan'
+      ) {
+        resPen = 24;
+        if (battle.round > 9) enrageMult = 1 + (battle.round - 9) * 0.24;
+      } else if (
+        towerFloor >= 20 ||
+        battle.enemyGroupId === 'boss_caojun' ||
+        battle.enemyGroupId === 'boss_caoren' ||
+        battle.enemyGroupId === 'boss_zhangren'
+      ) {
+        resPen = 14;
+        if (battle.round > 10) enrageMult = 1 + (battle.round - 10) * 0.2;
+      } else if (battle.enemyGroupId.startsWith('world_boss:')) {
+        resPen = actor.level >= 25 ? 18 : 10;
+      }
+      const effAtk = Math.round(actor.atk * enrageMult);
+
       const useControl = actor.roleClass === 'wenren' && actor.mp >= 20 && Math.random() < (isStrong ? 0.42 : 0.32);
       const useMagic = actor.roleClass !== 'wushi' && actor.mp >= 20 && Math.random() < (isStrong ? 0.48 : 0.35);
       const useWushiSkill = actor.roleClass === 'wushi' && isStrong && actor.mp >= 20 && Math.random() < 0.38;
@@ -836,7 +889,7 @@ export function performBattleAction(
         const kind: ControlKind = Math.random() < 0.5 ? 'chaos' : 'seal';
         const ctrlTargets = isStrong && alivePlayers.length >= 2 ? alivePlayers.slice(0, 2) : [target];
         const targetResults = ctrlTargets.map((t) => {
-          const resPct = t.resist?.[kind] ?? 0;
+          const resPct = Math.max(0, (t.resist?.[kind] ?? 0) - Math.round(resPen * 0.35));
           const hit = Math.random() < calcControlChance(isStrong ? 0.62 : 0.52, 0, resPct);
           if (hit) applyStatus(t, kind, 2);
           return {
@@ -865,8 +918,8 @@ export function performBattleAction(
         const aoeTargets = isStrong && alivePlayers.length >= 2 ? alivePlayers.slice(0, 3) : [target];
         const mult = aoeTargets.length > 1 ? 0.92 : 1.28;
         const targetResults = aoeTargets.map((t) => {
-          const { damage, crit } = calcDamage(actor.atk, t.defending, mult, {
-            resistPct: t.resist?.magic,
+          const { damage, crit } = calcDamage(effAtk, t.defending, mult, {
+            resistPct: Math.max(0, (t.resist?.magic ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
           t.hp = Math.max(0, t.hp - damage);
@@ -887,8 +940,8 @@ export function performBattleAction(
         const cleaveTargets = alivePlayers.length >= 2 && Math.random() < 0.5 ? alivePlayers.slice(0, 2) : [target];
         const mult = cleaveTargets.length > 1 ? 0.96 : 1.38;
         const targetResults = cleaveTargets.map((t) => {
-          const { damage, crit } = calcDamage(actor.atk, t.defending, mult, {
-            resistPct: t.resist?.phys,
+          const { damage, crit } = calcDamage(effAtk, t.defending, mult, {
+            resistPct: Math.max(0, (t.resist?.phys ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
           t.hp = Math.max(0, t.hp - damage);
@@ -916,8 +969,8 @@ export function performBattleAction(
           });
           continue;
         }
-        const { damage, crit } = calcDamage(actor.atk, target.defending, 0.92, {
-          resistPct: target.resist?.phys,
+        const { damage, crit } = calcDamage(effAtk, target.defending, 0.92, {
+          resistPct: Math.max(0, (target.resist?.phys ?? 0) - resPen),
           targetTrapped: hasStatus(target, 'trap'),
         });
         target.hp = Math.max(0, target.hp - damage);
@@ -968,11 +1021,15 @@ export function performBattleAction(
       };
       activeBattles.delete(characterId);
     } else {
-      const exp = group?.expReward ?? 60;
-      const silver = group?.silverReward ?? 60;
+      const isPracticeWorldBoss =
+        battle.enemyGroupId.startsWith('world_boss:') && ch.daily.worldBoss.claimedToday;
+      const exp = isPracticeWorldBoss ? 0 : (group?.expReward ?? 60);
+      const silver = isPracticeWorldBoss ? 0 : (group?.silverReward ?? 60);
       const dropRoll = Math.random();
       let droppedItem: { itemId: string; name: string; quantity: number } | undefined;
-      if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.35) {
+      if (isPracticeWorldBoss) {
+        // Pure practice mode after daily reward is claimed: no repeat loot farming
+      } else if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.35) {
         const bookIds = Object.keys(GENERAL_SKILL_BOOKS);
         const bookId = bookIds[Math.floor(Math.random() * bookIds.length)];
         addItem(characterId, bookId, 1);
@@ -988,7 +1045,11 @@ export function performBattleAction(
       let droppedEquipment:
         | { name: string; quality: 'common' | 'fine' | 'rare' | 'legend'; slot: 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount' }
         | undefined;
-      const equipDropChance = battle.enemyGroupId.startsWith('boss_') ? 0.38 : 0.16;
+      const equipDropChance = isPracticeWorldBoss
+        ? 0
+        : battle.enemyGroupId.startsWith('boss_')
+          ? 0.38
+          : 0.16;
       if (Math.random() < equipDropChance && ch.equipment.length < 30) {
         let pool: string[];
         if (
@@ -1094,6 +1155,13 @@ export function performBattleAction(
 }
 
 function stripInternal(b: ActiveBattle): BattleState {
-  const { characterId: _c, enemyGroupId: _e, arenaTargetId: _a, worldBroadcast: _w, ...rest } = b;
+  const {
+    characterId: _c,
+    enemyGroupId: _e,
+    arenaTargetId: _a,
+    worldBroadcast: _w,
+    healCooldownUntilRound: _h,
+    ...rest
+  } = b;
   return rest;
 }

@@ -130,11 +130,13 @@ function calcGeneralStatsAtLevel(
 ) {
   const lv = Math.max(1, level);
   const lateLv = Math.max(0, lv - 20);
+  // Differentiate low-tier starters (dipi ~1.02) from mid/top 1转-2转 generals (1.28-1.60+)
+  const tierScale = Math.max(0.2, (growth - 0.92) * 2.5);
   return {
-    maxHp: Math.round(base.hp + (lv - 1) * 22 * growth + lateLv * 38 * growth),
-    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth + lateLv * 8 * growth),
-    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth + lateLv * 5.2 * growth),
-    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth + lateLv * 1.6 * growth),
+    maxHp: Math.round(base.hp + (lv - 1) * 22 * growth + lateLv * 44 * tierScale),
+    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth + lateLv * 9 * tierScale),
+    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth + lateLv * 7.2 * tierScale),
+    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth + lateLv * 2.0 * tierScale),
   };
 }
 
@@ -2285,7 +2287,13 @@ export function playCasinoDice(
 ): { result: CasinoDiceResult; character: CharacterView } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  const currency = opts.currency === 'gold' ? 'gold' : 'silver';
+  if (!['big', 'small', 'odd', 'even', 'baozi'].includes(opts.betType)) {
+    throw new Error('无效的骰子押注类型');
+  }
+  if (opts.currency !== 'silver' && opts.currency !== 'gold') {
+    throw new Error('无效的押注货币（仅支持银两或金砖）');
+  }
+  const currency = opts.currency;
   const amount = Math.floor(opts.amount);
   const minBet = currency === 'gold' ? 10 : 50;
   const maxBet = currency === 'gold' ? 2000 : 50000;
@@ -2358,7 +2366,13 @@ export function playCasinoChibi(
 ): { result: CasinoChibiResult; character: CharacterView } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  const currency = opts.currency === 'gold' ? 'gold' : 'silver';
+  if (!['wei', 'wu', 'shu'].includes(opts.pick)) {
+    throw new Error('无效的赤壁押注阵营（仅支持魏/吴/蜀）');
+  }
+  if (opts.currency !== 'silver' && opts.currency !== 'gold') {
+    throw new Error('无效的押注货币（仅支持银两或金砖）');
+  }
+  const currency = opts.currency;
   const amount = Math.floor(opts.amount);
   const minBet = currency === 'gold' ? 10 : 50;
   const maxBet = currency === 'gold' ? 2000 : 50000;
@@ -2666,7 +2680,7 @@ export function createMarketListing(
         rarity: row.rarity,
         skill_id: row.skill_id,
         skill2_id: row.skill2_id,
-        intimacy: 0,
+        intimacy: row.intimacy ?? 0,
       };
     } else {
       throw new Error('无效的寄售类型');
@@ -2754,7 +2768,7 @@ function deliverMarketPayload(recipientId: number, kind: MarketListingKind, payl
       cnt: number;
     }
   ).cnt;
-  if (gCnt >= 12) throw new Error('副将栏已满（最多 12 名），无法接收该副将');
+  if (gCnt >= 16) throw new Error('副将栏已满（最多 16 名），无法接收该副将');
   db.prepare(
     `INSERT INTO generals (
       character_id, template_id, name, role_class, sprite_key, avatar_key,

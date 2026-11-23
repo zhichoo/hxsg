@@ -194,7 +194,7 @@ export const SKILLS: SkillDef[] = [
     kind: 'damage',
     damageType: 'magic',
     mpCost: 26,
-    power: 1.3,
+    power: 1.36,
     aoe: true,
     effect: 'fire',
     desc: '借风火之势席卷敌军，随熟练度提升目标数与法伤。',
@@ -1535,10 +1535,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 8200,
     capturableTemplateId: 'machao',
     enemies: [
-      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 4550, mp: 200, atk: 356, spd: 112 },
-      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 6050, mp: 240, atk: 392, spd: 120 },
-      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 3750, mp: 320, atk: 336, spd: 116 },
-      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 3650, mp: 360, atk: 348, spd: 114 },
+      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 5800, mp: 200, atk: 435, spd: 112 },
+      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 7800, mp: 240, atk: 480, spd: 122 },
+      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 4800, mp: 320, atk: 410, spd: 118 },
+      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 4650, mp: 360, atk: 428, spd: 115 },
     ],
   },
   yiling_wujun: {
@@ -1565,10 +1565,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 13500,
     capturableTemplateId: 'zhouyu',
     enemies: [
-      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 220, atk: 438, spd: 136 },
-      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 7100, mp: 420, atk: 462, spd: 148 },
-      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 5400, mp: 200, atk: 424, spd: 132 },
-      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 4750, mp: 400, atk: 436, spd: 140 },
+      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7600, mp: 220, atk: 545, spd: 138 },
+      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 9600, mp: 420, atk: 580, spd: 152 },
+      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7200, mp: 200, atk: 525, spd: 134 },
+      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 6400, mp: 400, atk: 542, spd: 144 },
     ],
   },
   wuzhang_sima: {
@@ -1595,10 +1595,10 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
     expReward: 22000,
     capturableTemplateId: 'zhugeliang',
     enemies: [
-      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 6900, mp: 260, atk: 508, spd: 158 },
-      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 9100, mp: 520, atk: 542, spd: 172 },
-      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 6600, mp: 260, atk: 498, spd: 162 },
-      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 6050, mp: 460, atk: 518, spd: 166 },
+      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9600, mp: 260, atk: 650, spd: 162 },
+      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 12800, mp: 520, atk: 695, spd: 178 },
+      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 260, atk: 638, spd: 166 },
+      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 8400, mp: 460, atk: 665, spd: 170 },
     ],
   },
 };
@@ -1678,19 +1678,20 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
   let atkBase: number;
   let spdBase: number;
   if (f <= 20) {
-    const lateBoost = f > 12 ? (f - 12) * (f - 12) * 28 : 0;
-    const lateAtkBoost = f > 12 ? (f - 12) * 14 : 0;
-    hpBase = Math.round(70 + f * 60 + f * f * 5.6 + lateBoost);
-    atkBase = Math.round(14 + f * 8.2 + f * f * 0.25 + lateAtkBoost);
-    spdBase = Math.round(14 + f * 2.8);
+    // Smooth curve through F20 (F20 combined HP ~16.7k, Lv Bu peak ATK ~408 — fair for Lv.20 T3/T4, hard for T1)
+    const lateBoost = f > 12 ? (f - 12) * (f - 12) * 4.5 : 0;
+    const lateAtkBoost = f > 12 ? (f - 12) * 5.5 : 0;
+    hpBase = Math.round(70 + f * 58 + f * f * 4.9 + lateBoost);
+    atkBase = Math.round(14 + f * 7.8 + f * f * 0.22 + lateAtkBoost);
+    spdBase = Math.round(14 + f * 2.6);
   } else {
-    // Smooth continuation from Floor 20 up to Floor 50 (F45-50 tuned as 1转 endgame challenge)
+    // Smooth continuation from Floor 20 up to Floor 50 (F45-50 tuned for 1转 + 2转 generals)
     const over = f - 20;
-    const apexHp = f > 40 ? (f - 40) * 220 : 0;
-    const apexAtk = f > 40 ? (f - 40) * 6.5 : 0;
-    hpBase = Math.round(4800 + over * 165 + over * over * 2.2 + apexHp);
-    atkBase = Math.round(355 + over * 7.8 + apexAtk);
-    spdBase = Math.round(68 + over * 3.6);
+    const apexHp = f > 40 ? (f - 40) * 260 : 0;
+    const apexAtk = f > 40 ? (f - 40) * 8.5 : 0;
+    hpBase = Math.round(3480 + over * 220 + over * over * 3.6 + apexHp);
+    atkBase = Math.round(302 + over * 10.2 + apexAtk);
+    spdBase = Math.round(66 + over * 3.6);
   }
 
   let enemies: EnemyGroupDef['enemies'];
