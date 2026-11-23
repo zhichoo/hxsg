@@ -2,16 +2,20 @@ import {
   calcRoleStats,
   expRequiredForLevel,
   GENERAL_TEMPLATES,
+  getSkillMaxTargets,
+  getSkillTier,
   ITEMS,
   MAPS,
   REALMS,
   ROLE_CLASS_META,
+  SKILLS,
   type CharacterView,
   type Gender,
   type GeneralView,
   type InventoryItemView,
   type RankEntry,
   type RoleClass,
+  type SkillProgressView,
 } from '@hxsg/shared';
 import { db } from './db.js';
 
@@ -35,6 +39,17 @@ interface CharacterRow {
   silver: number;
   gold: number;
   map_id: string;
+  free_points: number;
+  pt_vit: number;
+  pt_str: number;
+  pt_int: number;
+  pt_agi: number;
+  res_points: number;
+  res_phys: number;
+  res_chaos: number;
+  res_seal: number;
+  res_trap: number;
+  res_magic: number;
 }
 
 interface GeneralRow {
@@ -125,6 +140,29 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     })
     .filter(Boolean) as InventoryItemView[];
 
+  const skillRows = db
+    .prepare('SELECT skill_id, proficiency FROM character_skills WHERE character_id = ?')
+    .all(row.id) as unknown as Array<{ skill_id: string; proficiency: number }>;
+  const profMap = new Map(skillRows.map((s) => [s.skill_id, s.proficiency]));
+
+  const skills: SkillProgressView[] = SKILLS.filter(
+    (s) => s.roleClass === row.role_class || s.roleClass === 'all',
+  ).map((s) => {
+    const prof = profMap.get(s.id) ?? 0;
+    const { tier, nextTierProf } = getSkillTier(prof);
+    return {
+      skillId: s.id,
+      name: s.name,
+      proficiency: prof,
+      tier,
+      nextTierProf,
+      mpCost: s.mpCost,
+      maxTargets: getSkillMaxTargets(s.aoe, prof),
+      controlKind: s.controlKind,
+      desc: s.desc,
+    };
+  });
+
   return {
     id: row.id,
     accountId: row.account_id,
@@ -147,9 +185,40 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     gold: row.gold,
     mapId: row.map_id,
     isGm: Boolean(acc?.is_gm),
+    alloc: {
+      freePoints: row.free_points ?? 0,
+      vit: row.pt_vit ?? 0,
+      str: row.pt_str ?? 0,
+      int: row.pt_int ?? 0,
+      agi: row.pt_agi ?? 0,
+    },
+    resist: {
+      freePoints: row.res_points ?? 0,
+      phys: row.res_phys ?? 0,
+      chaos: row.res_chaos ?? 0,
+      seal: row.res_seal ?? 0,
+      trap: row.res_trap ?? 0,
+      magic: row.res_magic ?? 0,
+    },
+    skills,
     generals,
     inventory,
   };
+}
+
+export function addSkillProficiency(characterId: number, skillId: string, delta: number): number {
+  const row = db
+    .prepare('SELECT id, proficiency FROM character_skills WHERE character_id = ? AND skill_id = ?')
+    .get(characterId, skillId) as { id: number; proficiency: number } | undefined;
+  const next = Math.min(10000, (row?.proficiency ?? 0) + delta);
+  if (row) {
+    db.prepare('UPDATE character_skills SET proficiency = ? WHERE id = ?').run(next, row.id);
+  } else {
+    db.prepare(
+      'INSERT INTO character_skills (character_id, skill_id, proficiency) VALUES (?, ?, ?)',
+    ).run(characterId, skillId, next);
+  }
+  return next;
 }
 
 export function createCharacter(params: {
@@ -188,8 +257,14 @@ export function createCharacter(params: {
       `INSERT INTO characters (
         account_id, realm_id, name, role_class, gender, portrait,
         level, exp, hp, max_hp, mp, max_mp, atk, def, spd,
-        silver, gold, map_id, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, 800, 100, 'xuchang', ?, ?)`,
+        silver, gold, map_id,
+        free_points, pt_vit, pt_str, pt_int, pt_agi,
+        res_points, res_phys, res_chaos, res_seal, res_trap, res_magic,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, 800, 100, 'xuchang',
+        4, 0, 0, 0, 0,
+        5, 0, 0, 0, 0, 0,
+        ?, ?)`,
     )
     .run(
       params.accountId,
@@ -210,10 +285,121 @@ export function createCharacter(params: {
     );
 
   const characterId = Number(res.lastInsertRowid);
-
-  // Starter items
   addItem(characterId, 'jinchuang', 5);
   addItem(characterId, 'ningshen', 3);
+
+  return getCharacterById(characterId)!;
+}
+
+export function allocateCharacterStats(
+  characterId: number,
+  delta: { vit?: number; str?: number; int?: number; agi?: number },
+): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+
+  const dVit = Math.max(0, Math.floor(delta.vit ?? 0));
+  const dStr = Math.max(0, Math.floor(delta.str ?? 0));
+  const dInt = Math.max(0, Math.floor(delta.int ?? 0));
+  const dAgi = Math.max(0, Math.floor(delta.agi ?? 0));
+  const total = dVit + dStr + dInt + dAgi;
+  if (total <= 0) throw new Error('请选择要分配的属性点');
+  if (total > ch.alloc.freePoints) throw new Error('剩余自由属性点不足');
+
+  const nextAlloc = {
+    vit: ch.alloc.vit + dVit,
+    str: ch.alloc.str + dStr,
+    int: ch.alloc.int + dInt,
+    agi: ch.alloc.agi + dAgi,
+  };
+  const stats = calcRoleStats(ch.roleClass, ch.level, nextAlloc);
+  const nextHp = Math.min(stats.maxHp, ch.hp + dVit * 18);
+  const nextMp = Math.min(stats.maxMp, ch.mp + dInt * 16);
+
+  db.prepare(
+    `UPDATE characters
+     SET free_points = free_points - ?,
+         pt_vit = ?, pt_str = ?, pt_int = ?, pt_agi = ?,
+         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, def = ?, spd = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    total,
+    nextAlloc.vit,
+    nextAlloc.str,
+    nextAlloc.int,
+    nextAlloc.agi,
+    nextHp,
+    stats.maxHp,
+    nextMp,
+    stats.maxMp,
+    stats.atk,
+    stats.def,
+    stats.spd,
+    Date.now(),
+    characterId,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function resetCharacterStats(characterId: number): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const refunded = ch.alloc.vit + ch.alloc.str + ch.alloc.int + ch.alloc.agi;
+  if (refunded <= 0) throw new Error('尚未分配任何属性点');
+  const stats = calcRoleStats(ch.roleClass, ch.level, { vit: 0, str: 0, int: 0, agi: 0 });
+  db.prepare(
+    `UPDATE characters
+     SET free_points = free_points + ?,
+         pt_vit = 0, pt_str = 0, pt_int = 0, pt_agi = 0,
+         hp = MIN(hp, ?), max_hp = ?, mp = MIN(mp, ?), max_mp = ?, atk = ?, def = ?, spd = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(
+    refunded,
+    stats.maxHp,
+    stats.maxHp,
+    stats.maxMp,
+    stats.maxMp,
+    stats.atk,
+    stats.def,
+    stats.spd,
+    Date.now(),
+    characterId,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function allocateCharacterResist(
+  characterId: number,
+  delta: { phys?: number; chaos?: number; seal?: number; trap?: number; magic?: number },
+): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+
+  const dPhys = Math.max(0, Math.floor(delta.phys ?? 0));
+  const dChaos = Math.max(0, Math.floor(delta.chaos ?? 0));
+  const dSeal = Math.max(0, Math.floor(delta.seal ?? 0));
+  const dTrap = Math.max(0, Math.floor(delta.trap ?? 0));
+  const dMagic = Math.max(0, Math.floor(delta.magic ?? 0));
+  const total = dPhys + dChaos + dSeal + dTrap + dMagic;
+  if (total <= 0) throw new Error('请选择要分配的抗性点');
+  if (total > ch.resist.freePoints) throw new Error('剩余抗性点不足');
+
+  const nextPhys = ch.resist.phys + dPhys * 3;
+  const nextChaos = ch.resist.chaos + dChaos * 3;
+  const nextSeal = ch.resist.seal + dSeal * 3;
+  const nextTrap = ch.resist.trap + dTrap * 3;
+  const nextMagic = ch.resist.magic + dMagic * 3;
+
+  if (Math.max(nextPhys, nextChaos, nextSeal, nextTrap, nextMagic) > 75) {
+    throw new Error('单项抗性上限为 75%');
+  }
+
+  db.prepare(
+    `UPDATE characters
+     SET res_points = res_points - ?,
+         res_phys = ?, res_chaos = ?, res_seal = ?, res_trap = ?, res_magic = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(total, nextPhys, nextChaos, nextSeal, nextTrap, nextMagic, Date.now(), characterId);
 
   return getCharacterById(characterId)!;
 }
@@ -422,15 +608,18 @@ export function applyExpAndSilver(
 
   let level = ch.level;
   let exp = ch.exp + expGain;
-  let leveledUp = false;
+  let levelsGained = 0;
 
   while (exp >= expRequiredForLevel(level) && level < 140) {
     exp -= expRequiredForLevel(level);
     level++;
-    leveledUp = true;
+    levelsGained++;
   }
 
-  const stats = calcRoleStats(ch.roleClass, level);
+  const leveledUp = levelsGained > 0;
+  const freePointsGain = levelsGained * 4;
+  const resPointsGain = levelsGained * 1;
+  const stats = calcRoleStats(ch.roleClass, level, ch.alloc);
   const finalHp = leveledUp
     ? stats.maxHp
     : Math.max(1, Math.min(stats.maxHp, hpAfter ?? ch.hp));
@@ -441,7 +630,8 @@ export function applyExpAndSilver(
   db.prepare(
     `UPDATE characters
      SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?,
-         atk = ?, def = ?, spd = ?, silver = silver + ?, updated_at = ?
+         atk = ?, def = ?, spd = ?, silver = silver + ?,
+         free_points = free_points + ?, res_points = res_points + ?, updated_at = ?
      WHERE id = ?`,
   ).run(
     level,
@@ -454,11 +644,12 @@ export function applyExpAndSilver(
     stats.def,
     stats.spd,
     silverGain,
+    freePointsGain,
+    resPointsGain,
     Date.now(),
     characterId,
   );
 
-  // Also level up active generals
   const activeGenerals = ch.generals.filter((g) => g.slot !== null);
   for (const g of activeGenerals) {
     const tpl = GENERAL_TEMPLATES[g.templateId];

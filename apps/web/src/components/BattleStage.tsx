@@ -34,7 +34,7 @@ interface FloatingNum {
 
 interface ActiveFx {
   uid: string;
-  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal';
+  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap';
   startedAt: number;
 }
 
@@ -149,6 +149,28 @@ export function BattleStage({
             uid: t.uid,
             text: `+${t.heal}`,
             color: '#76ff88',
+            createdAt: now + delay,
+          });
+        } else if (t.appliedStatus) {
+          const stText =
+            t.appliedStatus === 'chaos' ? '混乱!' : t.appliedStatus === 'seal' ? '封印!' : '围困!';
+          const stColor =
+            t.appliedStatus === 'chaos'
+              ? '#ff7cf0'
+              : t.appliedStatus === 'seal'
+                ? '#7ce2ff'
+                : '#ffd26b';
+          floatsRef.current.push({
+            uid: t.uid,
+            text: stText,
+            color: stColor,
+            createdAt: now + delay,
+          });
+        } else if (t.resisted) {
+          floatsRef.current.push({
+            uid: t.uid,
+            text: '抵抗',
+            color: '#d9e3ff',
             createdAt: now + delay,
           });
         } else if (t.captured) {
@@ -390,6 +412,25 @@ export function BattleStage({
         ctx.fillStyle = u.side === 'player' ? '#fff394' : '#ffffff';
         ctx.fillText(u.name, ux, uy + 15);
 
+        // Control status badges (乱 / 封 / 围) above HP bar
+        if (u.statuses && u.statuses.length > 0) {
+          u.statuses.forEach((st, idx) => {
+            const label = st.kind === 'chaos' ? '乱' : st.kind === 'seal' ? '封' : '围';
+            const bg =
+              st.kind === 'chaos' ? '#9e198b' : st.kind === 'seal' ? '#136ea8' : '#8f5b0d';
+            const sx = bx + idx * 17;
+            const sy = by - 16;
+            ctx.fillStyle = bg;
+            ctx.fillRect(sx, sy, 15, 14);
+            ctx.strokeStyle = '#ffe97d';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(sx, sy, 15, 14);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.fillText(label, sx + 7.5, sy + 11);
+          });
+        }
+
         // Red action pointer arrow to the left of main role pointing right (->)
         if (u.isMainRole && battle.status === 'ongoing') {
           const px = ux - Math.round(28 * spriteScale) + Math.sin(now / 180) * 2;
@@ -614,20 +655,29 @@ export function BattleStage({
               </div>
               {subMenu === 'skill' ? (
                 <div className="grid grid-cols-2 gap-1.5">
-                  {mySkills.map((sk) => (
-                    <button
-                      key={sk.id}
-                      type="button"
-                      onClick={() => void dispatchCommand({ action: 'skill', skillId: sk.id })}
-                      className="p-2 bg-[#44154f] hover:bg-[#5f1d6e] border border-[#c5963d] text-left"
-                    >
-                      <div className="flex justify-between text-xs font-bold text-[#ffea84]">
-                        <span>{sk.name}</span>
-                        <span className="text-[#85c6ff]">耗精{sk.mpCost}</span>
-                      </div>
-                      <div className="text-[11px] text-[#f0dff5] truncate mt-0.5">{sk.desc}</div>
-                    </button>
-                  ))}
+                  {mySkills.map((sk) => {
+                    const prog = character.skills.find((s) => s.skillId === sk.id);
+                    return (
+                      <button
+                        key={sk.id}
+                        type="button"
+                        onClick={() => void dispatchCommand({ action: 'skill', skillId: sk.id })}
+                        className="p-2 bg-[#44154f] hover:bg-[#5f1d6e] border border-[#c5963d] text-left"
+                      >
+                        <div className="flex justify-between text-xs font-bold text-[#ffea84]">
+                          <span>
+                            {sk.name}
+                            {prog ? `(${prog.tier}阶)` : ''}
+                          </span>
+                          <span className="text-[#85c6ff]">耗精{sk.mpCost}</span>
+                        </div>
+                        <div className="text-[10.5px] text-[#e7d0ef] truncate mt-0.5">
+                          {prog ? `熟练${prog.proficiency} · ` : ''}
+                          {sk.desc}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-1.5">

@@ -1,6 +1,7 @@
 export type RoleClass = 'wushi' | 'wenren' | 'yiren';
 export type Gender = 'male' | 'female';
 export type ChatChannel = 'qu' | 'pai' | 'shang' | 'shi';
+export type ControlKind = 'chaos' | 'seal' | 'trap';
 
 export interface ServerRealm {
   id: string;
@@ -9,6 +10,35 @@ export interface ServerRealm {
   desc: string;
   bgImg: string;
   onlineBase: number;
+}
+
+export interface CharacterAllocations {
+  freePoints: number;
+  vit: number; // 体质 -> 气血 / 防御
+  str: number; // 力量 -> 攻击
+  int: number; // 智力 -> 精力 / 法伤
+  agi: number; // 敏捷 -> 速度
+}
+
+export interface CharacterResistances {
+  freePoints: number;
+  phys: number;  // 抗物理 %
+  chaos: number; // 抗乱 %
+  seal: number;  // 抗封 %
+  trap: number;  // 抗围 %
+  magic: number; // 抗法术 %
+}
+
+export interface SkillProgressView {
+  skillId: string;
+  name: string;
+  proficiency: number;
+  tier: number;
+  nextTierProf: number;
+  mpCost: number;
+  maxTargets: number;
+  controlKind?: ControlKind;
+  desc: string;
 }
 
 export interface CharacterView {
@@ -33,6 +63,9 @@ export interface CharacterView {
   gold: number;
   mapId: string;
   isGm: boolean;
+  alloc: CharacterAllocations;
+  resist: CharacterResistances;
+  skills: SkillProgressView[];
   generals: GeneralView[];
   inventory: InventoryItemView[];
 }
@@ -103,11 +136,22 @@ export interface SkillDef {
   id: string;
   name: string;
   roleClass: RoleClass | 'all';
+  kind: 'damage' | 'multi_hit' | 'control' | 'heal';
   mpCost: number;
   power: number;
   aoe: boolean;
-  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal';
+  hitCount?: number;
+  controlKind?: ControlKind;
+  controlTurns?: number;
+  baseControlRate?: number;
+  damageType?: 'phys' | 'magic';
+  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap';
   desc: string;
+}
+
+export interface UnitStatus {
+  kind: ControlKind;
+  turns: number;
 }
 
 export interface BattleUnit {
@@ -117,7 +161,7 @@ export interface BattleUnit {
   name: string;
   level: number;
   roleClass: RoleClass;
-  spriteKey: string; // e.g. r1, r1n, r2, r3, n1, n2, n3
+  spriteKey: string;
   hp: number;
   maxHp: number;
   mp: number;
@@ -126,16 +170,25 @@ export interface BattleUnit {
   spd: number;
   alive: boolean;
   defending: boolean;
-  position: number; // 0..4
+  position: number;
+  statuses: UnitStatus[];
+  resist?: {
+    phys: number;
+    chaos: number;
+    seal: number;
+    trap: number;
+    magic: number;
+  };
 }
 
 export interface BattleActionLog {
   actorUid: string;
   actorName: string;
-  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
+  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee' | 'status';
   skillId?: string;
   skillName?: string;
   effect?: SkillDef['effect'];
+  proficiencyGain?: number;
   targets: Array<{
     uid: string;
     name: string;
@@ -144,6 +197,8 @@ export interface BattleActionLog {
     crit?: boolean;
     killed?: boolean;
     captured?: boolean;
+    appliedStatus?: ControlKind;
+    resisted?: boolean;
   }>;
   message: string;
 }

@@ -85,6 +85,34 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(payload),
     }),
+  allocateStats: (payload: {
+    realmId: string;
+    vit?: number;
+    str?: number;
+    int?: number;
+    agi?: number;
+  }) =>
+    request<{ character: CharacterView }>('/api/character/allocate-stats', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+  resetStats: (realmId: string) =>
+    request<{ character: CharacterView }>('/api/character/reset-stats', {
+      method: 'POST',
+      body: JSON.stringify({ realmId }),
+    }),
+  allocateResist: (payload: {
+    realmId: string;
+    phys?: number;
+    chaos?: number;
+    seal?: number;
+    trap?: number;
+    magic?: number;
+  }) =>
+    request<{ character: CharacterView }>('/api/character/allocate-resist', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
   moveMap: (realmId: string, targetMapId: string) =>
     request<{ character: CharacterView; mapPlayers: OnlinePlayerSummary[] }>('/api/map/move', {
       method: 'POST',

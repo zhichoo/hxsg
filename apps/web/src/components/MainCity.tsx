@@ -204,7 +204,18 @@ export function MainCity({
               </div>
             </div>
             <div className="pt-1 border-t border-white/15">
-              <div className="text-[#f0e6cc] text-[11px]">升级还需经验:</div>
+              <div className="flex items-center justify-between text-[11px] text-[#f0e6cc]">
+                <span>升级还需经验:</span>
+                {(character.alloc.freePoints > 0 || character.resist.freePoints > 0) && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenPanel('status')}
+                    className="px-1.5 py-0.5 bg-[#1b6e29] border border-[#7cff90] text-[#e6ffe9] text-[10px] font-bold animate-pulse"
+                  >
+                    可加点!
+                  </button>
+                )}
+              </div>
               <div className="text-center text-[#ffe678] font-bold text-[13px]">{expRemain}</div>
             </div>
           </div>

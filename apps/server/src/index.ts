@@ -18,6 +18,8 @@ import {
 } from './battleEngine.js';
 import { dbPath } from './db.js';
 import {
+  allocateCharacterResist,
+  allocateCharacterStats,
   buyShopItem,
   createCharacter,
   getCharacterByAccountAndRealm,
@@ -25,6 +27,7 @@ import {
   gmGrant,
   moveCharacter,
   recruitGeneral,
+  resetCharacterStats,
   restAtInn,
   setGeneralSlot,
   useInventoryItem,
@@ -117,6 +120,43 @@ app.post('/api/character', async (req) => {
     'shi',
   );
   return { character };
+});
+
+app.post('/api/character/allocate-stats', async (req) => {
+  const auth = requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    vit?: number;
+    str?: number;
+    int?: number;
+    agi?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: allocateCharacterStats(current.id, body) };
+});
+
+app.post('/api/character/reset-stats', async (req) => {
+  const auth = requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: resetCharacterStats(current.id) };
+});
+
+app.post('/api/character/allocate-resist', async (req) => {
+  const auth = requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    phys?: number;
+    chaos?: number;
+    seal?: number;
+    trap?: number;
+    magic?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: allocateCharacterResist(current.id, body) };
 });
 
 app.post('/api/map/move', async (req) => {

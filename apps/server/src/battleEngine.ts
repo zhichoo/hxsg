@@ -1,8 +1,11 @@
 import crypto from 'node:crypto';
 import {
+  calcControlChance,
   calcDamage,
   ENEMY_GROUPS,
-  GENERAL_TEMPLATES,
+  getSkillMaxTargets,
+  getSkillPowerMultiplier,
+  getSkillTier,
   ITEMS,
   MAPS,
   ROLE_CLASS_META,
@@ -11,9 +14,11 @@ import {
   type BattleState,
   type BattleUnit,
   type CharacterView,
+  type ControlKind,
 } from '@hxsg/shared';
 import {
   addItem,
+  addSkillProficiency,
   applyExpAndSilver,
   getCharacterById,
   grantGeneralToCharacter,
@@ -25,6 +30,30 @@ interface ActiveBattle extends BattleState {
 }
 
 const activeBattles = new Map<number, ActiveBattle>();
+
+const STATUS_LABEL: Record<ControlKind, string> = {
+  chaos: '混乱',
+  seal: '封印',
+  trap: '围困',
+};
+
+function hasStatus(u: BattleUnit, kind: ControlKind): boolean {
+  return u.statuses.some((s) => s.kind === kind && s.turns > 0);
+}
+
+function applyStatus(u: BattleUnit, kind: ControlKind, turns: number) {
+  const existing = u.statuses.find((s) => s.kind === kind);
+  if (existing) existing.turns = Math.max(existing.turns, turns);
+  else u.statuses.push({ kind, turns });
+}
+
+function tickStatuses(units: BattleUnit[]) {
+  for (const u of units) {
+    u.statuses = u.statuses
+      .map((s) => ({ ...s, turns: s.turns - 1 }))
+      .filter((s) => s.turns > 0);
+  }
+}
 
 export function getActiveBattle(characterId: number): BattleState | null {
   return activeBattles.get(characterId) ?? null;
@@ -59,10 +88,17 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       alive: true,
       defending: false,
       position: 0,
+      statuses: [],
+      resist: {
+        phys: ch.resist.phys,
+        chaos: ch.resist.chaos,
+        seal: ch.resist.seal,
+        trap: ch.resist.trap,
+        magic: ch.resist.magic,
+      },
     },
   ];
 
-  // Add active slot generals (up to 3)
   const activeGenerals = ch.generals
     .filter((g) => g.slot !== null)
     .sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9));
@@ -84,6 +120,8 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       alive: true,
       defending: false,
       position: idx + 1,
+      statuses: [],
+      resist: { phys: 5, chaos: 10, seal: 10, trap: 10, magic: 5 },
     });
   });
 
@@ -105,6 +143,14 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       alive: true,
       defending: false,
       position: idx,
+      statuses: [],
+      resist: {
+        phys: Math.min(25, e.level * 1),
+        chaos: Math.min(35, e.level * 2),
+        seal: Math.min(35, e.level * 2),
+        trap: Math.min(30, e.level * 2),
+        magic: Math.min(25, e.level * 1),
+      },
     });
   });
 
@@ -152,7 +198,6 @@ export function performBattleAction(
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
   const group = ENEMY_GROUPS[battle.enemyGroupId];
 
-  // Build turn order sorted by speed DESC
   const aliveActors = battle.units.filter((u) => u.alive).sort((a, b) => b.spd - a.spd);
 
   let fled = false;
@@ -163,6 +208,42 @@ export function performBattleAction(
     const aliveEnemies = battle.units.filter((u) => u.side === 'enemy' && u.alive);
     const alivePlayers = battle.units.filter((u) => u.side === 'player' && u.alive);
     if (aliveEnemies.length === 0 || alivePlayers.length === 0) break;
+
+    // 1. Check Seal (封): skips entire turn
+    if (hasStatus(actor, 'seal')) {
+      logs.push({
+        actorUid: actor.uid,
+        actorName: actor.name,
+        action: 'status',
+        effect: 'seal',
+        targets: [],
+        message: `${actor.name} 处于【封印】状态，本回合无法行动！`,
+      });
+      continue;
+    }
+
+    // 2. Check Chaos (乱): attacks any random living unit (friend or foe!)
+    if (hasStatus(actor, 'chaos')) {
+      const others = battle.units.filter((u) => u.alive && u.uid !== actor.uid);
+      const target = others[Math.floor(Math.random() * others.length)];
+      if (target) {
+        const { damage, crit } = calcDamage(actor.atk, target.defending, 0.95, {
+          resistPct: target.resist?.phys,
+          targetTrapped: hasStatus(target, 'trap'),
+        });
+        target.hp = Math.max(0, target.hp - damage);
+        if (target.hp === 0) target.alive = false;
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'status',
+          effect: 'chaos',
+          targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
+          message: `${actor.name} 陷入【混乱】，胡乱攻击了 ${target.name}，造成 ${damage} 点伤害！`,
+        });
+      }
+      continue;
+    }
 
     if (actor.uid === mainUnit.uid) {
       if (cmd.action === 'flee') {
@@ -176,16 +257,15 @@ export function performBattleAction(
             message: `${actor.name} 脚底抹油，成功脱离战场！`,
           });
           break;
-        } else {
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'flee',
-            targets: [],
-            message: `${actor.name} 试图逃跑，却被敌军拦住了去路！`,
-          });
-          continue;
         }
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'flee',
+          targets: [],
+          message: `${actor.name} 试图逃跑，却被敌军拦住了去路！`,
+        });
+        continue;
       }
 
       if (cmd.action === 'defend') {
@@ -222,11 +302,10 @@ export function performBattleAction(
       }
 
       if (cmd.action === 'capture') {
-        const target =
-          aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
+        const target = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
         const tplId = group.capturableTemplateId;
         const hpRatio = target.hp / target.maxHp;
-        const chance = tplId ? Math.min(0.75, 0.25 + (1 - hpRatio) * 0.55) : 0;
+        const chance = tplId ? Math.min(0.78, 0.25 + (1 - hpRatio) * 0.55) : 0;
         if (tplId && Math.random() < chance && ch.generals.length < 12) {
           target.hp = 0;
           target.alive = false;
@@ -255,8 +334,15 @@ export function performBattleAction(
         const skill = SKILLS.find((s) => s.id === cmd.skillId);
         if (skill && actor.mp >= skill.mpCost) {
           actor.mp -= skill.mpCost;
-          if (skill.effect === 'heal') {
-            const healVal = Math.round(actor.maxHp * 0.42);
+          const skillProg = ch.skills.find((s) => s.skillId === skill.id);
+          const curProf = skillProg?.proficiency ?? 0;
+          const profGain = 20 + Math.floor(Math.random() * 12);
+          addSkillProficiency(characterId, skill.id, profGain);
+          const { tier } = getSkillTier(curProf);
+
+          if (skill.kind === 'heal') {
+            const healMult = getSkillPowerMultiplier(0.4, curProf, ch.alloc.int);
+            const healVal = Math.round(actor.maxHp * Math.min(0.85, healMult));
             actor.hp = Math.min(actor.maxHp, actor.hp + healVal);
             logs.push({
               actorUid: actor.uid,
@@ -265,16 +351,100 @@ export function performBattleAction(
               skillId: skill.id,
               skillName: skill.name,
               effect: 'heal',
+              proficiencyGain: profGain,
               targets: [{ uid: actor.uid, name: actor.name, damage: 0, heal: healVal }],
-              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${healVal}！`,
+              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${healVal}（熟练度 +${profGain}）！`,
             });
             continue;
           }
+
+          const maxTargets = getSkillMaxTargets(skill.aoe, curProf);
+          const primary = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
           const targets = skill.aoe
-            ? aliveEnemies
-            : [aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0]];
+            ? [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, maxTargets)
+            : [primary];
+
+          if (skill.kind === 'control' && skill.controlKind) {
+            const kind = skill.controlKind;
+            const turns = skill.controlTurns ?? 2;
+            const targetResults = targets.map((t) => {
+              const resPct = t.resist?.[kind] ?? 0;
+              const chance = calcControlChance(skill.baseControlRate ?? 0.68, curProf, resPct);
+              const hit = Math.random() < chance;
+              if (hit) applyStatus(t, kind, turns);
+              return {
+                uid: t.uid,
+                name: t.name,
+                damage: 0,
+                appliedStatus: hit ? kind : undefined,
+                resisted: !hit,
+              };
+            });
+            const hitCount = targetResults.filter((r) => r.appliedStatus).length;
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: skill.id,
+              skillName: skill.name,
+              effect: skill.effect,
+              proficiencyGain: profGain,
+              targets: targetResults,
+              message: `${actor.name} 施展【${skill.name}】(${tier}阶)，命中 ${hitCount}/${targets.length} 名敌军【${STATUS_LABEL[kind]}】（熟练度 +${profGain}）！`,
+            });
+            continue;
+          }
+
+          if (skill.kind === 'multi_hit') {
+            const hits = (skill.hitCount ?? 2) + (tier >= 3 ? 1 : 0);
+            const power = getSkillPowerMultiplier(skill.power, curProf, 0);
+            let totalDmg = 0;
+            let anyCrit = false;
+            for (let h = 0; h < hits && primary.alive; h++) {
+              const { damage, crit } = calcDamage(actor.atk, primary.defending, power, {
+                resistPct: primary.resist?.phys,
+                targetTrapped: hasStatus(primary, 'trap'),
+              });
+              primary.hp = Math.max(0, primary.hp - damage);
+              if (primary.hp === 0) primary.alive = false;
+              totalDmg += damage;
+              anyCrit = anyCrit || crit;
+            }
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: skill.id,
+              skillName: skill.name,
+              effect: skill.effect,
+              proficiencyGain: profGain,
+              targets: [
+                {
+                  uid: primary.uid,
+                  name: primary.name,
+                  damage: totalDmg,
+                  crit: anyCrit,
+                  killed: !primary.alive,
+                },
+              ],
+              message: `${actor.name} 施展【${skill.name}】连击 ${hits} 次，对 ${primary.name} 造成 ${totalDmg} 点伤害（熟练度 +${profGain}）！`,
+            });
+            continue;
+          }
+
+          // Standard / AOE damage skill
+          const power = getSkillPowerMultiplier(
+            skill.power,
+            curProf,
+            skill.damageType === 'magic' ? ch.alloc.int : 0,
+          );
           const targetResults = targets.map((t) => {
-            const { damage, crit } = calcDamage(actor.atk, t.defending, skill.power);
+            const resistPct =
+              skill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys;
+            const { damage, crit } = calcDamage(actor.atk, t.defending, power, {
+              resistPct,
+              targetTrapped: hasStatus(t, 'trap'),
+            });
             t.hp = Math.max(0, t.hp - damage);
             if (t.hp === 0) t.alive = false;
             return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
@@ -286,16 +456,32 @@ export function performBattleAction(
             skillId: skill.id,
             skillName: skill.name,
             effect: skill.effect,
+            proficiencyGain: profGain,
             targets: targetResults,
-            message: `${actor.name} 施展【${skill.name}】，造成总计 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害！`,
+            message: `${actor.name} 施展【${skill.name}】(${tier}阶)，命中 ${targets.length} 人共造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害（熟练度 +${profGain}）！`,
           });
           continue;
         }
       }
 
-      // Default: normal attack
+      // Check Trap (围): cannot perform normal physical attack
+      if (hasStatus(actor, 'trap')) {
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'status',
+          effect: 'trap',
+          targets: [],
+          message: `${actor.name} 处于【围困】状态，无法普攻！`,
+        });
+        continue;
+      }
+
       const target = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
-      const { damage, crit } = calcDamage(actor.atk, target.defending, 1);
+      const { damage, crit } = calcDamage(actor.atk, target.defending, 1, {
+        resistPct: target.resist?.phys,
+        targetTrapped: hasStatus(target, 'trap'),
+      });
       target.hp = Math.max(0, target.hp - damage);
       if (target.hp === 0) target.alive = false;
       logs.push({
@@ -307,9 +493,22 @@ export function performBattleAction(
         message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
-      // Allied general auto-attack
+      if (hasStatus(actor, 'trap')) {
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'status',
+          effect: 'trap',
+          targets: [],
+          message: `副将 ${actor.name} 被【围困】，本回合无法普攻！`,
+        });
+        continue;
+      }
       const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
-      const { damage, crit } = calcDamage(actor.atk, target.defending, 1.05);
+      const { damage, crit } = calcDamage(actor.atk, target.defending, 1.05, {
+        resistPct: target.resist?.phys,
+        targetTrapped: hasStatus(target, 'trap'),
+      });
       target.hp = Math.max(0, target.hp - damage);
       if (target.hp === 0) target.alive = false;
       logs.push({
@@ -323,10 +522,40 @@ export function performBattleAction(
     } else {
       // Enemy AI
       const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
+      const useControl = actor.roleClass === 'wenren' && actor.mp >= 20 && Math.random() < 0.35;
       const useSkill = actor.roleClass !== 'wushi' && actor.mp >= 20 && Math.random() < 0.35;
-      if (useSkill) {
+
+      if (useControl) {
         actor.mp -= 20;
-        const { damage, crit } = calcDamage(actor.atk, target.defending, 1.25);
+        const kind: ControlKind = Math.random() < 0.5 ? 'chaos' : 'seal';
+        const resPct = target.resist?.[kind] ?? 0;
+        const hit = Math.random() < calcControlChance(0.55, 0, resPct);
+        if (hit) applyStatus(target, kind, 2);
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'skill',
+          skillName: kind === 'chaos' ? '妖言惑众' : '定身咒',
+          effect: kind,
+          targets: [
+            {
+              uid: target.uid,
+              name: target.name,
+              damage: 0,
+              appliedStatus: hit ? kind : undefined,
+              resisted: !hit,
+            },
+          ],
+          message: hit
+            ? `${actor.name} 施展诡计，使 ${target.name} 陷入【${STATUS_LABEL[kind]}】！`
+            : `${actor.name} 企图控制 ${target.name}，被高抗性成功抵挡！`,
+        });
+      } else if (useSkill) {
+        actor.mp -= 20;
+        const { damage, crit } = calcDamage(actor.atk, target.defending, 1.25, {
+          resistPct: target.resist?.magic,
+          targetTrapped: hasStatus(target, 'trap'),
+        });
         target.hp = Math.max(0, target.hp - damage);
         if (target.hp === 0) target.alive = false;
         logs.push({
@@ -339,7 +568,21 @@ export function performBattleAction(
           message: `${actor.name} 施放法术袭击 ${target.name}，造成 ${damage} 点伤害！`,
         });
       } else {
-        const { damage, crit } = calcDamage(actor.atk, target.defending, 0.92);
+        if (hasStatus(actor, 'trap')) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'status',
+            effect: 'trap',
+            targets: [],
+            message: `${actor.name} 被【围困】，动弹不得！`,
+          });
+          continue;
+        }
+        const { damage, crit } = calcDamage(actor.atk, target.defending, 0.92, {
+          resistPct: target.resist?.phys,
+          targetTrapped: hasStatus(target, 'trap'),
+        });
         target.hp = Math.max(0, target.hp - damage);
         if (target.hp === 0) target.alive = false;
         logs.push({
@@ -354,6 +597,8 @@ export function performBattleAction(
     }
   }
 
+  // Decrement status durations at end of round
+  tickStatuses(battle.units);
   battle.lastLogs = logs;
 
   const enemiesLeft = battle.units.filter((u) => u.side === 'enemy' && u.alive).length;
@@ -389,7 +634,6 @@ export function performBattleAction(
     activeBattles.delete(characterId);
   } else if (playersLeft === 0) {
     battle.status = 'defeat';
-    // Revive with 20% HP back at safety
     updatedChar = applyExpAndSilver(
       characterId,
       0,

@@ -47,6 +47,7 @@ export function SubPanels({
   onClose,
   onNotify,
 }: SubPanelsProps) {
+  const [statusTab, setStatusTab] = useState<'stats' | 'resist' | 'skills'>('stats');
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
   const [gmCode, setGmCode] = useState('');
@@ -92,46 +93,216 @@ export function SubPanels({
       <div className="flex-1 flex overflow-hidden">
         <div className="w-[14px] hx-cloud-pillar shrink-0 border-r border-black" />
         <div className="flex-1 hx-purple-bg p-3 overflow-y-auto hx-scroll text-[13px] relative">
-          {/* STATUS */}
+          {/* STATUS: 属性加点 / 抗性配点 / 技能熟练 */}
           {panel === 'status' && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3 p-2.5 bg-[#26072c]/90 border border-[#b78f3c]">
-                <div className="w-[90px] h-[90px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
-                  <PixelSprite spriteKey={mySprite} scale={2} />
-                </div>
-                <div className="space-y-0.5 text-xs">
-                  <div className="text-base font-bold text-[#ffe678]">{character.name}</div>
-                  <div>
-                    职业：{character.level}级 {classMeta.label}（{character.gender === 'female' ? '女' : '男'}）
-                  </div>
-                  <div>
-                    经验：{character.exp} / {character.expToNext}
-                  </div>
-                  <div className="text-[#ffe04b]">
-                    金砖：{character.gold} · 银两：{character.silver}
-                  </div>
-                </div>
+            <div className="space-y-2.5">
+              {/* Sub-tabs */}
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
+                {(
+                  [
+                    ['stats', `属性加点${character.alloc.freePoints > 0 ? `(${character.alloc.freePoints})` : ''}`],
+                    ['resist', `抗性配点${character.resist.freePoints > 0 ? `(${character.resist.freePoints})` : ''}`],
+                    ['skills', '技能熟练'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setStatusTab(k)}
+                    className={`py-1.5 font-bold border ${
+                      statusTab === k
+                        ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                        : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  气血：{character.hp} / {character.maxHp}
+
+              {statusTab === 'stats' && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-3 p-2.5 bg-[#26072c]/90 border border-[#b78f3c]">
+                    <div className="w-[90px] h-[90px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
+                      <PixelSprite spriteKey={mySprite} scale={2} />
+                    </div>
+                    <div className="space-y-0.5 text-xs">
+                      <div className="text-base font-bold text-[#ffe678]">{character.name}</div>
+                      <div>
+                        职业：{character.level}级 {classMeta.label}（
+                        {character.gender === 'female' ? '女' : '男'}）
+                      </div>
+                      <div>
+                        经验：{character.exp} / {character.expToNext}
+                      </div>
+                      <div className="text-[#ffe04b]">
+                        金砖：{character.gold} · 银两：{character.silver}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
+                      气血：{character.hp} / {character.maxHp}
+                    </div>
+                    <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
+                      精力：{character.mp} / {character.maxMp}
+                    </div>
+                    <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
+                      攻击：{character.atk}
+                    </div>
+                    <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
+                      速度：{character.spd}（防 {character.def}）
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-[#230629]/90 border border-[#b68d3a] space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-[#ffea84] font-bold">
+                        剩余自由属性点：{character.alloc.freePoints}
+                      </span>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => run(() => api.resetStats(realmId), '已重置所有属性点')}
+                        className="px-2 py-0.5 bg-[#5a1f66] border border-[#c795d1] text-[#f8e7fc] text-[11px]"
+                      >
+                        洗点重置
+                      </button>
+                    </div>
+                    {(
+                      [
+                        ['vit', '体质', '气血+18 / 防+1', character.alloc.vit],
+                        ['str', '力量', '攻击+3', character.alloc.str],
+                        ['int', '智力', '精力+16 / 法伤提升', character.alloc.int],
+                        ['agi', '敏捷', '速度+3', character.alloc.agi],
+                      ] as const
+                    ).map(([key, label, tip, val]) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between text-xs py-1 border-t border-white/10"
+                      >
+                        <div>
+                          <span className="font-bold text-white">{label}</span>
+                          <span className="text-[#ffe27a] ml-1.5">已加 {val}</span>
+                          <span className="text-[#d7bddf] text-[11px] ml-1.5">({tip})</span>
+                        </div>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            type="button"
+                            disabled={busy || character.alloc.freePoints < 1}
+                            onClick={() =>
+                              run(
+                                () => api.allocateStats({ realmId, [key]: 1 }),
+                                `${label} +1`,
+                              )
+                            }
+                            className="hx-btn-gold px-2 py-0.5 text-[11px] disabled:opacity-40"
+                          >
+                            +1
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy || character.alloc.freePoints < 5}
+                            onClick={() =>
+                              run(
+                                () => api.allocateStats({ realmId, [key]: 5 }),
+                                `${label} +5`,
+                              )
+                            }
+                            className="hx-btn-gold px-2 py-0.5 text-[11px] disabled:opacity-40"
+                          >
+                            +5
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  精力：{character.mp} / {character.maxMp}
+              )}
+
+              {statusTab === 'resist' && (
+                <div className="p-2.5 bg-[#230629]/90 border border-[#b68d3a] space-y-2">
+                  <div className="text-xs text-[#ffea84] font-bold">
+                    剩余抗性点：{character.resist.freePoints}（每点 +3%，单项上限 75%）
+                  </div>
+                  {(
+                    [
+                      ['phys', '抗物理', '减免物理普攻与武士技能伤害', character.resist.phys],
+                      ['chaos', '抗乱', '抵御文人「离间计」混乱控制', character.resist.chaos],
+                      ['seal', '抗封', '抵御文人「定身计」封印控制', character.resist.seal],
+                      ['trap', '抗围', '抵御文人「画地为牢」围困', character.resist.trap],
+                      ['magic', '抗法术', '减免雷法/火计/呼风唤雨伤害', character.resist.magic],
+                    ] as const
+                  ).map(([key, label, tip, pct]) => (
+                    <div
+                      key={key}
+                      className="flex items-center justify-between text-xs py-1.5 border-t border-white/10"
+                    >
+                      <div>
+                        <span className="font-bold text-white">{label}</span>
+                        <span className="text-[#87e8ff] font-bold ml-2">{pct}%</span>
+                        <div className="text-[11px] text-[#dec4e6]">{tip}</div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy || character.resist.freePoints < 1 || pct >= 75}
+                        onClick={() =>
+                          run(
+                            () => api.allocateResist({ realmId, [key]: 1 }),
+                            `${label} 提升至 ${pct + 3}%`,
+                          )
+                        }
+                        className="hx-btn-gold px-2.5 py-1 text-[11px] shrink-0 disabled:opacity-40"
+                      >
+                        +3%
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  攻击：{character.atk}
+              )}
+
+              {statusTab === 'skills' && (
+                <div className="space-y-2">
+                  <div className="text-xs text-[#ffea84]">
+                    在战斗中多施放技能即可提升熟练度，进阶后群体技能打击人数与威力自动成长！
+                  </div>
+                  {character.skills.map((sk) => {
+                    const pct = Math.min(100, Math.round((sk.proficiency / sk.nextTierProf) * 100));
+                    return (
+                      <div
+                        key={sk.skillId}
+                        className="p-2.5 bg-[#25072b]/90 border border-[#9666a1] space-y-1 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-[#ffe678] text-sm">
+                            {sk.name}{' '}
+                            <span className="text-[#8de4ff] text-xs">({sk.tier}阶)</span>
+                          </span>
+                          <span className="text-[11px] text-[#e8d2ee]">
+                            耗精 {sk.mpCost} · 最多 {sk.maxTargets} 目标
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-[#eddcf2]">{sk.desc}</div>
+                        <div className="pt-1">
+                          <div className="flex justify-between text-[10.5px] text-[#ffd77a] mb-0.5">
+                            <span>熟练度</span>
+                            <span>
+                              {sk.proficiency} / {sk.nextTierProf}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-[#140318] border border-[#734a7d] overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#d98515] to-[#ffe666]"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  防御：{character.def}
-                </div>
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  速度：{character.spd}
-                </div>
-                <div className="p-2 bg-[#25072b]/80 border border-[#7c4d87]">
-                  副将数：{character.generals.length} / 12
-                </div>
-              </div>
+              )}
             </div>
           )}
 

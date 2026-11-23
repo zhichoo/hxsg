@@ -45,11 +45,31 @@ db.exec(`
     silver INTEGER NOT NULL DEFAULT 500,
     gold INTEGER NOT NULL DEFAULT 100,
     map_id TEXT NOT NULL DEFAULT 'xuchang',
+    free_points INTEGER NOT NULL DEFAULT 4,
+    pt_vit INTEGER NOT NULL DEFAULT 0,
+    pt_str INTEGER NOT NULL DEFAULT 0,
+    pt_int INTEGER NOT NULL DEFAULT 0,
+    pt_agi INTEGER NOT NULL DEFAULT 0,
+    res_points INTEGER NOT NULL DEFAULT 5,
+    res_phys INTEGER NOT NULL DEFAULT 0,
+    res_chaos INTEGER NOT NULL DEFAULT 0,
+    res_seal INTEGER NOT NULL DEFAULT 0,
+    res_trap INTEGER NOT NULL DEFAULT 0,
+    res_magic INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     UNIQUE(account_id, realm_id),
     UNIQUE(realm_id, name),
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS character_skills (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    skill_id TEXT NOT NULL,
+    proficiency INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(character_id, skill_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
   );
 
   CREATE TABLE IF NOT EXISTS generals (
@@ -97,3 +117,30 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_characters_realm ON characters(realm_id);
   CREATE INDEX IF NOT EXISTS idx_chat_realm_channel ON chat_messages(realm_id, channel, created_at DESC);
 `);
+
+// Safe online schema migration for existing DBs created in Phase 1
+const existingCols = new Set(
+  (db.prepare('PRAGMA table_info(characters)').all() as unknown as Array<{ name: string }>).map(
+    (c) => c.name,
+  ),
+);
+
+const newCols: Array<[string, string]> = [
+  ['free_points', 'INTEGER NOT NULL DEFAULT 4'],
+  ['pt_vit', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_str', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_int', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_agi', 'INTEGER NOT NULL DEFAULT 0'],
+  ['res_points', 'INTEGER NOT NULL DEFAULT 5'],
+  ['res_phys', 'INTEGER NOT NULL DEFAULT 0'],
+  ['res_chaos', 'INTEGER NOT NULL DEFAULT 0'],
+  ['res_seal', 'INTEGER NOT NULL DEFAULT 0'],
+  ['res_trap', 'INTEGER NOT NULL DEFAULT 0'],
+  ['res_magic', 'INTEGER NOT NULL DEFAULT 0'],
+];
+
+for (const [col, def] of newCols) {
+  if (!existingCols.has(col)) {
+    db.exec(`ALTER TABLE characters ADD COLUMN ${col} ${def}`);
+  }
+}
