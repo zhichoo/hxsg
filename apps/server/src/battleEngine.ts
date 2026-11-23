@@ -976,6 +976,28 @@ export function performBattleAction(
       if (Math.random() < 0.28 && ch.equipment.length < 30) {
         let pool: string[];
         if (
+          battle.enemyGroupId === 'yiling_wujun' ||
+          battle.enemyGroupId === 'boss_luxun' ||
+          battle.enemyGroupId === 'wuzhang_sima' ||
+          battle.enemyGroupId === 'boss_simayi'
+        ) {
+          pool =
+            battle.enemyGroupId === 'boss_simayi'
+              ? ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju', 'hanxue_ma']
+              : ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma', 'fangtian_ji', 'taiji_fajian', 'qilin_baojia', 'bailong_ju'];
+        } else if (
+          battle.enemyGroupId === 'yizhou_chuanjun' ||
+          battle.enemyGroupId === 'boss_zhangren' ||
+          battle.enemyGroupId === 'hanzhong_weijun' ||
+          battle.enemyGroupId === 'boss_xiahouyuan'
+        ) {
+          pool = ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma', 'qinglong_dao', 'jueying_ma'];
+        } else if (
+          battle.enemyGroupId === 'jiangling_caojun' ||
+          battle.enemyGroupId === 'boss_caoren'
+        ) {
+          pool = ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue', 'jueying_ma', 'chitu_ma'];
+        } else if (
           battle.enemyGroupId === 'luoyang_weidui' ||
           battle.enemyGroupId === 'hulao_xiliang' ||
           battle.enemyGroupId === 'boss_huaxiong' ||

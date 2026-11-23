@@ -450,7 +450,7 @@ function buildTowerState(highestFloor: number, sweepDate: string | null) {
     highestFloor: safeFloor,
     maxFloor: TOWER_MAX_FLOOR,
     dailySwept: sweepDate === getTodayDateStr(),
-    nextFloorName: safeFloor >= TOWER_MAX_FLOOR ? '已登顶天玄塔第 20 层' : meta.name,
+    nextFloorName: safeFloor >= TOWER_MAX_FLOOR ? `已登顶天玄塔第 ${TOWER_MAX_FLOOR} 层` : meta.name,
     nextFloorRecLevel: meta.recLevel,
     nextFloorMilestone: safeFloor >= TOWER_MAX_FLOOR ? undefined : meta.milestone,
   };
@@ -458,11 +458,13 @@ function buildTowerState(highestFloor: number, sweepDate: string | null) {
 
 function calcPaohuanReward(level: number, ring: number) {
   const safeRing = Math.max(1, Math.min(10, ring));
-  const exp = Math.round((75 + level * 42) * (1 + (safeRing - 1) * 0.22));
-  const silver = Math.round((55 + level * 20) * (1 + (safeRing - 1) * 0.2));
+  const lateExpBonus = level > 15 ? Math.round(Math.pow(level - 15, 1.55) * 28) : 0;
+  const lateSilverBonus = level > 15 ? Math.round((level - 15) * 32) : 0;
+  const exp = Math.round((75 + level * 48 + lateExpBonus) * (1 + (safeRing - 1) * 0.22));
+  const silver = Math.round((55 + level * 24 + lateSilverBonus) * (1 + (safeRing - 1) * 0.2));
   let bonusHint: string | undefined;
   if (safeRing === 10) {
-    bonusHint = '第 10 环大满贯：必得金砖 +25、稀有道具与随机精良/极品装备！';
+    bonusHint = '第 10 环大满贯：必得金砖 +25、稀有道具与同等级段精良/极品装备！';
   } else if (safeRing === 5) {
     bonusHint = '第 5 环节点：额外加赠 副将经验丹 或 藏宝图 ×1！';
   }
@@ -934,7 +936,11 @@ export function acceptPaohuan(characterId: number): { character: CharacterView; 
   let requiredCount = 1;
 
   if (doVisit) {
-    const visitPool = ['zhuojun', 'luoyang', 'xuchang_jiao', 'changshe'].filter((m) => m !== ch.mapId);
+    const visitPool = (
+      ch.level >= 22
+        ? ['zhuojun', 'luoyang', 'jingzhou', 'chibi', 'jiangling']
+        : ['zhuojun', 'luoyang', 'xuchang_jiao', 'changshe']
+    ).filter((m) => m !== ch.mapId);
     targetMapId = visitPool[Math.floor(Math.random() * visitPool.length)] ?? 'zhuojun';
     taskType = 'visit_map';
     targetId = targetMapId;
@@ -950,8 +956,18 @@ export function acceptPaohuan(characterId: number): { character: CharacterView; 
       killPool = ['luoyang_weidui', 'hulao_xiliang'];
     } else if (ch.level < 18) {
       killPool = ['hulao_xiliang', 'guandu_yuanjun'];
-    } else {
+    } else if (ch.level < 23) {
       killPool = ['guandu_yuanjun', 'chibi_shuijun'];
+    } else if (ch.level < 30) {
+      killPool = ['chibi_shuijun', 'jiangling_caojun'];
+    } else if (ch.level < 38) {
+      killPool = ['jiangling_caojun', 'yizhou_chuanjun'];
+    } else if (ch.level < 46) {
+      killPool = ['yizhou_chuanjun', 'hanzhong_weijun'];
+    } else if (ch.level < 53) {
+      killPool = ['hanzhong_weijun', 'yiling_wujun'];
+    } else {
+      killPool = ['yiling_wujun', 'wuzhang_sima'];
     }
     const groupId = killPool[Math.floor(Math.random() * killPool.length)];
     const grp = ENEMY_GROUPS[groupId] ?? ENEMY_GROUPS.xuchang_dipi;
@@ -1032,9 +1048,15 @@ export function claimPaohuan(characterId: number): { character: CharacterView; m
     const latest = getCharacterById(characterId)!;
     if (latest.equipment.length < 30) {
       const equipPool =
-        ch.level >= 10
-          ? ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma']
-          : ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
+        ch.level >= 48
+          ? ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju']
+          : ch.level >= 34
+            ? ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma']
+            : ch.level >= 22
+              ? ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue', 'jueying_ma']
+              : ch.level >= 10
+                ? ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma']
+                : ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
       const picked = equipPool[Math.floor(Math.random() * equipPool.length)];
       const eq = grantEquipmentToCharacter(characterId, picked, true);
       parts.push(`装备【${eq.name}】`);
@@ -1401,10 +1423,27 @@ export function digTreasureMap(characterId: number): {
   let result: TreasureDigResult;
 
   if (roll < 0.42 && ch.equipment.length < 30) {
-    // Classic treasure pool (includes rare & legend gear / mounts!)
+    // Classic treasure pool scaled smoothly with character level tier
     const r2 = Math.random();
     let pool: string[];
-    if (r2 < 0.14) {
+    if (ch.level >= 48) {
+      pool =
+        r2 < 0.28
+          ? ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju', 'hanxue_ma']
+          : ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma'];
+    } else if (ch.level >= 32) {
+      pool =
+        r2 < 0.12
+          ? ['fangtian_ji', 'taiji_fajian', 'qilin_baojia', 'bailong_ju']
+          : r2 < 0.65
+            ? ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma']
+            : ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue', 'jueying_ma'];
+    } else if (ch.level >= 20) {
+      pool =
+        r2 < 0.2
+          ? ['chitu_ma', 'longdan_qiang', 'huangjin_jia', 'jueying_ma']
+          : ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue', 'jueying_ma', 'dilu_ma'];
+    } else if (r2 < 0.14) {
       pool = ['chitu_ma', 'longdan_qiang', 'huangjin_jia'];
     } else if (r2 < 0.45) {
       pool = ['dilu_ma', 'qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue'];
@@ -1419,7 +1458,7 @@ export function digTreasureMap(characterId: number): {
       message: `铁铲一响，竟挖出了一件【${eq.name}】！`,
     };
   } else if (roll < 0.68) {
-    const silver = 280 + Math.floor(Math.random() * 720);
+    const silver = 280 + ch.level * 45 + Math.floor(Math.random() * (720 + ch.level * 50));
     db.prepare('UPDATE characters SET silver = silver + ?, updated_at = ? WHERE id = ?').run(
       silver,
       Date.now(),
@@ -1605,7 +1644,7 @@ export function recruitGeneral(characterId: number, templateId: string): {
   if (!tpl || tpl.tavernDirect === false) throw new Error('该名将需使用「招贤令」寻访获得');
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  if (ch.generals.length >= 12) throw new Error('副将栏位已满（最多 12 名）');
+  if (ch.generals.length >= 16) throw new Error('副将栏位已满（最多 16 名）');
   if (ch.silver < tpl.recruitCostSilver) throw new Error(`银两不足，需要 ${tpl.recruitCostSilver} 两`);
 
   db.prepare('UPDATE characters SET silver = silver - ?, updated_at = ? WHERE id = ?').run(
@@ -1623,7 +1662,7 @@ export function drawGeneralWithToken(characterId: number): {
 } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  if (ch.generals.length >= 12) throw new Error('副将栏位已满（最多 12 名），请先解雇多余副将');
+  if (ch.generals.length >= 16) throw new Error('副将栏位已满（最多 16 名），请先解雇多余副将');
   const owned = ch.inventory.find((i) => i.itemId === 'jiangling');
   if (!owned || owned.quantity <= 0) throw new Error('行囊中没有招贤令（可在药铺购买或挖宝获得）');
 
@@ -1631,12 +1670,19 @@ export function drawGeneralWithToken(characterId: number): {
 
   const roll = Math.random();
   let templateId: string;
-  if (roll < 0.08) templateId = 'lvbu';
-  else if (roll < 0.22) templateId = 'zhaoyun';
-  else if (roll < 0.36) templateId = 'guanyu';
-  else if (roll < 0.5) templateId = 'diaochan';
-  else if (roll < 0.68) templateId = 'yuji';
-  else if (roll < 0.84) templateId = 'huangyueying';
+  if (roll < 0.06) templateId = 'lvbu';
+  else if (roll < 0.12) templateId = 'zhugeliang';
+  else if (roll < 0.18) templateId = 'simayi';
+  else if (roll < 0.25) templateId = 'zhouyu';
+  else if (roll < 0.32) templateId = 'machao';
+  else if (roll < 0.41) templateId = 'zhaoyun';
+  else if (roll < 0.5) templateId = 'guanyu';
+  else if (roll < 0.59) templateId = 'diaochan';
+  else if (roll < 0.68) templateId = 'huatuo';
+  else if (roll < 0.76) templateId = 'zhangfei';
+  else if (roll < 0.83) templateId = 'huangzhong';
+  else if (roll < 0.9) templateId = 'yuji';
+  else if (roll < 0.95) templateId = 'huangyueying';
   else templateId = Math.random() < 0.5 ? 'guanping' : 'zhoucang';
 
   const general = grantGeneralToCharacter(characterId, templateId, Math.max(1, ch.level - 1));
@@ -1653,7 +1699,8 @@ export function feedGeneralExpPill(characterId: number, generalId: number): Char
 
   addItem(characterId, 'jingyandan', -1);
   let lv = g.level;
-  let exp = g.exp + 360;
+  const pillExp = Math.round(360 + ch.level * 140 + (ch.level > 20 ? (ch.level - 20) * (ch.level - 20) * 12 : 0));
+  let exp = g.exp + pillExp;
   const maxLv = Math.max(20, ch.level + 5);
   while (exp >= expRequiredForLevel(lv) && lv < maxLv) {
     exp -= expRequiredForLevel(lv);
@@ -1765,7 +1812,7 @@ export function rebirthGeneral(characterId: number, generalId: number): Characte
   const g = ch.generals.find((x) => x.id === generalId);
   if (!g) throw new Error('副将不存在');
   if (g.rebirth >= 2) throw new Error('该副将已达最高 2 转境界');
-  const reqLv = g.rebirth === 0 ? 10 : 20;
+  const reqLv = g.rebirth === 0 ? 20 : 40;
   if (g.level < reqLv) throw new Error(`需达到 ${reqLv} 级才可进行 ${g.rebirth + 1} 转`);
 
   const nextRebirth = g.rebirth + 1;
@@ -2032,14 +2079,70 @@ export function recordTowerClear(characterId: number, floor: number): string | n
     }
     bonusParts.push('金砖+100', '藏宝图×3');
   } else if (nextFloor === 20) {
-    db.prepare('UPDATE characters SET gold = gold + 200 WHERE id = ?').run(characterId);
+    db.prepare('UPDATE characters SET gold = gold + 160 WHERE id = ?').run(characterId);
     const latest = getCharacterById(characterId)!;
     if (latest.equipment.length < 30) {
       const pool = ['chitu_ma', 'longdan_qiang', 'huangjin_jia'];
       const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
-      bonusParts.push(`绝世神兵【${eq.name}】`);
+      bonusParts.push(`传世神兵【${eq.name}】`);
     }
-    bonusParts.push('金砖+200');
+    bonusParts.push('金砖+160');
+  } else if (nextFloor === 25) {
+    db.prepare('UPDATE characters SET gold = gold + 200 WHERE id = ?').run(characterId);
+    addItem(characterId, 'jiangling', 2);
+    const books = Object.keys(GENERAL_SKILL_BOOKS);
+    const book = books[Math.floor(Math.random() * books.length)];
+    addItem(characterId, book, 1);
+    bonusParts.push('金砖+200', '招贤令×2', `${ITEMS[book].name}×1`);
+  } else if (nextFloor === 30) {
+    db.prepare('UPDATE characters SET gold = gold + 260 WHERE id = ?').run(characterId);
+    addItem(characterId, 'xisuidan', 3);
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`35级极品【${eq.name}】`);
+    }
+    bonusParts.push('金砖+260', '洗髓丹×3');
+  } else if (nextFloor === 35) {
+    db.prepare('UPDATE characters SET gold = gold + 320 WHERE id = ?').run(characterId);
+    addItem(characterId, 'baotu', 4);
+    addItem(characterId, 'jiangling', 2);
+    bonusParts.push('金砖+320', '藏宝图×4', '招贤令×2');
+  } else if (nextFloor === 40) {
+    db.prepare('UPDATE characters SET gold = gold + 400 WHERE id = ?').run(characterId);
+    const books = Object.keys(GENERAL_SKILL_BOOKS);
+    for (let i = 0; i < 2; i++) {
+      const book = books[Math.floor(Math.random() * books.length)];
+      addItem(characterId, book, 1);
+    }
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`50级传世【${eq.name}】`);
+    }
+    bonusParts.push('金砖+400', '随机技能书×2');
+  } else if (nextFloor === 45) {
+    db.prepare('UPDATE characters SET gold = gold + 500 WHERE id = ?').run(characterId);
+    addItem(characterId, 'xisuidan', 4);
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`50级传世【${eq.name}】`);
+    }
+    bonusParts.push('金砖+500', '洗髓丹×4');
+  } else if (nextFloor === 50) {
+    db.prepare('UPDATE characters SET gold = gold + 800 WHERE id = ?').run(characterId);
+    addItem(characterId, 'jiangling', 3);
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['hanxue_ma', 'fangtian_ji', 'taiji_fajian'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`终极神品【${eq.name}】`);
+    }
+    bonusParts.push('金砖+800', '招贤令×3');
   }
 
   return bonusParts.length > 0
@@ -2057,8 +2160,8 @@ export function sweepTowerDaily(characterId: number): {
   if (ch.tower.dailySwept) throw new Error('今日已领取过天玄塔扫荡俸禄，明日再来吧');
 
   const f = ch.tower.highestFloor;
-  const exp = f * 120;
-  const silver = f * 160;
+  const exp = Math.round(f * 150 + (f > 20 ? (f - 20) * (f - 20) * 32 : 0));
+  const silver = Math.round(f * 180 + (f > 20 ? (f - 20) * 140 : 0));
   const parts: string[] = [`经验+${exp}`, `银两+${silver}`];
 
   db.prepare('UPDATE characters SET tower_sweep_date = ?, updated_at = ? WHERE id = ?').run(
@@ -2069,12 +2172,22 @@ export function sweepTowerDaily(characterId: number): {
   applyExpAndSilver(characterId, exp, silver);
 
   if (f >= 5) {
-    addItem(characterId, 'jingyandan', 1);
-    parts.push('副将经验丹×1');
+    const pillQty = f >= 35 ? 3 : f >= 20 ? 2 : 1;
+    addItem(characterId, 'jingyandan', pillQty);
+    parts.push(`副将经验丹×${pillQty}`);
   }
   if (f >= 10) {
-    addItem(characterId, 'baotu', 1);
-    parts.push('藏宝图×1');
+    const mapQty = f >= 40 ? 2 : 1;
+    addItem(characterId, 'baotu', mapQty);
+    parts.push(`藏宝图×${mapQty}`);
+  }
+  if (f >= 30) {
+    addItem(characterId, 'xisuidan', 1);
+    parts.push('洗髓丹×1');
+  }
+  if (f >= 50) {
+    addItem(characterId, 'jiangling', 1);
+    parts.push('招贤令×1');
   }
 
   return {

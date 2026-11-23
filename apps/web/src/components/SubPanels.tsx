@@ -764,7 +764,7 @@ export function SubPanels({
             <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
                 <span className="text-[#ffde7d] font-bold">
-                  副将营 ({character.generals.length}/12) · 最多出战 3 名
+                  副将营 ({character.generals.length}/16) · 最多出战 3 名
                 </span>
                 <span className="text-[#d9c1e0] text-[11px]">
                   经验丹×{character.inventory.find((i) => i.itemId === 'jingyandan')?.quantity ?? 0}{' '}
@@ -773,7 +773,7 @@ export function SubPanels({
               </div>
 
               {character.generals.map((g) => {
-                const rebirthReq = g.rebirth === 0 ? 10 : g.rebirth === 1 ? 20 : 999;
+                const rebirthReq = g.rebirth === 0 ? 20 : g.rebirth === 1 ? 40 : 999;
                 const canRebirth = g.rebirth < 2 && g.level >= rebirthReq;
                 const ownedBooks = character.inventory.filter(
                   (it) => Boolean(GENERAL_SKILL_BOOKS[it.itemId]) && it.quantity > 0,
@@ -1686,7 +1686,7 @@ export function SubPanels({
             );
           })()}
 
-          {/* TOWER (天玄塔20层爬塔与每日扫荡) */}
+          {/* TOWER (天玄塔50层爬塔与每日扫荡) */}
           {panel === 'tower' && (
             <div className="space-y-2.5 text-xs">
               <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
@@ -1761,7 +1761,7 @@ export function SubPanels({
                       className="hx-btn-red px-4 py-1.5 text-xs"
                     >
                       {character.tower.highestFloor >= character.tower.maxFloor
-                        ? '再战第 20 层·无双吕布'
+                        ? '再战第 50 层·魔神吕布'
                         : `挑战第 ${character.tower.highestFloor + 1} 层`}
                     </button>
                   </div>
@@ -1771,7 +1771,7 @@ export function SubPanels({
               {/* Milestone Floors Overview */}
               <div className="space-y-1">
                 <div className="text-[11px] text-[#e7cfbb] font-bold">镇塔名将层首通大奖</div>
-                {[5, 10, 15, 20].map((fl) => {
+                {[5, 10, 15, 20, 25, 30, 35, 40, 45, 50].map((fl) => {
                   const meta = getTowerFloorMeta(fl);
                   const cleared = character.tower.highestFloor >= fl;
                   return (

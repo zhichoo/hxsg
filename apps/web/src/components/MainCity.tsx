@@ -68,7 +68,7 @@ export function MainCity({
   }
 
   const handleNpcClick = (npc: MapNpc) => {
-    if (npc.id === 'npc_main') {
+    if (npc.id === 'npc_main' || npc.id === 'npc_jingzhou_main') {
       onOpenPanel('quests');
       return;
     }
@@ -92,7 +92,7 @@ export function MainCity({
   };
 
   const getNpcBadge = (npc: MapNpc): { label: string; cls: string } => {
-    if (npc.id === 'npc_main') {
+    if (npc.id === 'npc_main' || npc.id === 'npc_jingzhou_main') {
       if (currentMainQuest?.status === 'ready') {
         return { label: '可交!', cls: 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92] animate-pulse' };
       }

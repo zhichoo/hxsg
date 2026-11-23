@@ -4,7 +4,13 @@ import type { RoleClass } from './types.js';
 export const SKILL_TIER_THRESHOLDS = [0, 200, 700, 1800, 4000, 10000];
 
 export function expRequiredForLevel(level: number): number {
-  return Math.floor(80 * Math.pow(level, 1.55) + 40 * level);
+  const lv = Math.max(1, Math.floor(level));
+  const base = 80 * Math.pow(lv, 1.55) + 40 * lv;
+  if (lv <= 12) {
+    return Math.floor(base);
+  }
+  // Smoothly extends mid/late progression (Lv.13 -> Lv.60) for a 2-week to 1-month lifespan
+  return Math.floor(base + 320 * Math.pow(lv - 12, 1.85));
 }
 
 export function getSkillTier(proficiency: number): { tier: number; nextTierProf: number } {

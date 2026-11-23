@@ -283,9 +283,9 @@ export const ITEMS: Record<string, ItemTemplate> = {
   jingyandan: {
     itemId: 'jingyandan',
     name: '副将经验丹',
-    desc: '在副将营帐喂给副将，立即增加 360 点经验。',
+    desc: '在副将营帐喂给副将，随主将等级提升大幅增加副将经验并+5默契。',
     type: 'material',
-    priceSilver: 180,
+    priceSilver: 240,
   },
   xisuidan: {
     itemId: 'xisuidan',
@@ -464,6 +464,82 @@ export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
     resChaos: 10,
     desc: '常山赵子龙绝世神兵，仅可通过挖宝或高阶战利品获得。',
   },
+  qinglong_dao: {
+    templateId: 'qinglong_dao',
+    name: '青龙偃月刀',
+    slot: 'weapon',
+    quality: 'rare',
+    icon: 'sg4b_item3.png',
+    levelReq: 22,
+    priceSilver: 6200,
+    shopAvailable: true,
+    atkBonus: 98,
+    hpBonus: 140,
+    spdBonus: 10,
+    desc: '重八十二斤冷艳锯，威震荆襄的中阶神兵。',
+  },
+  zhangba_mao: {
+    templateId: 'zhangba_mao',
+    name: '丈八蛇矛',
+    slot: 'weapon',
+    quality: 'rare',
+    icon: 'sg4b_item5.png',
+    levelReq: 35,
+    priceSilver: 15000,
+    shopAvailable: true,
+    atkBonus: 152,
+    spdBonus: 18,
+    resChaos: 10,
+    desc: '燕人张翼德随身长矛，刺如灵蛇吐信。',
+  },
+  zhuge_yushan: {
+    templateId: 'zhuge_yushan',
+    name: '卧龙羽扇',
+    slot: 'weapon',
+    quality: 'rare',
+    icon: 'sg4b_item4.png',
+    levelReq: 35,
+    priceSilver: 15000,
+    shopAvailable: true,
+    atkBonus: 128,
+    mpBonus: 220,
+    spdBonus: 24,
+    resMagic: 14,
+    resSeal: 10,
+    desc: '白羽轻摇定乾坤，文人异人高阶法器。',
+  },
+  fangtian_ji: {
+    templateId: 'fangtian_ji',
+    name: '方天画戟',
+    slot: 'weapon',
+    quality: 'legend',
+    icon: 'sg4b_item5.png',
+    levelReq: 50,
+    priceSilver: 38000,
+    shopAvailable: false,
+    atkBonus: 235,
+    hpBonus: 280,
+    spdBonus: 28,
+    resPhys: 10,
+    resChaos: 14,
+    desc: '温侯无双绝世神戟，仅可通过高阶挖宝、首领掉落或登塔获取。',
+  },
+  taiji_fajian: {
+    templateId: 'taiji_fajian',
+    name: '太极仙剑',
+    slot: 'weapon',
+    quality: 'legend',
+    icon: 'sg4b_item2.png',
+    levelReq: 50,
+    priceSilver: 38000,
+    shopAvailable: false,
+    atkBonus: 198,
+    mpBonus: 360,
+    spdBonus: 34,
+    resMagic: 18,
+    resSeal: 15,
+    desc: '玄门镇派仙剑，施法速度与法术爆发登峰造极。',
+  },
 
   // 头盔
   bujin_mao: {
@@ -509,6 +585,54 @@ export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
     resChaos: 15,
     resSeal: 12,
     desc: '大将冠冕，大幅提升抗混乱与抗封印。',
+  },
+  fengchi_kui: {
+    templateId: 'fengchi_kui',
+    name: '凤翅亮银盔',
+    slot: 'helmet',
+    quality: 'rare',
+    icon: 'sg4b_item7.png',
+    levelReq: 22,
+    priceSilver: 5500,
+    shopAvailable: true,
+    hpBonus: 260,
+    defBonus: 22,
+    resChaos: 16,
+    resSeal: 12,
+    desc: '亮银锻造凤翅盔，荆襄大将制式宝盔。',
+  },
+  wuhou_jin: {
+    templateId: 'wuhou_jin',
+    name: '武侯纶巾',
+    slot: 'helmet',
+    quality: 'rare',
+    icon: 'sg4b_item8.png',
+    levelReq: 35,
+    priceSilver: 13500,
+    shopAvailable: true,
+    hpBonus: 420,
+    mpBonus: 160,
+    defBonus: 32,
+    resChaos: 22,
+    resSeal: 18,
+    desc: '羽扇纶巾谈笑间，极强定神抗控宝冠。',
+  },
+  tianlong_guan: {
+    templateId: 'tianlong_guan',
+    name: '天龙紫金冠',
+    slot: 'helmet',
+    quality: 'legend',
+    icon: 'sg4b_item8.png',
+    levelReq: 50,
+    priceSilver: 32000,
+    shopAvailable: false,
+    hpBonus: 680,
+    mpBonus: 220,
+    defBonus: 48,
+    resChaos: 28,
+    resSeal: 24,
+    resTrap: 14,
+    desc: '龙纹紫金传世冠，百计难侵，临阵不动如山。',
   },
 
   // 铠甲
@@ -570,6 +694,54 @@ export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
     resMagic: 10,
     desc: '传世名甲，穿戴后稳如泰山。',
   },
+  mingguang_kai: {
+    templateId: 'mingguang_kai',
+    name: '玄铁明光铠',
+    slot: 'armor',
+    quality: 'rare',
+    icon: 'sg4b_item10.png',
+    levelReq: 22,
+    priceSilver: 6000,
+    shopAvailable: true,
+    hpBonus: 390,
+    defBonus: 34,
+    resPhys: 16,
+    resMagic: 10,
+    desc: '护心镜明光耀目，兼抗刀剑与玄法。',
+  },
+  xuanwu_jia: {
+    templateId: 'xuanwu_jia',
+    name: '玄武重铠',
+    slot: 'armor',
+    quality: 'rare',
+    icon: 'sg4b_item11.png',
+    levelReq: 35,
+    priceSilver: 14500,
+    shopAvailable: true,
+    hpBonus: 640,
+    mpBonus: 180,
+    defBonus: 50,
+    resPhys: 22,
+    resMagic: 18,
+    desc: '四象玄武镇守重甲，水火不侵。',
+  },
+  qilin_baojia: {
+    templateId: 'qilin_baojia',
+    name: '麒麟吞天甲',
+    slot: 'armor',
+    quality: 'legend',
+    icon: 'sg4b_item12.png',
+    levelReq: 50,
+    priceSilver: 36000,
+    shopAvailable: false,
+    hpBonus: 980,
+    mpBonus: 240,
+    defBonus: 72,
+    resPhys: 28,
+    resMagic: 24,
+    resSeal: 12,
+    desc: '传世无双宝甲，可硬撼五丈原与天玄塔顶峰强敌。',
+  },
 
   // 靴子
   caoxie: {
@@ -613,8 +785,54 @@ export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
     resChaos: 8,
     desc: '日行千里之神靴，出手快人一步。',
   },
+  yunlong_xue: {
+    templateId: 'yunlong_xue',
+    name: '云龙战靴',
+    slot: 'boots',
+    quality: 'rare',
+    icon: 'sg4b_item14.png',
+    levelReq: 22,
+    priceSilver: 5200,
+    shopAvailable: true,
+    spdBonus: 42,
+    hpBonus: 130,
+    resTrap: 18,
+    resChaos: 10,
+    desc: '云龙纹饰战靴，疾步如风破围困。',
+  },
+  lingbo_lv: {
+    templateId: 'lingbo_lv',
+    name: '凌波神履',
+    slot: 'boots',
+    quality: 'rare',
+    icon: 'sg4b_item15.png',
+    levelReq: 35,
+    priceSilver: 12800,
+    shopAvailable: true,
+    spdBonus: 68,
+    hpBonus: 210,
+    resTrap: 24,
+    resChaos: 14,
+    desc: '凌波微步履水无痕，中后期先手利器。',
+  },
+  tengyun_xue: {
+    templateId: 'tengyun_xue',
+    name: '腾云御风靴',
+    slot: 'boots',
+    quality: 'legend',
+    icon: 'sg4b_item15.png',
+    levelReq: 50,
+    priceSilver: 30000,
+    shopAvailable: false,
+    spdBonus: 102,
+    hpBonus: 340,
+    resTrap: 30,
+    resChaos: 18,
+    resSeal: 14,
+    desc: '踏云逐电之传世神靴，先发制人克敌机先。',
+  },
 
-  // 战马（使用官方原版 h_1 ~ h_6 战马素材！）
+  // 战马（使用官方原版 h_1 ~ h_8 战马素材！）
   huangbiao_ma: {
     templateId: 'huangbiao_ma',
     name: '黄骠马',
@@ -673,7 +891,77 @@ export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
     spdBonus: 36,
     resPhys: 12,
     resChaos: 12,
-    desc: '人中吕布，马中赤兔！仅靠藏宝图挖宝或西凉铁骑掉落获取。',
+    desc: '人中吕布，马中赤兔！前期梦寐以求的传世名驹。',
+  },
+  jueying_ma: {
+    templateId: 'jueying_ma',
+    name: '绝影',
+    slot: 'mount',
+    quality: 'rare',
+    icon: 'h_4.png',
+    levelReq: 22,
+    priceSilver: 8800,
+    shopAvailable: true,
+    hpBonus: 440,
+    atkBonus: 48,
+    spdBonus: 52,
+    resTrap: 14,
+    resChaos: 12,
+    desc: '曹操名驹，奔行无影，中阶极速坐骑。',
+  },
+  zhuahuang_ma: {
+    templateId: 'zhuahuang_ma',
+    name: '爪黄飞电',
+    slot: 'mount',
+    quality: 'rare',
+    icon: 'h_6.png',
+    levelReq: 35,
+    priceSilver: 22000,
+    shopAvailable: true,
+    hpBonus: 720,
+    mpBonus: 150,
+    atkBonus: 74,
+    spdBonus: 78,
+    resPhys: 14,
+    resChaos: 16,
+    desc: '气势磅礴之皇家御马，攻防速全面跃升。',
+  },
+  bailong_ju: {
+    templateId: 'bailong_ju',
+    name: '白龙神驹',
+    slot: 'mount',
+    quality: 'legend',
+    icon: 'h_7.png',
+    levelReq: 50,
+    priceSilver: 48000,
+    shopAvailable: false,
+    hpBonus: 1080,
+    mpBonus: 220,
+    atkBonus: 112,
+    spdBonus: 110,
+    resPhys: 18,
+    resChaos: 20,
+    resMagic: 14,
+    desc: '通体雪白如龙腾云，仅在高阶挖宝与首领战中现世。',
+  },
+  hanxue_ma: {
+    templateId: 'hanxue_ma',
+    name: '汗血天马',
+    slot: 'mount',
+    quality: 'legend',
+    icon: 'h_8.png',
+    levelReq: 58,
+    priceSilver: 68000,
+    shopAvailable: false,
+    hpBonus: 1420,
+    mpBonus: 280,
+    atkBonus: 148,
+    spdBonus: 138,
+    resPhys: 22,
+    resChaos: 24,
+    resSeal: 18,
+    resTrap: 18,
+    desc: '西域大宛绝世天马，天玄塔 50 层登顶与五丈原终极神骑！',
   },
 };
 
@@ -859,6 +1147,132 @@ export const GENERAL_TEMPLATES: Record<string, GeneralTemplate> = {
     tavernDirect: false,
     desc: '飞将吕奉先！仅可通过「招贤令」寻访获取的绝世猛将。',
   },
+  zhangfei: {
+    templateId: 'zhangfei',
+    name: '张飞',
+    roleClass: 'wushi',
+    spriteKey: 'r1',
+    avatarKey: 'ws1.png',
+    skillId: 'psdh',
+    baseHp: 235,
+    baseMp: 70,
+    baseAtk: 46,
+    baseSpd: 26,
+    growthMin: 1.24,
+    growthMax: 1.4,
+    growth: 1.31,
+    recruitCostSilver: 4500,
+    tavernDirect: true,
+    desc: '燕人张翼德，一声怒吼喝断当阳桥，血厚攻猛。',
+  },
+  huangzhong: {
+    templateId: 'huangzhong',
+    name: '黄忠',
+    roleClass: 'wushi',
+    spriteKey: 'r1',
+    avatarKey: 'ws4.png',
+    skillId: 'lianji',
+    baseHp: 205,
+    baseMp: 75,
+    baseAtk: 45,
+    baseSpd: 31,
+    growthMin: 1.24,
+    growthMax: 1.4,
+    growth: 1.31,
+    recruitCostSilver: 4800,
+    tavernDirect: true,
+    desc: '定军山斩夏侯老将，百步穿杨连环破敌。',
+  },
+  huatuo: {
+    templateId: 'huatuo',
+    name: '华佗',
+    roleClass: 'yiren',
+    spriteKey: 'r3',
+    avatarKey: 'yr5.png',
+    skillId: 'huigong',
+    baseHp: 175,
+    baseMp: 185,
+    baseAtk: 31,
+    baseSpd: 30,
+    growthMin: 1.22,
+    growthMax: 1.38,
+    growth: 1.29,
+    recruitCostSilver: 5600,
+    tavernDirect: true,
+    desc: '乱世神医！天生自带【妙手回春】，中后期推塔与长线战续航核心。',
+  },
+  machao: {
+    templateId: 'machao',
+    name: '马超',
+    roleClass: 'wushi',
+    spriteKey: 'r1',
+    avatarKey: 'ws2.png',
+    skillId: 'lianji',
+    baseHp: 222,
+    baseMp: 80,
+    baseAtk: 47,
+    baseSpd: 36,
+    growthMin: 1.27,
+    growthMax: 1.44,
+    growth: 1.35,
+    recruitCostSilver: 6800,
+    tavernDirect: false,
+    desc: '锦马超！西凉神威天将军，极速物理连击收割者。',
+  },
+  zhouyu: {
+    templateId: 'zhouyu',
+    name: '周瑜',
+    roleClass: 'wenren',
+    spriteKey: 'r2',
+    avatarKey: 'wr6.png',
+    skillId: 'hfhy',
+    baseHp: 168,
+    baseMp: 185,
+    baseAtk: 36,
+    baseSpd: 37,
+    growthMin: 1.28,
+    growthMax: 1.45,
+    growth: 1.36,
+    recruitCostSilver: 7400,
+    tavernDirect: false,
+    desc: '江东美周郎！极速群攻【呼风唤雨】，火烧连营清场神将。',
+  },
+  simayi: {
+    templateId: 'simayi',
+    name: '司马懿',
+    roleClass: 'wenren',
+    spriteKey: 'r2',
+    avatarKey: 'wr4.png',
+    skillId: 'fengyin',
+    baseHp: 178,
+    baseMp: 195,
+    baseAtk: 35,
+    baseSpd: 36,
+    growthMin: 1.29,
+    growthMax: 1.46,
+    growth: 1.37,
+    recruitCostSilver: 8200,
+    tavernDirect: false,
+    desc: '冢虎司马仲达！自带强控【定身计】，压制高阶 BOSS 利器。',
+  },
+  zhugeliang: {
+    templateId: 'zhugeliang',
+    name: '诸葛亮',
+    roleClass: 'yiren',
+    spriteKey: 'r3',
+    avatarKey: 'yr6.png',
+    skillId: 'tianlei',
+    baseHp: 185,
+    baseMp: 220,
+    baseAtk: 42,
+    baseSpd: 36,
+    growthMin: 1.32,
+    growthMax: 1.5,
+    growth: 1.4,
+    recruitCostSilver: 9600,
+    tavernDirect: false,
+    desc: '卧龙孔明！自带群攻雷法【雷动九天】，三国第一法系神将！',
+  },
 };
 
 export interface EnemyGroupDef {
@@ -1037,6 +1451,156 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
       { name: '曹营祭酒', level: 20, roleClass: 'yiren', spriteKey: 'n3', hp: 1700, mp: 260, atk: 175, spd: 64 },
     ],
   },
+  jiangling_caojun: {
+    id: 'jiangling_caojun',
+    name: '曹仁江陵守军',
+    mapId: 'jiangling',
+    minLevel: 22,
+    silverReward: 820,
+    expReward: 1350,
+    capturableTemplateId: 'zhangfei',
+    enemies: [
+      { name: '江陵铁甲卫', level: 24, roleClass: 'wushi', spriteKey: 'n1', hp: 1850, mp: 90, atk: 205, spd: 62 },
+      { name: '荆北弓弩手', level: 24, roleClass: 'wenren', spriteKey: 'n2', hp: 1520, mp: 180, atk: 192, spd: 68 },
+      { name: '曹魏校尉', level: 25, roleClass: 'wushi', spriteKey: 'n1', hp: 2100, mp: 100, atk: 222, spd: 65 },
+      { name: '军中道士', level: 25, roleClass: 'yiren', spriteKey: 'n3', hp: 1580, mp: 220, atk: 208, spd: 67 },
+    ],
+  },
+  boss_caoren: {
+    id: 'boss_caoren',
+    name: '征南将军·曹仁',
+    mapId: 'jiangling',
+    minLevel: 25,
+    silverReward: 1650,
+    expReward: 2750,
+    capturableTemplateId: 'zhangfei',
+    enemies: [
+      { name: '八门金锁卫', level: 26, roleClass: 'wushi', spriteKey: 'n1', hp: 2950, mp: 120, atk: 235, spd: 68 },
+      { name: '征南大将·曹仁', level: 27, roleClass: 'wushi', spriteKey: 'r1', hp: 4200, mp: 180, atk: 278, spd: 76 },
+      { name: '骁将·牛金', level: 26, roleClass: 'wushi', spriteKey: 'r1', hp: 3150, mp: 120, atk: 248, spd: 72 },
+      { name: '满宠参军', level: 26, roleClass: 'wenren', spriteKey: 'n2', hp: 2350, mp: 280, atk: 222, spd: 80 },
+    ],
+  },
+  yizhou_chuanjun: {
+    id: 'yizhou_chuanjun',
+    name: '西川栈道劲旅',
+    mapId: 'yizhou',
+    minLevel: 29,
+    silverReward: 1180,
+    expReward: 2400,
+    capturableTemplateId: 'huangzhong',
+    enemies: [
+      { name: '东州铁卫', level: 31, roleClass: 'wushi', spriteKey: 'n1', hp: 2650, mp: 100, atk: 272, spd: 80 },
+      { name: '蜀中连弩手', level: 31, roleClass: 'wenren', spriteKey: 'n2n', hp: 2220, mp: 220, atk: 256, spd: 88 },
+      { name: '川军都伯', level: 32, roleClass: 'wushi', spriteKey: 'n1', hp: 2980, mp: 120, atk: 292, spd: 84 },
+      { name: '青城方士', level: 32, roleClass: 'yiren', spriteKey: 'n3', hp: 2340, mp: 260, atk: 278, spd: 86 },
+    ],
+  },
+  boss_zhangren: {
+    id: 'boss_zhangren',
+    name: '落凤坡·张任大阵',
+    mapId: 'yizhou',
+    minLevel: 33,
+    silverReward: 2400,
+    expReward: 4800,
+    capturableTemplateId: 'huangzhong',
+    enemies: [
+      { name: '伏兵弓将', level: 34, roleClass: 'wenren', spriteKey: 'n2', hp: 3400, mp: 240, atk: 298, spd: 96 },
+      { name: '益州名将·张任', level: 35, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 220, atk: 355, spd: 102 },
+      { name: '老将·严颜', level: 34, roleClass: 'wushi', spriteKey: 'r1', hp: 4600, mp: 180, atk: 325, spd: 92 },
+      { name: '川中谋士', level: 34, roleClass: 'yiren', spriteKey: 'n3', hp: 3300, mp: 320, atk: 310, spd: 98 },
+    ],
+  },
+  hanzhong_weijun: {
+    id: 'hanzhong_weijun',
+    name: '定军山魏军营',
+    mapId: 'hanzhong',
+    minLevel: 37,
+    silverReward: 1650,
+    expReward: 4100,
+    capturableTemplateId: 'machao',
+    enemies: [
+      { name: '虎豹重骑', level: 39, roleClass: 'wushi', spriteKey: 'n1', hp: 3750, mp: 120, atk: 355, spd: 102 },
+      { name: '定军弓将', level: 39, roleClass: 'wenren', spriteKey: 'n2', hp: 3150, mp: 260, atk: 338, spd: 112 },
+      { name: '征西校尉', level: 40, roleClass: 'wushi', spriteKey: 'n1', hp: 4150, mp: 140, atk: 378, spd: 106 },
+      { name: '魏营术师', level: 40, roleClass: 'yiren', spriteKey: 'n3', hp: 3250, mp: 300, atk: 362, spd: 109 },
+    ],
+  },
+  boss_xiahouyuan: {
+    id: 'boss_xiahouyuan',
+    name: '妙才·夏侯渊大营',
+    mapId: 'hanzhong',
+    minLevel: 41,
+    silverReward: 3400,
+    expReward: 8200,
+    capturableTemplateId: 'machao',
+    enemies: [
+      { name: '河间名将·张郃', level: 42, roleClass: 'wushi', spriteKey: 'r1', hp: 5600, mp: 200, atk: 410, spd: 118 },
+      { name: '征西将军·夏侯渊', level: 43, roleClass: 'wushi', spriteKey: 'r1', hp: 7400, mp: 240, atk: 458, spd: 128 },
+      { name: '定军副将·郭淮', level: 42, roleClass: 'wenren', spriteKey: 'n2', hp: 4500, mp: 320, atk: 382, spd: 124 },
+      { name: '随军天师', level: 42, roleClass: 'yiren', spriteKey: 'n3', hp: 4350, mp: 360, atk: 402, spd: 120 },
+    ],
+  },
+  yiling_wujun: {
+    id: 'yiling_wujun',
+    name: '东吴解烦精兵',
+    mapId: 'yiling',
+    minLevel: 45,
+    silverReward: 2250,
+    expReward: 6800,
+    capturableTemplateId: 'zhouyu',
+    enemies: [
+      { name: '江东解烦卫', level: 47, roleClass: 'wushi', spriteKey: 'n1', hp: 5100, mp: 140, atk: 450, spd: 128 },
+      { name: '火攻都尉', level: 47, roleClass: 'wenren', spriteKey: 'n2', hp: 4350, mp: 300, atk: 432, spd: 138 },
+      { name: '锦帆悍将', level: 48, roleClass: 'wushi', spriteKey: 'n1', hp: 5650, mp: 160, atk: 478, spd: 132 },
+      { name: '东吴术士', level: 48, roleClass: 'yiren', spriteKey: 'n3', hp: 4450, mp: 340, atk: 462, spd: 135 },
+    ],
+  },
+  boss_luxun: {
+    id: 'boss_luxun',
+    name: '火烧连营·陆逊',
+    mapId: 'yiling',
+    minLevel: 49,
+    silverReward: 4800,
+    expReward: 13500,
+    capturableTemplateId: 'zhouyu',
+    enemies: [
+      { name: '锦帆贼·甘宁', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 7200, mp: 220, atk: 515, spd: 148 },
+      { name: '大都督·陆逊', level: 51, roleClass: 'wenren', spriteKey: 'r2', hp: 8600, mp: 420, atk: 535, spd: 162 },
+      { name: '江东名将·朱然', level: 50, roleClass: 'wushi', spriteKey: 'r1', hp: 6900, mp: 200, atk: 495, spd: 142 },
+      { name: '火计方士', level: 50, roleClass: 'yiren', spriteKey: 'n3', hp: 5800, mp: 400, atk: 512, spd: 152 },
+    ],
+  },
+  wuzhang_sima: {
+    id: 'wuzhang_sima',
+    name: '司马亲卫中军',
+    mapId: 'wuzhangyuan',
+    minLevel: 53,
+    silverReward: 3100,
+    expReward: 10800,
+    capturableTemplateId: 'simayi',
+    enemies: [
+      { name: '死士重甲兵', level: 55, roleClass: 'wushi', spriteKey: 'n1', hp: 6800, mp: 180, atk: 560, spd: 154 },
+      { name: '司马参谋', level: 55, roleClass: 'wenren', spriteKey: 'n2', hp: 5800, mp: 360, atk: 540, spd: 166 },
+      { name: '大魏虎将', level: 56, roleClass: 'wushi', spriteKey: 'n1', hp: 7450, mp: 200, atk: 590, spd: 158 },
+      { name: '太史玄士', level: 56, roleClass: 'yiren', spriteKey: 'n3', hp: 5950, mp: 400, atk: 575, spd: 162 },
+    ],
+  },
+  boss_simayi: {
+    id: 'boss_simayi',
+    name: '冢虎·司马懿本阵',
+    mapId: 'wuzhangyuan',
+    minLevel: 57,
+    silverReward: 6800,
+    expReward: 22000,
+    capturableTemplateId: 'zhugeliang',
+    enemies: [
+      { name: '司马师', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 9200, mp: 260, atk: 625, spd: 174 },
+      { name: '大都督·司马懿', level: 60, roleClass: 'wenren', spriteKey: 'r2', hp: 11800, mp: 520, atk: 668, spd: 192 },
+      { name: '司马昭', level: 58, roleClass: 'wushi', spriteKey: 'r1', hp: 8900, mp: 260, atk: 615, spd: 178 },
+      { name: '五丈原天师', level: 59, roleClass: 'yiren', spriteKey: 'n3', hp: 7800, mp: 460, atk: 640, spd: 182 },
+    ],
+  },
 };
 
 export interface MainQuestDef {
@@ -1061,7 +1625,7 @@ export interface MainQuestDef {
   };
 }
 
-export const TOWER_MAX_FLOOR = 20;
+export const TOWER_MAX_FLOOR = 50;
 
 export function getTowerFloorMeta(floor: number): {
   floor: number;
@@ -1071,7 +1635,7 @@ export function getTowerFloorMeta(floor: number): {
   milestone?: string;
 } {
   const f = Math.max(1, Math.min(TOWER_MAX_FLOOR, Math.floor(floor)));
-  const recLevel = Math.max(2, f + 1);
+  const recLevel = f <= 20 ? Math.max(2, f + 1) : Math.min(60, Math.round(21 + (f - 20) * 1.3));
   if (f === 5) {
     return { floor: f, name: '第5层 · 黄巾妖阵', recLevel, isBoss: true, milestone: '首通赠 金砖+30、招贤令×1' };
   }
@@ -1082,7 +1646,25 @@ export function getTowerFloorMeta(floor: number): {
     return { floor: f, name: '第15层 · 五虎幻阵', recLevel, isBoss: true, milestone: '首通赠 金砖+100、藏宝图×3、极品装备×1' };
   }
   if (f === 20) {
-    return { floor: f, name: '第20层 · 无双战神吕布', recLevel, isBoss: true, milestone: '登顶赠 金砖+200、绝世神兵/赤兔宝马×1' };
+    return { floor: f, name: '第20层 · 飞将吕布幻影', recLevel, isBoss: true, milestone: '首通赠 金砖+160、10级传世神兵/赤兔×1' };
+  }
+  if (f === 25) {
+    return { floor: f, name: '第25层 · 赤壁周郎水师', recLevel, isBoss: true, milestone: '首通赠 金砖+200、招贤令×2、随机技能书×1' };
+  }
+  if (f === 30) {
+    return { floor: f, name: '第30层 · 蜀汉五虎上将', recLevel, isBoss: true, milestone: '首通赠 金砖+260、洗髓丹×3、35级极品装备×1' };
+  }
+  if (f === 35) {
+    return { floor: f, name: '第35层 · 东吴四大都督', recLevel, isBoss: true, milestone: '首通赠 金砖+320、藏宝图×4、招贤令×2' };
+  }
+  if (f === 40) {
+    return { floor: f, name: '第40层 · 曹魏五子良将', recLevel, isBoss: true, milestone: '首通赠 金砖+400、随机技能书×2、50级传世装备×1' };
+  }
+  if (f === 45) {
+    return { floor: f, name: '第45层 · 卧龙凤雏奇阵', recLevel, isBoss: true, milestone: '首通赠 金砖+500、洗髓丹×4、50级传世装备×1' };
+  }
+  if (f === 50) {
+    return { floor: f, name: '第50层 · 魔神吕布终极试炼', recLevel, isBoss: true, milestone: '登顶赠 金砖+800、汗血天马/50级神兵×1、招贤令×3' };
   }
   return { floor: f, name: `天玄塔第 ${f} 层守卫`, recLevel, isBoss: false };
 }
@@ -1090,12 +1672,24 @@ export function getTowerFloorMeta(floor: number): {
 export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
   const f = Math.max(1, Math.min(TOWER_MAX_FLOOR, Math.floor(floor)));
   const meta = getTowerFloorMeta(f);
-  const lv = Math.max(2, f + 1);
-  const lateBoost = f > 12 ? (f - 12) * (f - 12) * 28 : 0;
-  const lateAtkBoost = f > 12 ? (f - 12) * 14 : 0;
-  const hpBase = Math.round(70 + f * 60 + f * f * 5.6 + lateBoost);
-  const atkBase = Math.round(14 + f * 8.2 + f * f * 0.25 + lateAtkBoost);
-  const spdBase = Math.round(14 + f * 2.8);
+  const lv = meta.recLevel;
+
+  let hpBase: number;
+  let atkBase: number;
+  let spdBase: number;
+  if (f <= 20) {
+    const lateBoost = f > 12 ? (f - 12) * (f - 12) * 28 : 0;
+    const lateAtkBoost = f > 12 ? (f - 12) * 14 : 0;
+    hpBase = Math.round(70 + f * 60 + f * f * 5.6 + lateBoost);
+    atkBase = Math.round(14 + f * 8.2 + f * f * 0.25 + lateAtkBoost);
+    spdBase = Math.round(14 + f * 2.8);
+  } else {
+    // Smooth continuation from Floor 20 (hpBase≈5302, atkBase≈390, spdBase≈70) up to Floor 50
+    const over = f - 20;
+    hpBase = Math.round(5300 + over * 260 + over * over * 5.5);
+    atkBase = Math.round(390 + over * 13.5 + over * over * 0.12);
+    spdBase = Math.round(70 + over * 4.4);
+  }
 
   let enemies: EnemyGroupDef['enemies'];
   if (f === 5) {
@@ -1119,9 +1713,51 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
   } else if (f === 20) {
     enemies = [
       { name: '陷阵营·高顺', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 1.15), mp: 80, atk: Math.round(atkBase * 1.1), spd: spdBase + 2 },
-      { name: '无双战神·吕布', level: lv + 2, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.7), mp: 150, atk: Math.round(atkBase * 1.35), spd: spdBase + 8 },
+      { name: '飞将·吕布幻影', level: lv + 2, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.7), mp: 150, atk: Math.round(atkBase * 1.35), spd: spdBase + 8 },
       { name: '闭月·貂蝉幻影', level: lv + 1, roleClass: 'wenren', spriteKey: 'r2n', hp: Math.round(hpBase * 0.95), mp: 200, atk: atkBase, spd: spdBase + 10 },
       { name: '陈宫军师', level: lv, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 1.0), mp: 200, atk: Math.round(atkBase * 1.15), spd: spdBase + 5 },
+    ];
+  } else if (f === 25) {
+    enemies = [
+      { name: '大都督·周瑜幻影', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.4), mp: 300, atk: Math.round(atkBase * 1.22), spd: spdBase + 12 },
+      { name: '老将·黄盖', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.25), mp: 120, atk: Math.round(atkBase * 1.12), spd: spdBase + 4 },
+      { name: '江东儒将·鲁肃', level: lv, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 1.05), mp: 260, atk: Math.round(atkBase * 1.1), spd: spdBase + 8 },
+      { name: '东吴水师校尉', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 1.1), mp: 100, atk: atkBase, spd: spdBase + 2 },
+    ];
+  } else if (f === 30) {
+    enemies = [
+      { name: '武圣·关羽幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.35), mp: 160, atk: Math.round(atkBase * 1.2), spd: spdBase + 6 },
+      { name: '燕人·张飞幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.45), mp: 140, atk: Math.round(atkBase * 1.22), spd: spdBase + 2 },
+      { name: '子龙·赵云幻影', level: lv + 2, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.3), mp: 160, atk: Math.round(atkBase * 1.18), spd: spdBase + 10 },
+      { name: '锦马超幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.25), mp: 160, atk: Math.round(atkBase * 1.2), spd: spdBase + 12 },
+    ];
+  } else if (f === 35) {
+    enemies = [
+      { name: '美周郎·周瑜', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.35), mp: 360, atk: Math.round(atkBase * 1.22), spd: spdBase + 14 },
+      { name: '白衣渡江·吕蒙', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.3), mp: 180, atk: Math.round(atkBase * 1.18), spd: spdBase + 8 },
+      { name: '儒将·陆逊', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.3), mp: 360, atk: Math.round(atkBase * 1.2), spd: spdBase + 12 },
+      { name: '江东谋主·鲁肃', level: lv + 1, roleClass: 'yiren', spriteKey: 'r3', hp: Math.round(hpBase * 1.15), mp: 320, atk: Math.round(atkBase * 1.15), spd: spdBase + 6 },
+    ];
+  } else if (f === 40) {
+    enemies = [
+      { name: '威震逍遥津·张辽', level: lv + 2, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.48), mp: 200, atk: Math.round(atkBase * 1.26), spd: spdBase + 10 },
+      { name: '河间·张郃', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.3), mp: 180, atk: Math.round(atkBase * 1.18), spd: spdBase + 8 },
+      { name: '大斧·徐晃', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.35), mp: 160, atk: Math.round(atkBase * 1.2), spd: spdBase + 4 },
+      { name: '鬼才·郭嘉幻影', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.15), mp: 380, atk: Math.round(atkBase * 1.22), spd: spdBase + 15 },
+    ];
+  } else if (f === 45) {
+    enemies = [
+      { name: '卧龙·诸葛亮', level: lv + 2, roleClass: 'yiren', spriteKey: 'r3', hp: Math.round(hpBase * 1.5), mp: 460, atk: Math.round(atkBase * 1.3), spd: spdBase + 14 },
+      { name: '凤雏·庞统', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.3), mp: 420, atk: Math.round(atkBase * 1.22), spd: spdBase + 16 },
+      { name: '冢虎·司马懿', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 1.4), mp: 420, atk: Math.round(atkBase * 1.25), spd: spdBase + 12 },
+      { name: '麒麟儿·姜维', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.35), mp: 220, atk: Math.round(atkBase * 1.2), spd: spdBase + 10 },
+    ];
+  } else if (f === 50) {
+    enemies = [
+      { name: '魔神·吕布', level: lv + 3, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.85), mp: 320, atk: Math.round(atkBase * 1.42), spd: spdBase + 18 },
+      { name: '倾城·貂蝉', level: lv + 2, roleClass: 'wenren', spriteKey: 'r2n', hp: Math.round(hpBase * 1.25), mp: 460, atk: Math.round(atkBase * 1.22), spd: spdBase + 22 },
+      { name: '仙人·左慈', level: lv + 2, roleClass: 'yiren', spriteKey: 'r3', hp: Math.round(hpBase * 1.35), mp: 500, atk: Math.round(atkBase * 1.32), spd: spdBase + 15 },
+      { name: '陷阵统领·高顺', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.45), mp: 220, atk: Math.round(atkBase * 1.25), spd: spdBase + 8 },
     ];
   } else {
     const count = f >= 12 ? 4 : 3;
@@ -1133,9 +1769,9 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
       roleClass: classes[idx],
       spriteKey: sprites[idx],
       hp: Math.round(hpBase * (idx === 0 ? 1.1 : 0.92)),
-      mp: classes[idx] === 'wushi' ? 50 : 120,
+      mp: classes[idx] === 'wushi' ? 80 : 220,
       atk: Math.round(atkBase * (idx === 0 ? 1.05 : 0.96)),
-      spd: spdBase + idx,
+      spd: spdBase + idx * 2,
     }));
   }
 
@@ -1144,8 +1780,8 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
     name: meta.name,
     mapId: 'xuchang',
     minLevel: meta.recLevel,
-    silverReward: Math.round(60 + f * 40),
-    expReward: Math.round(80 + f * 72),
+    silverReward: Math.round(60 + f * 55 + (f > 20 ? (f - 20) * (f - 20) * 3 : 0)),
+    expReward: Math.round(80 + f * 95 + (f > 20 ? (f - 20) * (f - 20) * 16 : 0)),
     enemies,
   };
 }
@@ -1302,6 +1938,161 @@ export const MAIN_QUESTS: MainQuestDef[] = [
       item: { itemId: 'baotu', quantity: 3 },
     },
   },
+  {
+    questId: 'main_09',
+    chapter: 9,
+    title: '智取荆州',
+    recLevel: 22,
+    npcName: '荆州主线使者',
+    dialogue: '赤壁凯旋，荆襄九郡群雄逐鹿！请少侠南下【荆州城】报到，商议攻取南郡大计。',
+    objectiveKind: 'visit_map',
+    targetId: 'jingzhou',
+    targetName: '前往荆州城',
+    targetMapId: 'jingzhou',
+    requiredCount: 1,
+    rewards: {
+      exp: 9500,
+      silver: 4500,
+      item: { itemId: 'jiangling', quantity: 1 },
+    },
+  },
+  {
+    questId: 'main_10',
+    chapter: 10,
+    title: '血战江陵',
+    recLevel: 25,
+    npcName: '荆州主线使者',
+    dialogue: '大将曹仁据守【江陵古道】布下八门金锁阵。少侠请携副将破阵，正面击败【征南将军·曹仁】！',
+    objectiveKind: 'kill',
+    targetId: 'boss_caoren',
+    targetName: '征南将军·曹仁',
+    targetMapId: 'jiangling',
+    requiredCount: 1,
+    rewards: {
+      exp: 18000,
+      silver: 7200,
+      gold: 60,
+      equipTemplateId: 'qinglong_dao',
+      item: { itemId: 'jingyandan', quantity: 3 },
+    },
+  },
+  {
+    questId: 'main_11',
+    chapter: 11,
+    title: '入主西川',
+    recLevel: 30,
+    npcName: '荆州主线使者',
+    dialogue: '益州险塞，沃野千里。请少侠沿【益州栈道】西进，击破 3 队【西川栈道劲旅】打通入川要道！',
+    objectiveKind: 'kill',
+    targetId: 'yizhou_chuanjun',
+    targetName: '西川栈道劲旅',
+    targetMapId: 'yizhou',
+    requiredCount: 3,
+    rewards: {
+      exp: 28000,
+      silver: 9500,
+      equipTemplateId: 'mingguang_kai',
+      item: { itemId: 'baotu', quantity: 2 },
+    },
+  },
+  {
+    questId: 'main_12',
+    chapter: 12,
+    title: '破阵落凤坡',
+    recLevel: 34,
+    npcName: '荆州主线使者',
+    dialogue: '川中名将张任于【益州栈道】设伏，凶险异常。请少侠直破【落凤坡·张任大阵】，奠定西川基业！',
+    objectiveKind: 'kill',
+    targetId: 'boss_zhangren',
+    targetName: '落凤坡·张任大阵',
+    targetMapId: 'yizhou',
+    requiredCount: 1,
+    rewards: {
+      exp: 44000,
+      silver: 13000,
+      gold: 80,
+      equipTemplateId: 'zhuahuang_ma',
+      item: { itemId: 'xisuidan', quantity: 2 },
+    },
+  },
+  {
+    questId: 'main_13',
+    chapter: 13,
+    title: '斩夏侯定汉中',
+    recLevel: 40,
+    npcName: '荆州守将',
+    dialogue: '魏将夏侯渊屯兵【汉中定军山】，虎视益州。少侠请效仿老将黄忠，踏平【妙才·夏侯渊大营】！',
+    objectiveKind: 'kill',
+    targetId: 'boss_xiahouyuan',
+    targetName: '妙才·夏侯渊大营',
+    targetMapId: 'hanzhong',
+    requiredCount: 1,
+    rewards: {
+      exp: 68000,
+      silver: 18500,
+      gold: 100,
+      equipTemplateId: 'xuanwu_jia',
+      item: { itemId: 'jiangling', quantity: 2 },
+    },
+  },
+  {
+    questId: 'main_14',
+    chapter: 14,
+    title: '夷陵烽火',
+    recLevel: 46,
+    npcName: '荆州守将',
+    dialogue: '东吴解烦精兵云集【夷陵火林】，伺机断我归路。请少侠先行剿灭 3 队【东吴解烦精兵】以挫敌锋！',
+    objectiveKind: 'kill',
+    targetId: 'yiling_wujun',
+    targetName: '东吴解烦精兵',
+    targetMapId: 'yiling',
+    requiredCount: 3,
+    rewards: {
+      exp: 98000,
+      silver: 24000,
+      equipTemplateId: 'lingbo_lv',
+      item: { itemId: 'jingyandan', quantity: 5 },
+    },
+  },
+  {
+    questId: 'main_15',
+    chapter: 15,
+    title: '火林破连营',
+    recLevel: 50,
+    npcName: '荆州守将',
+    dialogue: '江东大都督陆逊统领甘宁、朱然扼守【夷陵火林】！请少侠率满编副将正面击破【火烧连营·陆逊】！',
+    objectiveKind: 'kill',
+    targetId: 'boss_luxun',
+    targetName: '火烧连营·陆逊',
+    targetMapId: 'yiling',
+    requiredCount: 1,
+    rewards: {
+      exp: 145000,
+      silver: 34000,
+      gold: 160,
+      item: { itemId: 'baotu', quantity: 4 },
+    },
+  },
+  {
+    questId: 'main_16',
+    chapter: 16,
+    title: '星落五丈原',
+    recLevel: 56,
+    npcName: '许昌主线使者',
+    dialogue: '六出祁山，决战【五丈原】！迎战大魏大都督【冢虎·司马懿本阵】，功成之后便可筹备主角 60 级一转！',
+    objectiveKind: 'kill',
+    targetId: 'boss_simayi',
+    targetName: '冢虎·司马懿本阵',
+    targetMapId: 'wuzhangyuan',
+    requiredCount: 1,
+    rewards: {
+      exp: 240000,
+      silver: 52000,
+      gold: 300,
+      equipTemplateId: 'fangtian_ji',
+      item: { itemId: 'jiangling', quantity: 3 },
+    },
+  },
 ];
 
 export const MAPS: Record<string, MapNode> = {
@@ -1314,7 +2105,7 @@ export const MAPS: Record<string, MapNode> = {
     desc: '魏都许昌，商贾云集，英雄豪杰汇集之地。',
     isSafe: true,
     recommendedLevel: '安全区',
-    neighbors: ['xuchang_jiao', 'luoyang', 'zhuojun'],
+    neighbors: ['xuchang_jiao', 'luoyang', 'zhuojun', 'jingzhou'],
     npcs: [
       {
         id: 'npc_main',
@@ -1340,7 +2131,7 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'pharmacy', name: '回春药铺', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '铁匠铺与马市', desc: '购置兵器、铠甲、战靴与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '招贤馆', desc: '招募名将与购买副将技能书', icon: 'ss_m_3.png', kind: 'tavern' },
-      { id: 'tower', name: '天玄塔', desc: '20层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
+      { id: 'tower', name: '天玄塔', desc: '50层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
       { id: 'casino', name: '许昌赌坊', desc: '经典猜大小/豹子 与 赤壁押注', icon: 'ss_m_9.png', kind: 'casino' },
       { id: 'bank', name: '许昌钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
       { id: 'market', name: '许昌集市', desc: '玩家离线摆摊寄售装备/副将/秘籍', icon: 'ss_m_11.png', kind: 'market' },
@@ -1507,7 +2298,7 @@ export const MAPS: Record<string, MapNode> = {
     desc: '赤壁矶头浪淘沙，铁索楼船连绵十里，大战一触即发！',
     isSafe: false,
     recommendedLevel: 'Lv.18 ~ 22',
-    neighbors: ['guandu', 'xuchang'],
+    neighbors: ['guandu', 'jingzhou', 'xuchang'],
     npcs: [
       {
         id: 'npc_chibi_shuijun',
@@ -1520,6 +2311,170 @@ export const MAPS: Record<string, MapNode> = {
         name: '【BOSS】赤壁先锋大营',
         action: 'battle',
         enemyGroupId: 'boss_caojun',
+      },
+    ],
+    facilities: [],
+  },
+  jingzhou: {
+    id: 'jingzhou',
+    name: '荆州城',
+    region: '荆襄重镇',
+    thumb: 'site_m10.png',
+    battleBg: 'f_bg6',
+    desc: '兵家必争之地，上通巴蜀、下控江东，22 级以上豪杰的大本营。',
+    isSafe: true,
+    recommendedLevel: '安全区',
+    neighbors: ['chibi', 'jiangling', 'yizhou', 'xuchang'],
+    npcs: [
+      {
+        id: 'npc_jingzhou_main',
+        name: '荆州主线使者',
+        action: 'talk',
+        dialogue: '赤壁之后，天下三分之势已成！江陵、益州、汉中、夷陵乃至五丈原皆有劲敌等你建功立业！',
+      },
+      {
+        id: 'npc_jingzhou_guard',
+        name: '荆州守将',
+        action: 'talk',
+        dialogue: '荆州兵甲坊备有 22 级与 35 级名兵宝甲，招贤馆也可寻访张飞、诸葛亮、周瑜、华佗等名将！',
+      },
+    ],
+    facilities: [
+      { id: 'inn', name: '荆州客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
+      { id: 'pharmacy', name: '荆州回春堂', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
+      { id: 'blacksmith', name: '荆州兵甲坊', desc: '购置高阶兵器、铠甲与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
+      { id: 'tavern', name: '荆州招贤馆', desc: '招募中后期三国名将与技能书', icon: 'ss_m_3.png', kind: 'tavern' },
+      { id: 'tower', name: '天玄塔分坛', desc: '50层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
+      { id: 'bank', name: '荆州钱庄', desc: '全区互通存取银两金砖', icon: 'ss_m_10.png', kind: 'bank' },
+      { id: 'market', name: '荆州集市', desc: '全区互通离线摆摊寄售', icon: 'ss_m_11.png', kind: 'market' },
+    ],
+  },
+  jiangling: {
+    id: 'jiangling',
+    name: '江陵古道',
+    region: '南郡前线',
+    thumb: 'site_m12.png',
+    battleBg: 'f_bg5',
+    desc: '曹仁据险筑垒，八门金锁阵横亘古道，战鼓震天。',
+    isSafe: false,
+    recommendedLevel: 'Lv.22 ~ 28',
+    neighbors: ['jingzhou', 'yizhou'],
+    npcs: [
+      {
+        id: 'npc_jiangling_caojun',
+        name: '曹仁江陵守军',
+        action: 'battle',
+        enemyGroupId: 'jiangling_caojun',
+      },
+      {
+        id: 'npc_boss_caoren',
+        name: '【BOSS】征南将军·曹仁',
+        action: 'battle',
+        enemyGroupId: 'boss_caoren',
+      },
+    ],
+    facilities: [],
+  },
+  yizhou: {
+    id: 'yizhou',
+    name: '益州栈道',
+    region: '巴蜀险关',
+    thumb: 'site_m13.png',
+    battleBg: 'f_bg7',
+    desc: '蜀道难于上青天，西川劲旅与落凤坡伏兵严阵以待。',
+    isSafe: false,
+    recommendedLevel: 'Lv.28 ~ 36',
+    neighbors: ['jingzhou', 'jiangling', 'hanzhong'],
+    npcs: [
+      {
+        id: 'npc_yizhou_chuanjun',
+        name: '西川栈道劲旅',
+        action: 'battle',
+        enemyGroupId: 'yizhou_chuanjun',
+      },
+      {
+        id: 'npc_boss_zhangren',
+        name: '【BOSS】落凤坡·张任',
+        action: 'battle',
+        enemyGroupId: 'boss_zhangren',
+      },
+    ],
+    facilities: [],
+  },
+  hanzhong: {
+    id: 'hanzhong',
+    name: '汉中定军山',
+    region: '汉中要塞',
+    thumb: 'site_m14.png',
+    battleBg: 'f_bg8',
+    desc: '定军山峭壁耸立，夏侯渊大营居高临下，一战可定汉中。',
+    isSafe: false,
+    recommendedLevel: 'Lv.36 ~ 44',
+    neighbors: ['yizhou', 'yiling'],
+    npcs: [
+      {
+        id: 'npc_hanzhong_weijun',
+        name: '定军山魏军营',
+        action: 'battle',
+        enemyGroupId: 'hanzhong_weijun',
+      },
+      {
+        id: 'npc_boss_xiahouyuan',
+        name: '【BOSS】妙才·夏侯渊',
+        action: 'battle',
+        enemyGroupId: 'boss_xiahouyuan',
+      },
+    ],
+    facilities: [],
+  },
+  yiling: {
+    id: 'yiling',
+    name: '夷陵火林',
+    region: '猇亭古林',
+    thumb: 'site_m15.png',
+    battleBg: 'f_bg20',
+    desc: '七百里连营深陷密林，东吴大都督陆逊率江东精锐枕戈待旦。',
+    isSafe: false,
+    recommendedLevel: 'Lv.44 ~ 52',
+    neighbors: ['hanzhong', 'wuzhangyuan'],
+    npcs: [
+      {
+        id: 'npc_yiling_wujun',
+        name: '东吴解烦精兵',
+        action: 'battle',
+        enemyGroupId: 'yiling_wujun',
+      },
+      {
+        id: 'npc_boss_luxun',
+        name: '【BOSS】火烧连营·陆逊',
+        action: 'battle',
+        enemyGroupId: 'boss_luxun',
+      },
+    ],
+    facilities: [],
+  },
+  wuzhangyuan: {
+    id: 'wuzhangyuan',
+    name: '五丈原',
+    region: '关中决战地',
+    thumb: 'site_m16.png',
+    battleBg: 'f_bg9',
+    desc: '秋风肃杀，渭水之滨。大魏司马懿本阵岿然不动，乃首期最高试炼之地！',
+    isSafe: false,
+    recommendedLevel: 'Lv.52 ~ 60',
+    neighbors: ['yiling', 'jingzhou'],
+    npcs: [
+      {
+        id: 'npc_wuzhang_sima',
+        name: '司马亲卫中军',
+        action: 'battle',
+        enemyGroupId: 'wuzhang_sima',
+      },
+      {
+        id: 'npc_boss_simayi',
+        name: '【BOSS】冢虎·司马懿',
+        action: 'battle',
+        enemyGroupId: 'boss_simayi',
       },
     ],
     facilities: [],
