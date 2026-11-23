@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyRequest } from 'fastify';
-import { REALMS, type Gender, type RoleClass } from '@hxsg/shared';
+import { REALMS, type EquipmentSlot, type Gender, type RoleClass } from '@hxsg/shared';
 import { loginAccount, registerAccount, verifyToken, type AuthPayload } from './auth.js';
 import {
   getActiveBattle,
@@ -16,8 +16,11 @@ import { dbPath } from './db.js';
 import {
   allocateCharacterResist,
   allocateCharacterStats,
+  buyEquipment,
   buyShopItem,
   createCharacter,
+  digTreasureMap,
+  equipItem,
   getCharacterByAccountAndRealm,
   getRankings,
   gmGrant,
@@ -25,7 +28,9 @@ import {
   recruitGeneral,
   resetCharacterStats,
   restAtInn,
+  sellEquipment,
   setGeneralSlot,
+  unequipSlot,
   useInventoryItem,
 } from './gameService.js';
 import {
@@ -260,6 +265,46 @@ app.post('/api/inventory/use', async (req) => {
   return { character: useInventoryItem(current.id, body.itemId || '') };
 });
 
+app.post('/api/equipment/buy', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; templateId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: buyEquipment(current.id, body.templateId || '') };
+});
+
+app.post('/api/equipment/equip', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; equipId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: equipItem(current.id, Number(body.equipId)) };
+});
+
+app.post('/api/equipment/unequip', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; slot?: EquipmentSlot };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: unequipSlot(current.id, body.slot || 'weapon') };
+});
+
+app.post('/api/equipment/sell', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; equipId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: sellEquipment(current.id, Number(body.equipId)) };
+});
+
+app.post('/api/treasure/dig', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return digTreasureMap(current.id);
+});
+
 app.post('/api/generals/recruit', async (req) => {
   const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; templateId?: string };
@@ -317,6 +362,8 @@ app.post('/api/gm/grant', async (req) => {
     exp?: number;
     fullHeal?: boolean;
     grantGeneralId?: string;
+    grantEquipId?: string;
+    grantBaotu?: number;
     announce?: string;
   };
   if (!auth.isGm && body.passcode !== GM_PASSCODE) {

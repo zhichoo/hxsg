@@ -21,6 +21,7 @@ import {
   addSkillProficiency,
   applyExpAndSilver,
   getCharacterById,
+  grantEquipmentToCharacter,
   grantGeneralToCharacter,
 } from './gameService.js';
 
@@ -616,11 +617,31 @@ export function performBattleAction(
     const silver = group.silverReward;
     const dropRoll = Math.random();
     let droppedItem: { itemId: string; name: string; quantity: number } | undefined;
-    if (dropRoll < 0.35) {
-      const dropId = dropRoll < 0.2 ? 'jinchuang' : 'ningshen';
+    if (dropRoll < 0.42) {
+      const dropId =
+        dropRoll < 0.14 ? 'baotu' : dropRoll < 0.28 ? 'jinchuang' : 'ningshen';
       addItem(characterId, dropId, 1);
       droppedItem = { itemId: dropId, name: ITEMS[dropId].name, quantity: 1 };
     }
+
+    // Classic equipment / mount drop roll
+    let droppedEquipment:
+      | { name: string; quality: 'common' | 'fine' | 'rare' | 'legend'; slot: 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount' }
+      | undefined;
+    if (Math.random() < 0.28 && ch.equipment.length < 30) {
+      let pool: string[];
+      if (battle.enemyGroupId === 'luoyang_weidui') {
+        pool = ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma', 'chitu_ma', 'longdan_qiang'];
+      } else if (battle.enemyGroupId === 'changshe_daoshi') {
+        pool = ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
+      } else {
+        pool = ['qingtong_qiang', 'taomu_jian', 'bujin_mao', 'cubu_yi', 'caoxie', 'huangbiao_ma'];
+      }
+      const picked = pool[Math.floor(Math.random() * pool.length)];
+      const eq = grantEquipmentToCharacter(characterId, picked, true);
+      droppedEquipment = { name: eq.name, quality: eq.quality, slot: eq.slot };
+    }
+
     const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
     updatedChar = res.character;
     battle.rewards = {
@@ -629,6 +650,7 @@ export function performBattleAction(
       leveledUp: res.leveledUp,
       newLevel: res.newLevel,
       droppedItem,
+      droppedEquipment,
       capturedGeneral,
     };
     activeBattles.delete(characterId);

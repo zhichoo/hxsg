@@ -1,4 +1,11 @@
-import type { MapNode, RoleClass, ServerRealm, SkillDef } from './types.js';
+import type {
+  EquipmentQuality,
+  EquipmentSlot,
+  MapNode,
+  RoleClass,
+  ServerRealm,
+  SkillDef,
+} from './types.js';
 
 export const REALMS: ServerRealm[] = [
   {
@@ -273,6 +280,324 @@ export const ITEMS: Record<string, ItemTemplate> = {
     type: 'material',
     priceSilver: 500,
   },
+  baotu: {
+    itemId: 'baotu',
+    name: '藏宝图',
+    desc: '古旧羊皮图卷，在行囊点击「挖宝」可寻得神兵、名马或银两。',
+    type: 'material',
+    priceSilver: 260,
+  },
+};
+
+export interface EquipmentTemplate {
+  templateId: string;
+  name: string;
+  slot: EquipmentSlot;
+  quality: EquipmentQuality;
+  icon: string;
+  levelReq: number;
+  priceSilver: number;
+  shopAvailable: boolean;
+  hpBonus?: number;
+  mpBonus?: number;
+  atkBonus?: number;
+  defBonus?: number;
+  spdBonus?: number;
+  resPhys?: number;
+  resChaos?: number;
+  resSeal?: number;
+  resTrap?: number;
+  resMagic?: number;
+  desc: string;
+}
+
+export const EQUIPMENT_SLOT_LABELS: Record<EquipmentSlot, string> = {
+  weapon: '武器',
+  helmet: '头盔',
+  armor: '铠甲',
+  boots: '靴子',
+  mount: '战马',
+};
+
+export const EQUIPMENT_TEMPLATES: Record<string, EquipmentTemplate> = {
+  // 武器
+  qingtong_qiang: {
+    templateId: 'qingtong_qiang',
+    name: '青铜长枪',
+    slot: 'weapon',
+    quality: 'common',
+    icon: 'sg4b_item1.png',
+    levelReq: 1,
+    priceSilver: 220,
+    shopAvailable: true,
+    atkBonus: 14,
+    desc: '军中制式青铜枪，初入乱世称手兵器。',
+  },
+  taomu_jian: {
+    templateId: 'taomu_jian',
+    name: '桃木法剑',
+    slot: 'weapon',
+    quality: 'common',
+    icon: 'sg4b_item2.png',
+    levelReq: 1,
+    priceSilver: 240,
+    shopAvailable: true,
+    atkBonus: 10,
+    mpBonus: 35,
+    desc: '道家桃木削制，助文人异人凝聚法力。',
+  },
+  bailian_dao: {
+    templateId: 'bailian_dao',
+    name: '百炼钢刀',
+    slot: 'weapon',
+    quality: 'fine',
+    icon: 'sg4b_item3.png',
+    levelReq: 4,
+    priceSilver: 680,
+    shopAvailable: true,
+    atkBonus: 28,
+    spdBonus: 4,
+    desc: '千锤百炼而成的钢刀，劈砍凌厉。',
+  },
+  qixing_jian: {
+    templateId: 'qixing_jian',
+    name: '七星宝剑',
+    slot: 'weapon',
+    quality: 'rare',
+    icon: 'sg4b_item4.png',
+    levelReq: 7,
+    priceSilver: 1650,
+    shopAvailable: true,
+    atkBonus: 42,
+    mpBonus: 70,
+    resMagic: 8,
+    desc: '曹操曾献董卓之名剑，攻法兼备。',
+  },
+  longdan_qiang: {
+    templateId: 'longdan_qiang',
+    name: '龙胆亮银枪',
+    slot: 'weapon',
+    quality: 'legend',
+    icon: 'sg4b_item5.png',
+    levelReq: 10,
+    priceSilver: 4200,
+    shopAvailable: false,
+    atkBonus: 68,
+    spdBonus: 12,
+    resChaos: 10,
+    desc: '常山赵子龙绝世神兵，仅可通过挖宝或高阶战利品获得。',
+  },
+
+  // 头盔
+  bujin_mao: {
+    templateId: 'bujin_mao',
+    name: '青布头巾',
+    slot: 'helmet',
+    quality: 'common',
+    icon: 'sg4b_item6.png',
+    levelReq: 1,
+    priceSilver: 180,
+    shopAvailable: true,
+    hpBonus: 40,
+    defBonus: 4,
+    resChaos: 4,
+    desc: '轻便布巾，略微定神防乱。',
+  },
+  tiekui: {
+    templateId: 'tiekui',
+    name: '精铁战盔',
+    slot: 'helmet',
+    quality: 'fine',
+    icon: 'sg4b_item7.png',
+    levelReq: 5,
+    priceSilver: 620,
+    shopAvailable: true,
+    hpBonus: 95,
+    defBonus: 10,
+    resChaos: 8,
+    resSeal: 6,
+    desc: '精铁锻打战盔，兼顾防御与抗控。',
+  },
+  zijin_guan: {
+    templateId: 'zijin_guan',
+    name: '束发紫金冠',
+    slot: 'helmet',
+    quality: 'rare',
+    icon: 'sg4b_item8.png',
+    levelReq: 9,
+    priceSilver: 1900,
+    shopAvailable: false,
+    hpBonus: 160,
+    mpBonus: 60,
+    resChaos: 15,
+    resSeal: 12,
+    desc: '大将冠冕，大幅提升抗混乱与抗封印。',
+  },
+
+  // 铠甲
+  cubu_yi: {
+    templateId: 'cubu_yi',
+    name: '粗布战袍',
+    slot: 'armor',
+    quality: 'common',
+    icon: 'sg4b_item9.png',
+    levelReq: 1,
+    priceSilver: 200,
+    shopAvailable: true,
+    hpBonus: 55,
+    defBonus: 6,
+    resPhys: 4,
+    desc: '寻常行伍战衣，聊胜于无。',
+  },
+  suozi_jia: {
+    templateId: 'suozi_jia',
+    name: '精钢锁子甲',
+    slot: 'armor',
+    quality: 'fine',
+    icon: 'sg4b_item10.png',
+    levelReq: 5,
+    priceSilver: 760,
+    shopAvailable: true,
+    hpBonus: 130,
+    defBonus: 14,
+    resPhys: 10,
+    desc: '环环相扣的锁子甲，大幅抵御刀枪伤害。',
+  },
+  bagua_pao: {
+    templateId: 'bagua_pao',
+    name: '八卦道袍',
+    slot: 'armor',
+    quality: 'rare',
+    icon: 'sg4b_item11.png',
+    levelReq: 8,
+    priceSilver: 1800,
+    shopAvailable: true,
+    hpBonus: 145,
+    mpBonus: 95,
+    resMagic: 14,
+    resSeal: 10,
+    desc: '道家护身法袍，极克法术与控制。',
+  },
+  huangjin_jia: {
+    templateId: 'huangjin_jia',
+    name: '黄金锁子甲',
+    slot: 'armor',
+    quality: 'legend',
+    icon: 'sg4b_item12.png',
+    levelReq: 10,
+    priceSilver: 4500,
+    shopAvailable: false,
+    hpBonus: 260,
+    defBonus: 24,
+    resPhys: 18,
+    resMagic: 10,
+    desc: '传世名甲，穿戴后稳如泰山。',
+  },
+
+  // 靴子
+  caoxie: {
+    templateId: 'caoxie',
+    name: '疾行草履',
+    slot: 'boots',
+    quality: 'common',
+    icon: 'sg4b_item13.png',
+    levelReq: 1,
+    priceSilver: 160,
+    shopAvailable: true,
+    spdBonus: 7,
+    resTrap: 4,
+    desc: '轻便行军鞋，抢占先手出手权。',
+  },
+  tayun_lv: {
+    templateId: 'tayun_lv',
+    name: '踏云战靴',
+    slot: 'boots',
+    quality: 'fine',
+    icon: 'sg4b_item14.png',
+    levelReq: 5,
+    priceSilver: 640,
+    shopAvailable: true,
+    spdBonus: 16,
+    hpBonus: 45,
+    resTrap: 10,
+    desc: '身轻如燕，文人先手控场必备。',
+  },
+  jifeng_xue: {
+    templateId: 'jifeng_xue',
+    name: '追风神靴',
+    slot: 'boots',
+    quality: 'rare',
+    icon: 'sg4b_item15.png',
+    levelReq: 9,
+    priceSilver: 1750,
+    shopAvailable: false,
+    spdBonus: 28,
+    resTrap: 16,
+    resChaos: 8,
+    desc: '日行千里之神靴，出手快人一步。',
+  },
+
+  // 战马（使用官方原版 h_1 ~ h_6 战马素材！）
+  huangbiao_ma: {
+    templateId: 'huangbiao_ma',
+    name: '黄骠马',
+    slot: 'mount',
+    quality: 'common',
+    icon: 'h_2.png',
+    levelReq: 1,
+    priceSilver: 450,
+    shopAvailable: true,
+    hpBonus: 65,
+    spdBonus: 10,
+    desc: '耐力极佳的军中良驹，新手第一匹坐骑。',
+  },
+  wuzhui_ma: {
+    templateId: 'wuzhui_ma',
+    name: '乌骓马',
+    slot: 'mount',
+    quality: 'fine',
+    icon: 'h_3.png',
+    levelReq: 5,
+    priceSilver: 1400,
+    shopAvailable: true,
+    hpBonus: 135,
+    atkBonus: 15,
+    spdBonus: 18,
+    resPhys: 6,
+    desc: '通体乌黑发亮，奔袭如雷霆万钧。',
+  },
+  dilu_ma: {
+    templateId: 'dilu_ma',
+    name: '的卢',
+    slot: 'mount',
+    quality: 'rare',
+    icon: 'h_5.png',
+    levelReq: 8,
+    priceSilver: 2800,
+    shopAvailable: true,
+    hpBonus: 190,
+    mpBonus: 60,
+    spdBonus: 26,
+    resTrap: 12,
+    resChaos: 10,
+    desc: '一跃檀溪之名驹，极速兼顾防控制。',
+  },
+  chitu_ma: {
+    templateId: 'chitu_ma',
+    name: '赤兔宝马',
+    slot: 'mount',
+    quality: 'legend',
+    icon: 'h_1.png',
+    levelReq: 10,
+    priceSilver: 6800,
+    shopAvailable: false,
+    hpBonus: 300,
+    atkBonus: 32,
+    spdBonus: 36,
+    resPhys: 12,
+    resChaos: 12,
+    desc: '人中吕布，马中赤兔！仅靠藏宝图挖宝或西凉铁骑掉落获取。',
+  },
 };
 
 export interface GeneralTemplate {
@@ -474,7 +799,8 @@ export const MAPS: Record<string, MapNode> = {
     ],
     facilities: [
       { id: 'inn', name: '许昌客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
-      { id: 'pharmacy', name: '回春药铺', desc: '购买金创药、大还丹、凝神散', icon: 'ss_m_2.png', kind: 'pharmacy' },
+      { id: 'pharmacy', name: '回春药铺', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
+      { id: 'blacksmith', name: '铁匠铺与马市', desc: '购置兵器、铠甲、战靴与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '招贤馆', desc: '招募关平、黄月英、于吉、赵云', icon: 'ss_m_3.png', kind: 'tavern' },
       { id: 'gm', name: '福利驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
     ],
@@ -545,7 +871,8 @@ export const MAPS: Record<string, MapNode> = {
     ],
     facilities: [
       { id: 'inn', name: '洛阳悦来客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
-      { id: 'pharmacy', name: '太医署药房', desc: '购买金创药、大还丹、凝神散', icon: 'ss_m_2.png', kind: 'pharmacy' },
+      { id: 'pharmacy', name: '太医署药房', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
+      { id: 'blacksmith', name: '洛阳兵马司', desc: '购置精良兵器防具与名驹', icon: 'ss_m_7.png', kind: 'blacksmith' },
       { id: 'tavern', name: '洛阳招贤馆', desc: '招募强力三国副将', icon: 'ss_m_3.png', kind: 'tavern' },
     ],
   },

@@ -67,6 +67,31 @@
       "method": "POST",
       "auth": "platform"
     },
+    "equipmentBuy": {
+      "url": "__API_BASE__/api/equipment/buy",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "equipmentEquip": {
+      "url": "__API_BASE__/api/equipment/equip",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "equipmentUnequip": {
+      "url": "__API_BASE__/api/equipment/unequip",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "equipmentSell": {
+      "url": "__API_BASE__/api/equipment/sell",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "treasureDig": {
+      "url": "__API_BASE__/api/treasure/dig",
+      "method": "POST",
+      "auth": "platform"
+    },
     "generalsRecruit": {
       "url": "__API_BASE__/api/generals/recruit",
       "method": "POST",

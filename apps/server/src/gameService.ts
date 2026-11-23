@@ -1,5 +1,6 @@
 import {
   calcRoleStats,
+  EQUIPMENT_TEMPLATES,
   expRequiredForLevel,
   GENERAL_TEMPLATES,
   getSkillMaxTargets,
@@ -10,12 +11,17 @@ import {
   ROLE_CLASS_META,
   SKILLS,
   type CharacterView,
+  type EquipmentBonusSummary,
+  type EquipmentQuality,
+  type EquipmentSlot,
+  type EquipmentView,
   type Gender,
   type GeneralView,
   type InventoryItemView,
   type RankEntry,
   type RoleClass,
   type SkillProgressView,
+  type TreasureDigResult,
 } from '@hxsg/shared';
 import { db } from './db.js';
 
@@ -91,10 +97,111 @@ export function getCharacterById(characterId: number): CharacterView | null {
   return hydrateCharacter(row);
 }
 
+interface EquipmentRow {
+  id: number;
+  character_id: number;
+  template_id: string;
+  name: string;
+  slot: EquipmentSlot;
+  quality: EquipmentQuality;
+  icon: string;
+  level_req: number;
+  hp_bonus: number;
+  mp_bonus: number;
+  atk_bonus: number;
+  def_bonus: number;
+  spd_bonus: number;
+  res_phys: number;
+  res_chaos: number;
+  res_seal: number;
+  res_trap: number;
+  res_magic: number;
+  sell_silver: number;
+  equipped: number;
+}
+
+function getEquipmentList(characterId: number): {
+  equipment: EquipmentView[];
+  bonus: EquipmentBonusSummary;
+} {
+  const rows = db
+    .prepare(
+      'SELECT * FROM character_equipment WHERE character_id = ? ORDER BY equipped DESC, id DESC',
+    )
+    .all(characterId) as unknown as EquipmentRow[];
+
+  const bonus: EquipmentBonusSummary = {
+    hp: 0,
+    mp: 0,
+    atk: 0,
+    def: 0,
+    spd: 0,
+    resPhys: 0,
+    resChaos: 0,
+    resSeal: 0,
+    resTrap: 0,
+    resMagic: 0,
+  };
+
+  const equipment: EquipmentView[] = rows.map((r) => {
+    const equipped = Boolean(r.equipped);
+    if (equipped) {
+      bonus.hp += r.hp_bonus;
+      bonus.mp += r.mp_bonus;
+      bonus.atk += r.atk_bonus;
+      bonus.def += r.def_bonus;
+      bonus.spd += r.spd_bonus;
+      bonus.resPhys += r.res_phys;
+      bonus.resChaos += r.res_chaos;
+      bonus.resSeal += r.res_seal;
+      bonus.resTrap += r.res_trap;
+      bonus.resMagic += r.res_magic;
+    }
+    return {
+      id: r.id,
+      templateId: r.template_id,
+      name: r.name,
+      slot: r.slot,
+      quality: r.quality,
+      icon: r.icon,
+      levelReq: r.level_req,
+      hpBonus: r.hp_bonus,
+      mpBonus: r.mp_bonus,
+      atkBonus: r.atk_bonus,
+      defBonus: r.def_bonus,
+      spdBonus: r.spd_bonus,
+      resPhys: r.res_phys,
+      resChaos: r.res_chaos,
+      resSeal: r.res_seal,
+      resTrap: r.res_trap,
+      resMagic: r.res_magic,
+      sellSilver: r.sell_silver,
+      equipped,
+    };
+  });
+
+  return { equipment, bonus };
+}
+
 function hydrateCharacter(row: CharacterRow): CharacterView {
   const acc = db.prepare('SELECT is_gm FROM accounts WHERE id = ?').get(row.account_id) as
     | { is_gm: number }
     | undefined;
+
+  const { equipment, bonus } = getEquipmentList(row.id);
+  const alloc = {
+    freePoints: row.free_points ?? 0,
+    vit: row.pt_vit ?? 0,
+    str: row.pt_str ?? 0,
+    int: row.pt_int ?? 0,
+    agi: row.pt_agi ?? 0,
+  };
+  const baseStats = calcRoleStats(row.role_class, row.level, alloc);
+  const effectiveMaxHp = baseStats.maxHp + bonus.hp;
+  const effectiveMaxMp = baseStats.maxMp + bonus.mp;
+  const effectiveAtk = baseStats.atk + bonus.atk;
+  const effectiveDef = baseStats.def + bonus.def;
+  const effectiveSpd = baseStats.spd + bonus.spd;
 
   const generalRows = db
     .prepare('SELECT * FROM generals WHERE character_id = ? ORDER BY slot IS NULL, slot ASC, id ASC')
@@ -174,32 +281,28 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     level: row.level,
     exp: row.exp,
     expToNext: expRequiredForLevel(row.level),
-    hp: row.hp,
-    maxHp: row.max_hp,
-    mp: row.mp,
-    maxMp: row.max_mp,
-    atk: row.atk,
-    def: row.def,
-    spd: row.spd,
+    hp: Math.min(row.hp, effectiveMaxHp),
+    maxHp: effectiveMaxHp,
+    mp: Math.min(row.mp, effectiveMaxMp),
+    maxMp: effectiveMaxMp,
+    atk: effectiveAtk,
+    def: effectiveDef,
+    spd: effectiveSpd,
     silver: row.silver,
     gold: row.gold,
     mapId: row.map_id,
     isGm: Boolean(acc?.is_gm),
-    alloc: {
-      freePoints: row.free_points ?? 0,
-      vit: row.pt_vit ?? 0,
-      str: row.pt_str ?? 0,
-      int: row.pt_int ?? 0,
-      agi: row.pt_agi ?? 0,
-    },
+    alloc,
     resist: {
       freePoints: row.res_points ?? 0,
-      phys: row.res_phys ?? 0,
-      chaos: row.res_chaos ?? 0,
-      seal: row.res_seal ?? 0,
-      trap: row.res_trap ?? 0,
-      magic: row.res_magic ?? 0,
+      phys: Math.min(75, (row.res_phys ?? 0) + bonus.resPhys),
+      chaos: Math.min(75, (row.res_chaos ?? 0) + bonus.resChaos),
+      seal: Math.min(75, (row.res_seal ?? 0) + bonus.resSeal),
+      trap: Math.min(75, (row.res_trap ?? 0) + bonus.resTrap),
+      magic: Math.min(75, (row.res_magic ?? 0) + bonus.resMagic),
     },
+    equipBonus: bonus,
+    equipment,
     skills,
     generals,
     inventory,
@@ -287,6 +390,7 @@ export function createCharacter(params: {
   const characterId = Number(res.lastInsertRowid);
   addItem(characterId, 'jinchuang', 5);
   addItem(characterId, 'ningshen', 3);
+  addItem(characterId, 'baotu', 1);
 
   return getCharacterById(characterId)!;
 }
@@ -440,14 +544,268 @@ export function moveCharacter(characterId: number, targetMapId: string): Charact
 export function restAtInn(characterId: number): CharacterView {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  db.prepare('UPDATE characters SET hp = max_hp, mp = max_mp, updated_at = ? WHERE id = ?').run(
-    Date.now(),
-    characterId,
-  );
+  db.prepare(
+    'UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?',
+  ).run(ch.maxHp, ch.maxMp, ch.maxHp, ch.maxMp, Date.now(), characterId);
   db.prepare('UPDATE generals SET hp = max_hp, mp = max_mp WHERE character_id = ?').run(
     characterId,
   );
   return getCharacterById(characterId)!;
+}
+
+export function grantEquipmentToCharacter(
+  characterId: number,
+  templateId: string,
+  randomize = false,
+): EquipmentView {
+  const tpl = EQUIPMENT_TEMPLATES[templateId];
+  if (!tpl) throw new Error('装备模板不存在');
+
+  const roll = (val?: number) => {
+    if (!val) return 0;
+    if (!randomize) return val;
+    const mult = 0.9 + Math.random() * 0.28;
+    return Math.max(1, Math.round(val * mult));
+  };
+
+  let resPhys = tpl.resPhys ?? 0;
+  let resChaos = tpl.resChaos ?? 0;
+  let resSeal = tpl.resSeal ?? 0;
+  let resTrap = tpl.resTrap ?? 0;
+  let resMagic = tpl.resMagic ?? 0;
+  let name = tpl.name;
+
+  // Dropped / dug gear has a chance to roll an extra classic resistance affix
+  if (randomize && Math.random() < 0.35) {
+    const extra = 3 + Math.floor(Math.random() * 4);
+    const pick = Math.floor(Math.random() * 5);
+    if (pick === 0) resPhys += extra;
+    else if (pick === 1) resChaos += extra;
+    else if (pick === 2) resSeal += extra;
+    else if (pick === 3) resTrap += extra;
+    else resMagic += extra;
+    name = `极品·${tpl.name}`;
+  }
+
+  const hpBonus = roll(tpl.hpBonus);
+  const mpBonus = roll(tpl.mpBonus);
+  const atkBonus = roll(tpl.atkBonus);
+  const defBonus = roll(tpl.defBonus);
+  const spdBonus = roll(tpl.spdBonus);
+  const sellSilver = Math.max(30, Math.round(tpl.priceSilver * 0.4));
+
+  const info = db
+    .prepare(
+      `INSERT INTO character_equipment (
+        character_id, template_id, name, slot, quality, icon, level_req,
+        hp_bonus, mp_bonus, atk_bonus, def_bonus, spd_bonus,
+        res_phys, res_chaos, res_seal, res_trap, res_magic,
+        sell_silver, equipped, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    )
+    .run(
+      characterId,
+      tpl.templateId,
+      name,
+      tpl.slot,
+      tpl.quality,
+      tpl.icon,
+      tpl.levelReq,
+      hpBonus,
+      mpBonus,
+      atkBonus,
+      defBonus,
+      spdBonus,
+      resPhys,
+      resChaos,
+      resSeal,
+      resTrap,
+      resMagic,
+      sellSilver,
+      Date.now(),
+    );
+
+  return {
+    id: Number(info.lastInsertRowid),
+    templateId: tpl.templateId,
+    name,
+    slot: tpl.slot,
+    quality: tpl.quality,
+    icon: tpl.icon,
+    levelReq: tpl.levelReq,
+    hpBonus,
+    mpBonus,
+    atkBonus,
+    defBonus,
+    spdBonus,
+    resPhys,
+    resChaos,
+    resSeal,
+    resTrap,
+    resMagic,
+    sellSilver,
+    equipped: false,
+  };
+}
+
+export function buyEquipment(characterId: number, templateId: string): CharacterView {
+  const tpl = EQUIPMENT_TEMPLATES[templateId];
+  if (!tpl || !tpl.shopAvailable) throw new Error('商店暂不出售该装备');
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.equipment.length >= 30) throw new Error('装备栏已满（最多 30 件），请先出售多余装备');
+  if (ch.silver < tpl.priceSilver) throw new Error(`银两不足，需要 ${tpl.priceSilver} 两`);
+
+  db.prepare('UPDATE characters SET silver = silver - ?, updated_at = ? WHERE id = ?').run(
+    tpl.priceSilver,
+    Date.now(),
+    characterId,
+  );
+  grantEquipmentToCharacter(characterId, templateId, false);
+  return getCharacterById(characterId)!;
+}
+
+export function equipItem(characterId: number, equipId: number): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const target = ch.equipment.find((e) => e.id === equipId);
+  if (!target) throw new Error('装备不存在');
+  if (ch.level < target.levelReq) {
+    throw new Error(`需要 ${target.levelReq} 级才能穿戴【${target.name}】`);
+  }
+
+  db.prepare('UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ?').run(
+    characterId,
+    target.slot,
+  );
+  db.prepare('UPDATE character_equipment SET equipped = 1 WHERE id = ? AND character_id = ?').run(
+    equipId,
+    characterId,
+  );
+
+  const updated = getCharacterById(characterId)!;
+  const nextHp = Math.min(updated.maxHp, ch.hp + Math.max(0, target.hpBonus));
+  const nextMp = Math.min(updated.maxMp, ch.mp + Math.max(0, target.mpBonus));
+  db.prepare('UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?').run(
+    nextHp,
+    nextMp,
+    updated.maxHp,
+    updated.maxMp,
+    Date.now(),
+    characterId,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function unequipSlot(characterId: number, slot: EquipmentSlot): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  db.prepare('UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ?').run(
+    characterId,
+    slot,
+  );
+  const updated = getCharacterById(characterId)!;
+  db.prepare(
+    'UPDATE characters SET hp = MIN(hp, ?), mp = MIN(mp, ?), max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?',
+  ).run(updated.maxHp, updated.maxMp, updated.maxHp, updated.maxMp, Date.now(), characterId);
+  return getCharacterById(characterId)!;
+}
+
+export function sellEquipment(characterId: number, equipId: number): CharacterView {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const target = ch.equipment.find((e) => e.id === equipId);
+  if (!target) throw new Error('装备不存在');
+  if (target.equipped) throw new Error('请先卸下该装备再出售');
+
+  db.prepare('DELETE FROM character_equipment WHERE id = ? AND character_id = ?').run(
+    equipId,
+    characterId,
+  );
+  db.prepare('UPDATE characters SET silver = silver + ?, updated_at = ? WHERE id = ?').run(
+    target.sellSilver,
+    Date.now(),
+    characterId,
+  );
+  return getCharacterById(characterId)!;
+}
+
+export function digTreasureMap(characterId: number): {
+  result: TreasureDigResult;
+  character: CharacterView;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const owned = ch.inventory.find((i) => i.itemId === 'baotu');
+  if (!owned || owned.quantity <= 0) throw new Error('行囊中没有藏宝图');
+
+  addItem(characterId, 'baotu', -1);
+
+  const roll = Math.random();
+  let result: TreasureDigResult;
+
+  if (roll < 0.42 && ch.equipment.length < 30) {
+    // Classic treasure pool (includes rare & legend gear / mounts!)
+    const r2 = Math.random();
+    let pool: string[];
+    if (r2 < 0.14) {
+      pool = ['chitu_ma', 'longdan_qiang', 'huangjin_jia'];
+    } else if (r2 < 0.45) {
+      pool = ['dilu_ma', 'qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue'];
+    } else {
+      pool = ['wuzhui_ma', 'bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv'];
+    }
+    const tplId = pool[Math.floor(Math.random() * pool.length)];
+    const eq = grantEquipmentToCharacter(characterId, tplId, true);
+    result = {
+      outcome: 'equipment',
+      equipment: eq,
+      message: `铁铲一响，竟挖出了一件【${eq.name}】！`,
+    };
+  } else if (roll < 0.68) {
+    const silver = 280 + Math.floor(Math.random() * 720);
+    db.prepare('UPDATE characters SET silver = silver + ?, updated_at = ? WHERE id = ?').run(
+      silver,
+      Date.now(),
+      characterId,
+    );
+    result = {
+      outcome: 'silver',
+      silver,
+      message: `你在荒丘下掘出一坛古钱，获得银两 ${silver} 两！`,
+    };
+  } else if (roll < 0.8) {
+    const gold = 20 + Math.floor(Math.random() * 45);
+    db.prepare('UPDATE characters SET gold = gold + ?, updated_at = ? WHERE id = ?').run(
+      gold,
+      Date.now(),
+      characterId,
+    );
+    result = {
+      outcome: 'gold',
+      gold,
+      message: `金光闪现！你在古墓石匣中寻得金砖 ${gold} 块！`,
+    };
+  } else if (roll < 0.92) {
+    const itemId = Math.random() < 0.5 ? 'dahuan' : 'jiangling';
+    const qty = itemId === 'dahuan' ? 2 : 1;
+    addItem(characterId, itemId, qty);
+    result = {
+      outcome: 'item',
+      item: { itemId, name: ITEMS[itemId].name, quantity: qty },
+      message: `你翻出一个旧行囊，获得【${ITEMS[itemId].name}】×${qty}！`,
+    };
+  } else {
+    result = {
+      outcome: 'nothing',
+      message: '你吭哧吭哧挖了半天，只挖出一只破草鞋，看来前人已捷足先登……',
+    };
+  }
+
+  return {
+    result,
+    character: getCharacterById(characterId)!,
+  };
 }
 
 export function buyShopItem(characterId: number, itemId: string, quantity: number): CharacterView {
@@ -620,12 +978,10 @@ export function applyExpAndSilver(
   const freePointsGain = levelsGained * 4;
   const resPointsGain = levelsGained * 1;
   const stats = calcRoleStats(ch.roleClass, level, ch.alloc);
-  const finalHp = leveledUp
-    ? stats.maxHp
-    : Math.max(1, Math.min(stats.maxHp, hpAfter ?? ch.hp));
-  const finalMp = leveledUp
-    ? stats.maxMp
-    : Math.max(0, Math.min(stats.maxMp, mpAfter ?? ch.mp));
+  const effMaxHp = stats.maxHp + ch.equipBonus.hp;
+  const effMaxMp = stats.maxMp + ch.equipBonus.mp;
+  const finalHp = leveledUp ? effMaxHp : Math.max(1, Math.min(effMaxHp, hpAfter ?? ch.hp));
+  const finalMp = leveledUp ? effMaxMp : Math.max(0, Math.min(effMaxMp, mpAfter ?? ch.mp));
 
   db.prepare(
     `UPDATE characters
@@ -637,12 +993,12 @@ export function applyExpAndSilver(
     level,
     exp,
     finalHp,
-    stats.maxHp,
+    effMaxHp,
     finalMp,
-    stats.maxMp,
-    stats.atk,
-    stats.def,
-    stats.spd,
+    effMaxMp,
+    stats.atk + ch.equipBonus.atk,
+    stats.def + ch.equipBonus.def,
+    stats.spd + ch.equipBonus.spd,
     silverGain,
     freePointsGain,
     resPointsGain,
@@ -709,7 +1065,15 @@ export function getRankings(realmId: string, sort: 'level' | 'silver' | 'gold'):
 
 export function gmGrant(
   characterId: number,
-  opts: { silver?: number; gold?: number; exp?: number; fullHeal?: boolean; grantGeneralId?: string },
+  opts: {
+    silver?: number;
+    gold?: number;
+    exp?: number;
+    fullHeal?: boolean;
+    grantGeneralId?: string;
+    grantEquipId?: string;
+    grantBaotu?: number;
+  },
 ): CharacterView {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
@@ -734,6 +1098,12 @@ export function gmGrant(
   }
   if (opts.grantGeneralId && GENERAL_TEMPLATES[opts.grantGeneralId]) {
     grantGeneralToCharacter(characterId, opts.grantGeneralId, ch.level);
+  }
+  if (opts.grantEquipId && EQUIPMENT_TEMPLATES[opts.grantEquipId]) {
+    grantEquipmentToCharacter(characterId, opts.grantEquipId, true);
+  }
+  if (opts.grantBaotu && opts.grantBaotu > 0) {
+    addItem(characterId, 'baotu', Math.min(20, opts.grantBaotu));
   }
   return getCharacterById(characterId)!;
 }

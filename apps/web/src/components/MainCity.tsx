@@ -268,6 +268,7 @@ export function MainCity({
                     onClick={() => {
                       if (fac.kind === 'inn') onRestInn();
                       else if (fac.kind === 'pharmacy') onOpenPanel('shop');
+                      else if (fac.kind === 'blacksmith') onOpenPanel('blacksmith');
                       else if (fac.kind === 'tavern') onOpenPanel('tavern');
                       else if (fac.kind === 'gm') onOpenPanel('gm');
                     }}

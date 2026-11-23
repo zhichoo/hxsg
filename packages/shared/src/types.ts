@@ -2,6 +2,52 @@ export type RoleClass = 'wushi' | 'wenren' | 'yiren';
 export type Gender = 'male' | 'female';
 export type ChatChannel = 'qu' | 'pai' | 'shang' | 'shi';
 export type ControlKind = 'chaos' | 'seal' | 'trap';
+export type EquipmentSlot = 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount';
+export type EquipmentQuality = 'common' | 'fine' | 'rare' | 'legend';
+
+export interface EquipmentView {
+  id: number;
+  templateId: string;
+  name: string;
+  slot: EquipmentSlot;
+  quality: EquipmentQuality;
+  icon: string;
+  levelReq: number;
+  hpBonus: number;
+  mpBonus: number;
+  atkBonus: number;
+  defBonus: number;
+  spdBonus: number;
+  resPhys: number;
+  resChaos: number;
+  resSeal: number;
+  resTrap: number;
+  resMagic: number;
+  sellSilver: number;
+  equipped: boolean;
+}
+
+export interface EquipmentBonusSummary {
+  hp: number;
+  mp: number;
+  atk: number;
+  def: number;
+  spd: number;
+  resPhys: number;
+  resChaos: number;
+  resSeal: number;
+  resTrap: number;
+  resMagic: number;
+}
+
+export interface TreasureDigResult {
+  outcome: 'equipment' | 'silver' | 'gold' | 'item' | 'nothing';
+  message: string;
+  equipment?: EquipmentView;
+  silver?: number;
+  gold?: number;
+  item?: { itemId: string; name: string; quantity: number };
+}
 
 export interface ServerRealm {
   id: string;
@@ -65,6 +111,8 @@ export interface CharacterView {
   isGm: boolean;
   alloc: CharacterAllocations;
   resist: CharacterResistances;
+  equipBonus: EquipmentBonusSummary;
+  equipment: EquipmentView[];
   skills: SkillProgressView[];
   generals: GeneralView[];
   inventory: InventoryItemView[];
@@ -115,7 +163,7 @@ export interface MapFacility {
   name: string;
   desc: string;
   icon: string;
-  kind: 'inn' | 'pharmacy' | 'tavern' | 'bank' | 'market' | 'arena' | 'gm';
+  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'bank' | 'market' | 'arena' | 'gm';
 }
 
 export interface MapNode {
@@ -220,6 +268,7 @@ export interface BattleState {
     leveledUp: boolean;
     newLevel: number;
     droppedItem?: { itemId: string; name: string; quantity: number };
+    droppedEquipment?: { name: string; quality: EquipmentQuality; slot: EquipmentSlot };
     capturedGeneral?: { name: string; growth: number };
   };
 }

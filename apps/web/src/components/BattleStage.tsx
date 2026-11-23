@@ -772,6 +772,21 @@ export function BattleStage({
                       {battle.rewards.droppedItem.quantity}
                     </div>
                   )}
+                  {battle.rewards.droppedEquipment && (
+                    <div
+                      className={`font-bold ${
+                        battle.rewards.droppedEquipment.quality === 'legend'
+                          ? 'text-[#ffb84d]'
+                          : battle.rewards.droppedEquipment.quality === 'rare'
+                            ? 'text-[#78c8ff]'
+                            : battle.rewards.droppedEquipment.quality === 'fine'
+                              ? 'text-[#7dff92]'
+                              : 'text-white'
+                      }`}
+                    >
+                      爆出装备：【{battle.rewards.droppedEquipment.name}】（已入行囊）
+                    </div>
+                  )}
                   {battle.rewards.capturedGeneral && (
                     <div className="text-[#ffcf54] font-bold">
                       成功招降副将：【{battle.rewards.capturedGeneral.name}】（成长{' '}

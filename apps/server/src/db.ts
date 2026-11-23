@@ -105,6 +105,33 @@ db.exec(`
     FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
   );
 
+  CREATE TABLE IF NOT EXISTS character_equipment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    template_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    slot TEXT NOT NULL,
+    quality TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    level_req INTEGER NOT NULL DEFAULT 1,
+    hp_bonus INTEGER NOT NULL DEFAULT 0,
+    mp_bonus INTEGER NOT NULL DEFAULT 0,
+    atk_bonus INTEGER NOT NULL DEFAULT 0,
+    def_bonus INTEGER NOT NULL DEFAULT 0,
+    spd_bonus INTEGER NOT NULL DEFAULT 0,
+    res_phys INTEGER NOT NULL DEFAULT 0,
+    res_chaos INTEGER NOT NULL DEFAULT 0,
+    res_seal INTEGER NOT NULL DEFAULT 0,
+    res_trap INTEGER NOT NULL DEFAULT 0,
+    res_magic INTEGER NOT NULL DEFAULT 0,
+    sell_silver INTEGER NOT NULL DEFAULT 50,
+    equipped INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_char_equip_char ON character_equipment(character_id);
+
   CREATE TABLE IF NOT EXISTS chat_messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     realm_id TEXT NOT NULL,

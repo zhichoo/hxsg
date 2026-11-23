@@ -1,11 +1,13 @@
 import type {
   BattleState,
   CharacterView,
+  EquipmentSlot,
   Gender,
   OnlinePlayerSummary,
   RankEntry,
   RoleClass,
   ServerRealm,
+  TreasureDigResult,
 } from '@hxsg/shared';
 import { isMappRuntime, platformHttpRequest, platformStorage } from './platform/host';
 
@@ -184,6 +186,35 @@ export const api = {
       method: 'POST',
       body: { realmId, itemId },
     }),
+  buyEquipment: (realmId: string, templateId: string) =>
+    callEndpoint<{ character: CharacterView }>('equipmentBuy', '/api/equipment/buy', {
+      method: 'POST',
+      body: { realmId, templateId },
+    }),
+  equipItem: (realmId: string, equipId: number) =>
+    callEndpoint<{ character: CharacterView }>('equipmentEquip', '/api/equipment/equip', {
+      method: 'POST',
+      body: { realmId, equipId },
+    }),
+  unequipSlot: (realmId: string, slot: EquipmentSlot) =>
+    callEndpoint<{ character: CharacterView }>('equipmentUnequip', '/api/equipment/unequip', {
+      method: 'POST',
+      body: { realmId, slot },
+    }),
+  sellEquipment: (realmId: string, equipId: number) =>
+    callEndpoint<{ character: CharacterView }>('equipmentSell', '/api/equipment/sell', {
+      method: 'POST',
+      body: { realmId, equipId },
+    }),
+  digTreasure: (realmId: string) =>
+    callEndpoint<{ result: TreasureDigResult; character: CharacterView }>(
+      'treasureDig',
+      '/api/treasure/dig',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
   recruitGeneral: (realmId: string, templateId: string) =>
     callEndpoint<{ character: CharacterView }>('generalsRecruit', '/api/generals/recruit', {
       method: 'POST',
@@ -226,6 +257,8 @@ export const api = {
     exp?: number;
     fullHeal?: boolean;
     grantGeneralId?: string;
+    grantEquipId?: string;
+    grantBaotu?: number;
     announce?: string;
   }) =>
     callEndpoint<{ character: CharacterView }>('gmGrant', '/api/gm/grant', {

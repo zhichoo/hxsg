@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
+  EQUIPMENT_SLOT_LABELS,
+  EQUIPMENT_TEMPLATES,
   GENERAL_TEMPLATES,
   ITEMS,
   ROLE_CLASS_META,
   type CharacterView,
+  type EquipmentQuality,
+  type EquipmentSlot,
+  type EquipmentView,
   type RankEntry,
+  type TreasureDigResult,
 } from '@hxsg/shared';
 import { api } from '../api';
 import { AssetBg, AssetImg } from './AssetImg';
@@ -16,9 +22,52 @@ export type SubPanelType =
   | 'generals'
   | 'rank'
   | 'shop'
+  | 'blacksmith'
   | 'tavern'
   | 'notice'
   | 'gm';
+
+const QUALITY_COLOR: Record<EquipmentQuality, string> = {
+  common: 'text-white',
+  fine: 'text-[#7dff92]',
+  rare: 'text-[#74c9ff]',
+  legend: 'text-[#ffbe47]',
+};
+
+const QUALITY_LABEL: Record<EquipmentQuality, string> = {
+  common: '普通',
+  fine: '精良',
+  rare: '极品',
+  legend: '神兵',
+};
+
+const EQUIP_SLOTS: EquipmentSlot[] = ['weapon', 'helmet', 'armor', 'boots', 'mount'];
+
+function formatEquipStats(eq: {
+  hpBonus?: number;
+  mpBonus?: number;
+  atkBonus?: number;
+  defBonus?: number;
+  spdBonus?: number;
+  resPhys?: number;
+  resChaos?: number;
+  resSeal?: number;
+  resTrap?: number;
+  resMagic?: number;
+}): string {
+  const parts: string[] = [];
+  if (eq.atkBonus) parts.push(`攻+${eq.atkBonus}`);
+  if (eq.hpBonus) parts.push(`血+${eq.hpBonus}`);
+  if (eq.mpBonus) parts.push(`精+${eq.mpBonus}`);
+  if (eq.defBonus) parts.push(`防+${eq.defBonus}`);
+  if (eq.spdBonus) parts.push(`速+${eq.spdBonus}`);
+  if (eq.resPhys) parts.push(`抗物+${eq.resPhys}%`);
+  if (eq.resChaos) parts.push(`抗乱+${eq.resChaos}%`);
+  if (eq.resSeal) parts.push(`抗封+${eq.resSeal}%`);
+  if (eq.resTrap) parts.push(`抗围+${eq.resTrap}%`);
+  if (eq.resMagic) parts.push(`抗法+${eq.resMagic}%`);
+  return parts.join(' · ') || '基础属性';
+}
 
 interface SubPanelsProps {
   panel: SubPanelType;
@@ -31,10 +80,11 @@ interface SubPanelsProps {
 
 const TITLES: Record<SubPanelType, string> = {
   status: '人物状态',
-  items: '行囊物品',
+  items: '行囊与装备',
   generals: '副将营帐',
   rank: '排行榜',
   shop: '回春药铺',
+  blacksmith: '铁匠铺与马市',
   tavern: '许昌招贤馆',
   notice: '游戏公告',
   gm: 'GM 管理面板',
@@ -49,6 +99,9 @@ export function SubPanels({
   onNotify,
 }: SubPanelsProps) {
   const [statusTab, setStatusTab] = useState<'stats' | 'resist' | 'skills'>('stats');
+  const [bagTab, setBagTab] = useState<'equip' | 'consumable'>('equip');
+  const [smithTab, setSmithTab] = useState<'gear' | 'mount'>('gear');
+  const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
   const [gmCode, setGmCode] = useState('');
@@ -79,6 +132,23 @@ export function SubPanels({
 
   const classMeta = ROLE_CLASS_META[character.roleClass];
   const mySprite = character.gender === 'female' ? classMeta.femaleSprite : classMeta.maleSprite;
+  const equippedBySlot = new Map<EquipmentSlot, EquipmentView>(
+    character.equipment.filter((e) => e.equipped).map((e) => [e.slot, e]),
+  );
+  const equippedMount = equippedBySlot.get('mount');
+
+  const handleDigTreasure = async () => {
+    setBusy(true);
+    try {
+      const res = await api.digTreasure(realmId);
+      onUpdateCharacter(res.character);
+      setDigResult(res.result);
+    } catch (err) {
+      onNotify(err instanceof Error ? err.message : '挖宝失败');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-[#1b0820]">
@@ -123,12 +193,12 @@ export function SubPanels({
 
               {statusTab === 'stats' && (
                 <div className="space-y-2.5">
-                  <div className="flex items-center gap-3 p-2.5 bg-[#26072c]/90 border border-[#b78f3c]">
-                    <div className="w-[90px] h-[90px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
+                  <div className="flex items-center gap-2.5 p-2.5 bg-[#26072c]/90 border border-[#b78f3c]">
+                    <div className="w-[84px] h-[84px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
                       <PixelSprite spriteKey={mySprite} scale={2} />
                     </div>
-                    <div className="space-y-0.5 text-xs">
-                      <div className="text-base font-bold text-[#ffe678]">{character.name}</div>
+                    <div className="flex-1 min-w-0 space-y-0.5 text-xs">
+                      <div className="text-base font-bold text-[#ffe678] truncate">{character.name}</div>
                       <div>
                         职业：{character.level}级 {classMeta.label}（
                         {character.gender === 'female' ? '女' : '男'}）
@@ -139,21 +209,48 @@ export function SubPanels({
                       <div className="text-[#ffe04b]">
                         金砖：{character.gold} · 银两：{character.silver}
                       </div>
+                      {equippedMount && (
+                        <div className="text-[11px] text-[#9be8ff]">
+                          坐骑：{equippedMount.name}
+                        </div>
+                      )}
                     </div>
+                    {equippedMount && (
+                      <div className="w-[54px] h-[54px] bg-[#1c2817] border border-[#d6ab48] flex items-center justify-center shrink-0 p-1">
+                        <AssetImg
+                          path={equippedMount.icon}
+                          alt={equippedMount.name}
+                          className="w-full h-full object-contain pixelated"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-1.5 text-xs">
                     <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
-                      气血：{character.hp} / {character.maxHp}
+                      气血：{character.hp}/{character.maxHp}
+                      {character.equipBonus.hp > 0 && (
+                        <span className="text-[#7dff92] ml-1">(+{character.equipBonus.hp})</span>
+                      )}
                     </div>
                     <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
-                      精力：{character.mp} / {character.maxMp}
+                      精力：{character.mp}/{character.maxMp}
+                      {character.equipBonus.mp > 0 && (
+                        <span className="text-[#7dff92] ml-1">(+{character.equipBonus.mp})</span>
+                      )}
                     </div>
                     <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
                       攻击：{character.atk}
+                      {character.equipBonus.atk > 0 && (
+                        <span className="text-[#7dff92] ml-1">(+{character.equipBonus.atk})</span>
+                      )}
                     </div>
                     <div className="p-2 bg-[#25072b]/85 border border-[#7c4d87]">
-                      速度：{character.spd}（防 {character.def}）
+                      速度：{character.spd}
+                      {character.equipBonus.spd > 0 && (
+                        <span className="text-[#7dff92] ml-1">(+{character.equipBonus.spd})</span>
+                      )}
+                      <span className="text-[#d6bddf] ml-1">防{character.def}</span>
                     </div>
                   </div>
 
@@ -307,35 +404,293 @@ export function SubPanels({
             </div>
           )}
 
-          {/* ITEMS / BAG */}
+          {/* ITEMS & EQUIPMENT BAG */}
           {panel === 'items' && (
-            <div className="space-y-2">
-              {character.inventory.map((it) => (
-                <div
-                  key={it.itemId}
-                  className="p-2 bg-[#27082e]/90 border border-[#8e6299] flex items-center justify-between gap-2"
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setBagTab('equip')}
+                  className={`py-1.5 font-bold border ${
+                    bagTab === 'equip'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
                 >
-                  <div>
-                    <div className="font-bold text-[#ffe780]">
-                      {it.name} <span className="text-white text-xs">×{it.quantity}</span>
+                  装备与战马 ({character.equipment.length}/30)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBagTab('consumable')}
+                  className={`py-1.5 font-bold border ${
+                    bagTab === 'consumable'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  丹药与藏宝图 ({character.inventory.reduce((s, i) => s + i.quantity, 0)})
+                </button>
+              </div>
+
+              {bagTab === 'equip' && (
+                <div className="space-y-2.5">
+                  {/* 5 Equipped Slots */}
+                  <div className="p-2 bg-[#230629]/90 border border-[#b68d3a] space-y-1.5">
+                    <div className="text-xs font-bold text-[#ffea84]">
+                      当前穿戴（无宝石无锻造，穿戴即享全额属性与抗性）
                     </div>
-                    <div className="text-[11px] text-[#e0c7e8]">{it.desc}</div>
+                    {EQUIP_SLOTS.map((slot) => {
+                      const eq = equippedBySlot.get(slot);
+                      return (
+                        <div
+                          key={slot}
+                          className="flex items-center justify-between gap-2 py-1 border-t border-white/10 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-1.5 py-0.5 bg-[#4b1a56] border border-[#9666a1] text-[11px] text-[#ffdf78] shrink-0">
+                              {EQUIPMENT_SLOT_LABELS[slot]}
+                            </span>
+                            {eq ? (
+                              <>
+                                <AssetImg
+                                  path={eq.icon}
+                                  alt={eq.name}
+                                  className="w-7 h-7 object-contain pixelated shrink-0 bg-[#1a131f] border border-[#c69d46] p-0.5"
+                                />
+                                <div className="min-w-0">
+                                  <div className={`font-bold truncate ${QUALITY_COLOR[eq.quality]}`}>
+                                    {eq.name}
+                                  </div>
+                                  <div className="text-[10.5px] text-[#e3cce8] truncate">
+                                    {formatEquipStats(eq)}
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <span className="text-[#9e86a6]">未装备</span>
+                            )}
+                          </div>
+                          {eq && (
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                run(
+                                  () => api.unequipSlot(realmId, slot),
+                                  `已卸下【${eq.name}】`,
+                                )
+                              }
+                              className="px-2 py-0.5 text-[11px] bg-[#52245c] border border-[#c095cc] text-white shrink-0"
+                            >
+                              卸下
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {it.type === 'consumable' && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => run(() => api.useItem(realmId, it.itemId), `已使用【${it.name}】`)}
-                      className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+
+                  {/* Backpack Unequipped Equipment */}
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-bold text-[#ffdf78]">行囊中的装备：</div>
+                    {character.equipment
+                      .filter((e) => !e.equipped)
+                      .map((eq) => (
+                        <div
+                          key={eq.id}
+                          className="p-2 bg-[#27082e]/90 border border-[#8e6299] flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <AssetImg
+                              path={eq.icon}
+                              alt={eq.name}
+                              className="w-9 h-9 object-contain pixelated shrink-0 bg-[#19121e] border border-[#b9903d] p-0.5"
+                            />
+                            <div className="min-w-0">
+                              <div className={`font-bold truncate ${QUALITY_COLOR[eq.quality]}`}>
+                                [{QUALITY_LABEL[eq.quality]}] {eq.name}
+                                <span className="text-[#d9c1e0] font-normal text-[11px] ml-1">
+                                  ({EQUIPMENT_SLOT_LABELS[eq.slot]} · Lv.{eq.levelReq})
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-[#e6d1eb] truncate">
+                                {formatEquipStats(eq)}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex flex-col gap-1 shrink-0">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                run(() => api.equipItem(realmId, eq.id), `已穿戴【${eq.name}】`)
+                              }
+                              className="hx-btn-gold px-2.5 py-0.5 text-[11px]"
+                            >
+                              穿戴
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                run(
+                                  () => api.sellEquipment(realmId, eq.id),
+                                  `已出售【${eq.name}】获得 ${eq.sellSilver} 银`,
+                                )
+                              }
+                              className="px-2 py-0.5 text-[10px] bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8]"
+                            >
+                              卖{eq.sellSilver}银
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    {character.equipment.filter((e) => !e.equipped).length === 0 && (
+                      <div className="text-center text-xs text-[#d8bedf] py-4">
+                        行囊暂无未穿戴装备，可去许昌「铁匠铺与马市」购置、野外打怪或用「藏宝图」挖宝！
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {bagTab === 'consumable' && (
+                <div className="space-y-2">
+                  {digResult && (
+                    <div className="p-2.5 bg-[#36110e] border-2 border-[#ffd85c] text-xs space-y-1">
+                      <div className="font-bold text-[#ffea7a]">藏宝图奇遇</div>
+                      <div className="text-white">{digResult.message}</div>
+                      {digResult.equipment && (
+                        <div className="text-[#9ae6ff]">
+                          属性：{formatEquipStats(digResult.equipment)}（已存入装备栏）
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {character.inventory.map((it) => (
+                    <div
+                      key={it.itemId}
+                      className="p-2 bg-[#27082e]/90 border border-[#8e6299] flex items-center justify-between gap-2"
                     >
-                      使用
-                    </button>
+                      <div>
+                        <div className="font-bold text-[#ffe780]">
+                          {it.name} <span className="text-white text-xs">×{it.quantity}</span>
+                        </div>
+                        <div className="text-[11px] text-[#e0c7e8]">{it.desc}</div>
+                      </div>
+                      {it.itemId === 'baotu' ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleDigTreasure()}
+                          className="hx-btn-red px-3 py-1 text-xs shrink-0"
+                        >
+                          挖宝
+                        </button>
+                      ) : it.type === 'consumable' ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            run(() => api.useItem(realmId, it.itemId), `已使用【${it.name}】`)
+                          }
+                          className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                        >
+                          使用
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                  {character.inventory.length === 0 && (
+                    <div className="text-center text-[#d8bedf] py-8">
+                      行囊空空如也，去回春药铺买点丹药或藏宝图吧
+                    </div>
                   )}
                 </div>
-              ))}
-              {character.inventory.length === 0 && (
-                <div className="text-center text-[#d8bedf] py-8">行囊空空如也，去回春药铺买点药吧</div>
               )}
+            </div>
+          )}
+
+          {/* BLACKSMITH & HORSE MARKET */}
+          {panel === 'blacksmith' && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-[#ffe27a] font-bold">当前银两：{character.silver} 两</span>
+                <span className="text-[#d7bddf]">极品神兵与赤兔需靠打怪/挖宝获得</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setSmithTab('gear')}
+                  className={`py-1.5 font-bold border ${
+                    smithTab === 'gear'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  兵器与防具
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSmithTab('mount')}
+                  className={`py-1.5 font-bold border ${
+                    smithTab === 'mount'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  军马场（战马）
+                </button>
+              </div>
+              <div className="space-y-2">
+                {Object.values(EQUIPMENT_TEMPLATES)
+                  .filter(
+                    (tpl) =>
+                      tpl.shopAvailable &&
+                      (smithTab === 'mount' ? tpl.slot === 'mount' : tpl.slot !== 'mount'),
+                  )
+                  .map((tpl) => (
+                    <div
+                      key={tpl.templateId}
+                      className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AssetImg
+                          path={tpl.icon}
+                          alt={tpl.name}
+                          className="w-10 h-10 object-contain pixelated shrink-0 bg-[#1a131f] border border-[#c69d46] p-0.5"
+                        />
+                        <div className="min-w-0">
+                          <div className={`font-bold truncate ${QUALITY_COLOR[tpl.quality]}`}>
+                            {tpl.name}
+                            <span className="text-[#d9c1e0] font-normal text-[11px] ml-1">
+                              ({EQUIPMENT_SLOT_LABELS[tpl.slot]} · Lv.{tpl.levelReq})
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#9de6ff] truncate">
+                            {formatEquipStats(tpl)}
+                          </div>
+                          <div className="text-[11px] text-[#ffd46b]">
+                            售价：{tpl.priceSilver} 银
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          run(
+                            () => api.buyEquipment(realmId, tpl.templateId),
+                            `已购入【${tpl.name}】（请到「物品」穿戴）`,
+                          )
+                        }
+                        className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                      >
+                        购买
+                      </button>
+                    </div>
+                  ))}
+              </div>
             </div>
           )}
 
@@ -621,6 +976,42 @@ export function SubPanels({
                   className="hx-btn-gold py-1.5"
                 >
                   一键满血满蓝
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () =>
+                        api.gmGrant({
+                          realmId,
+                          passcode: gmCode,
+                          grantBaotu: 5,
+                        }),
+                      'GM 发放 5 张【藏宝图】成功！',
+                    )
+                  }
+                  className="hx-btn-gold py-1.5"
+                >
+                  +5 藏宝图
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    run(
+                      () =>
+                        api.gmGrant({
+                          realmId,
+                          passcode: gmCode,
+                          grantEquipId: 'chitu_ma',
+                        }),
+                      '已直接领取【赤兔宝马】（请到物品穿戴）！',
+                    )
+                  }
+                  className="hx-btn-gold py-1.5"
+                >
+                  领取【赤兔宝马】
                 </button>
                 <button
                   type="button"
