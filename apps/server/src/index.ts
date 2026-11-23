@@ -5,6 +5,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyRequest } from 'fastify';
 import {
+  getCurrentWorldBoss,
   REALMS,
   TOWER_MAX_FLOOR,
   type EquipmentSlot,
@@ -27,11 +28,13 @@ import {
   acceptPaohuan,
   allocateCharacterResist,
   allocateCharacterStats,
+  answerKejuQuestion,
   bankTransfer,
   buyEquipment,
   buyMarketListing,
   buyShopItem,
   cancelMarketListing,
+  claimDailyEscort,
   claimMailAttachment,
   claimMainQuest,
   claimPaohuan,
@@ -60,6 +63,7 @@ import {
   sellEquipment,
   sendPlayerMail,
   setGeneralSlot,
+  startDailyEscort,
   sweepTowerDaily,
   unequipSlot,
   useInventoryItem,
@@ -427,9 +431,14 @@ app.post('/api/battle/start', async (req) => {
 app.post('/api/battle/action', async (req) => {
   const auth = await requireAuth(req);
   const body = req.body as PlayerBattleCommand & { realmId?: string };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
   if (!current) throw new Error('尚未创建角色');
-  return performBattleAction(current.id, body);
+  const res = performBattleAction(current.id, body);
+  if (res.worldBroadcast) {
+    broadcastSystemMessage(realmId, res.worldBroadcast, 'shi');
+  }
+  return { battle: res.battle, character: res.character };
 });
 
 app.post('/api/quests/main/accept', async (req) => {
@@ -661,6 +670,66 @@ app.post('/api/mail/delete', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return deleteMail(current.id, Number(body.mailId));
+});
+
+// Stage 2: Daily Low-Burden Loops (Keju 5Q / Escort 1x / World Boss 1x)
+app.post('/api/daily/keju/answer', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; optionIndex?: number };
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const res = answerKejuQuestion(current.id, Number(body.optionIndex));
+  if (res.broadcast) {
+    broadcastSystemMessage(realmId, res.broadcast, 'shi');
+  }
+  return res;
+});
+
+app.post('/api/daily/escort/start', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return startDailyEscort(current.id);
+});
+
+app.post('/api/daily/escort/battle', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  if (current.daily.escort.status !== 'active') {
+    throw new Error('当前无需迎战劫镖匪徒');
+  }
+  const existing = getActiveBattle(current.id);
+  if (existing && existing.status === 'ongoing') {
+    return { battle: existing };
+  }
+  const battle = startBattle(current.id, 'escort_bandit');
+  return { battle };
+});
+
+app.post('/api/daily/escort/claim', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return claimDailyEscort(current.id);
+});
+
+app.post('/api/daily/world-boss/challenge', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  const existing = getActiveBattle(current.id);
+  if (existing && existing.status === 'ongoing') {
+    return { battle: existing };
+  }
+  const wb = getCurrentWorldBoss();
+  const battle = startBattle(current.id, `world_boss:${wb.boss.id}`);
+  return { battle };
 });
 
 app.post('/api/gm/grant', async (req) => {

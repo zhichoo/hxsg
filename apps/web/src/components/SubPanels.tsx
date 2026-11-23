@@ -30,6 +30,7 @@ export type SubPanelType =
   | 'generals'
   | 'quests'
   | 'paohuan'
+  | 'daily'
   | 'tower'
   | 'casino'
   | 'bank'
@@ -100,6 +101,7 @@ const TITLES: Record<SubPanelType, string> = {
   generals: '副将营帐',
   quests: '任务卷轴',
   paohuan: '许昌跑环',
+  daily: '每日历练',
   tower: '天玄塔试炼',
   casino: '许昌赌坊',
   bank: '许昌钱庄',
@@ -130,6 +132,12 @@ export function SubPanels({
   const [questTab, setQuestTab] = useState<'main' | 'paohuan'>(
     panel === 'paohuan' ? 'paohuan' : 'main',
   );
+  const [dailyTab, setDailyTab] = useState<'keju' | 'escort' | 'worldboss'>('keju');
+  const [kejuFeedback, setKejuFeedback] = useState<{
+    correct: boolean;
+    message: string;
+    explanation: string;
+  } | null>(null);
   const [casinoTab, setCasinoTab] = useState<'dice' | 'chibi'>('dice');
   const [betCurrency, setBetCurrency] = useState<'silver' | 'gold'>('silver');
   const [betAmount, setBetAmount] = useState<number>(200);
@@ -1685,6 +1693,252 @@ export function SubPanels({
               </div>
             );
           })()}
+
+          {/* DAILY (每日历练：科举5题 + 运镖1趟 + 整点杀星每日1次) */}
+          {panel === 'daily' && (
+            <div className="space-y-2.5 text-xs">
+              <div className="grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    ['keju', `科举(${character.daily.keju.answered}/5)`],
+                    ['escort', `运镖(${character.daily.escort.completedToday ? '已毕' : '1趟'})`],
+                    ['worldboss', `杀星(${character.daily.worldBoss.claimedToday ? '已领' : '1次'})`],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => setDailyTab(k)}
+                    className={`py-1.5 font-bold border ${
+                      dailyTab === k
+                        ? 'bg-[#6c1b78] border-[#f2c95b] text-[#ffe985]'
+                        : 'bg-[#2a0a30] border-[#774d80] text-[#d6bddc]'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* 1. 每日科举 5 题 */}
+              {dailyTab === 'keju' && (
+                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-sm text-[#ffe678]">每日科举文试（5题）</span>
+                    <span className="text-[#9ee0ff] font-bold">
+                      进度 {character.daily.keju.answered}/5 · 答对 {character.daily.keju.correct}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#e7cfbb]">
+                    零消耗轻松拿大量经验与银两！5题全对高中状元加赠 金砖+50、招贤令×1、洗髓丹×1、藏宝图×1。
+                  </div>
+
+                  {kejuFeedback && (
+                    <div
+                      className={`p-2 border text-[11px] space-y-0.5 ${
+                        kejuFeedback.correct
+                          ? 'bg-[#173019] border-[#5cc466] text-[#d5ffda]'
+                          : 'bg-[#3b1518] border-[#d66a6a] text-[#ffd4d4]'
+                      }`}
+                    >
+                      <div className="font-bold">{kejuFeedback.message}</div>
+                      <div className="text-[#f0dfb8]">典故解析：{kejuFeedback.explanation}</div>
+                    </div>
+                  )}
+
+                  {character.daily.keju.completed || !character.daily.keju.currentQuestion ? (
+                    <div className="p-3 bg-[#1a2618]/80 border border-[#4b7d48] text-[#bfeec2] text-center font-bold">
+                      🎓 今日科举 5 题已全部完成（答对 {character.daily.keju.correct}/5），明日再来金榜题名吧！
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="p-2.5 bg-black/40 border border-[#966a2e] text-[#fff6d6] font-bold leading-relaxed">
+                        第 {character.daily.keju.currentQuestion.index + 1} 题：
+                        {character.daily.keju.currentQuestion.question}
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5">
+                        {character.daily.keju.currentQuestion.options.map((opt, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                const res = await api.answerKeju(realmId, idx);
+                                onUpdateCharacter(res.character);
+                                setKejuFeedback({
+                                  correct: res.correct,
+                                  message: res.message,
+                                  explanation: res.explanation,
+                                });
+                                onNotify(res.message);
+                              } catch (err) {
+                                onNotify(err instanceof Error ? err.message : '答题失败');
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                            className="w-full text-left px-3 py-2 bg-[#371040] hover:bg-[#531a61] border border-[#a87c3b] text-[#fff2c2] font-bold"
+                          >
+                            {['A', 'B', 'C', 'D'][idx]}. {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 2. 每日运镖 1 趟 */}
+              {dailyTab === 'escort' && (
+                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-sm text-[#ffe678]">皇家重镖（每日 1 趟）</span>
+                    <span className="text-[#9ee0ff] font-bold">
+                      {character.daily.escort.completedToday
+                        ? '今日已交付 ✓'
+                        : character.daily.escort.status === 'idle'
+                          ? '待接镖'
+                          : character.daily.escort.status === 'active'
+                            ? '遇劫匪拦路'
+                            : '可交付领赏'}
+                    </span>
+                  </div>
+                  <div className="p-2 bg-black/35 border border-[#7c5a2d] space-y-1 text-[11px] text-[#f2dfbe]">
+                    <div>单趟厚赏：经验 +{character.daily.escort.rewardExp} · 银两 +{character.daily.escort.rewardSilver} · 金砖 +{character.daily.escort.rewardGold}</div>
+                    <div className="text-[#ffcf54] font-bold">★ 额外必得：藏宝图×2、副将经验丹×2</div>
+                  </div>
+
+                  {character.daily.escort.completedToday ? (
+                    <div className="p-3 bg-[#1a2618]/80 border border-[#4b7d48] text-[#bfeec2] text-center font-bold">
+                      🚚 今日重镖已安全送达并领赏，明日再来护镖！
+                    </div>
+                  ) : character.daily.escort.status === 'idle' ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        run(
+                          () => api.startEscort(realmId),
+                          '已接下今日皇家重镖！先击退劫匪再送往目标城池！',
+                        )
+                      }
+                      className="w-full hx-btn-gold py-2 text-xs"
+                    >
+                      接取今日皇家重镖（每日 1 趟）
+                    </button>
+                  ) : character.daily.escort.status === 'active' ? (
+                    <div className="space-y-2">
+                      <div className="text-[#ffeaad]">
+                        镖车路线：【{character.daily.escort.originMapName}】 → 【{character.daily.escort.targetMapName}】
+                      </div>
+                      <div className="text-[#ffb0b0]">
+                        黑风寨匪徒半路杀出！击退他们即可安全交付镖车（若战败可回客栈补满重试，不扣次数）。
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.battleEscortBandit(realmId);
+                            onEnterBattle?.(res.battle);
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '开战失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="w-full hx-btn-red py-2 text-xs"
+                      >
+                        ⚔ 迎战劫镖黑风寨匪徒
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="text-[#bfeec2] font-bold">
+                        ✓ 已击退劫匪！请前往【{character.daily.escort.targetMapName}】交付镖车领取大奖。
+                      </div>
+                      <div className="text-[11px] text-[#e7cfbb]">
+                        当前所在：{character.mapId === character.daily.escort.targetMapId ? '已抵达目标城池！' : `需移动到【${character.daily.escort.targetMapName}】（主界面点「移动」即可到达）`}
+                      </div>
+                      <button
+                        type="button"
+                        disabled={busy || character.mapId !== character.daily.escort.targetMapId}
+                        onClick={() =>
+                          run(() => api.claimEscort(realmId), '交付重镖成功，已领取今日运镖大奖！')
+                        }
+                        className={`w-full py-2 text-xs font-bold border ${
+                          character.mapId === character.daily.escort.targetMapId
+                            ? 'hx-btn-gold'
+                            : 'bg-[#361c3d] border-[#6a4c73] text-[#9f82a8]'
+                        }`}
+                      >
+                        {character.mapId === character.daily.escort.targetMapId
+                          ? '🎁 交付镖车领取今日大奖'
+                          : `请先前往【${character.daily.escort.targetMapName}】`}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 3. 整点杀星 / 野外名将（每日 1 次丰厚奖） */}
+              {dailyTab === 'worldboss' && (
+                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="font-black text-sm text-[#ffe678]">
+                        【{character.daily.worldBoss.title}】{character.daily.worldBoss.bossName}
+                      </div>
+                      <div className="text-[11px] text-[#9ee0ff]">
+                        本整点现身：{character.daily.worldBoss.mapName} · 约 {character.daily.worldBoss.nextRefreshMinutes} 分钟后换阵
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 text-[11px] font-bold border shrink-0 ${
+                        character.daily.worldBoss.claimedToday
+                          ? 'bg-[#1a2618] border-[#4b7d48] text-[#bfeec2]'
+                          : 'bg-[#7d1428] border-[#ffca5c] text-[#ffe899]'
+                      }`}
+                    >
+                      {character.daily.worldBoss.claimedToday ? '今日已领奖 ✓' : '每日1次厚赏'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-[#e7cfbb] leading-relaxed">
+                    {character.daily.worldBoss.desc}
+                  </div>
+                  <div className="p-2 bg-black/35 border border-[#7c5a2d] space-y-1 text-[11px] text-[#f2dfbe]">
+                    <div>强度随你的主角等级自动匹配（单人携副将即可挑战，小服不抢怪不内卷）。</div>
+                    <div className="text-[#ffcf54] font-bold">
+                      ★ 每日首杀厚赏：大量经验与银两、金砖+60、洗髓丹×1、必得技能书×1 或 招贤令×2，更有 50% 几率爆同阶神兵极品！
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        const res = await api.challengeWorldBoss(realmId);
+                        onEnterBattle?.(res.battle);
+                      } catch (err) {
+                        onNotify(err instanceof Error ? err.message : '挑战失败');
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                    className="w-full hx-btn-red py-2 text-xs"
+                  >
+                    {character.daily.worldBoss.claimedToday
+                      ? `⚔ 再次切磋【${character.daily.worldBoss.bossName}】`
+                      : `⚔ 迎战本整点星宿【${character.daily.worldBoss.bossName}】`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* TOWER (天玄塔50层爬塔与每日扫荡) */}
           {panel === 'tower' && (

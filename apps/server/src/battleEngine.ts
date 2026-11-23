@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import {
+  buildEscortBanditGroup,
   buildTowerEnemyGroup,
+  buildWorldBossEnemyGroup,
   calcControlChance,
   calcDamage,
   ENEMY_GROUPS,
@@ -12,6 +14,7 @@ import {
   MAPS,
   ROLE_CLASS_META,
   SKILLS,
+  TOWER_MAX_FLOOR,
   type BattleActionLog,
   type BattleState,
   type BattleUnit,
@@ -27,18 +30,27 @@ import {
   getCharacterById,
   grantEquipmentToCharacter,
   grantGeneralToCharacter,
+  markEscortBanditCleared,
   recordArenaOutcome,
   recordQuestBattleVictory,
   recordTowerClear,
+  recordWorldBossVictory,
 } from './gameService.js';
 
-function resolveEnemyGroup(enemyGroupId: string): EnemyGroupDef | undefined {
+function resolveEnemyGroup(enemyGroupId: string, characterLevel = 10): EnemyGroupDef | undefined {
   if (enemyGroupId.startsWith('tower_')) {
     const floor = Number(enemyGroupId.slice(6));
-    if (Number.isInteger(floor) && floor >= 1 && floor <= 20) {
+    if (Number.isInteger(floor) && floor >= 1 && floor <= TOWER_MAX_FLOOR) {
       return buildTowerEnemyGroup(floor);
     }
     return undefined;
+  }
+  if (enemyGroupId === 'escort_bandit') {
+    return buildEscortBanditGroup(characterLevel);
+  }
+  if (enemyGroupId.startsWith('world_boss:')) {
+    const bossId = enemyGroupId.slice('world_boss:'.length);
+    return buildWorldBossEnemyGroup(bossId, characterLevel);
   }
   return ENEMY_GROUPS[enemyGroupId];
 }
@@ -47,6 +59,7 @@ interface ActiveBattle extends BattleState {
   characterId: number;
   enemyGroupId: string;
   arenaTargetId?: number;
+  worldBroadcast?: string;
 }
 
 const activeBattles = new Map<number, ActiveBattle>();
@@ -82,11 +95,13 @@ export function getActiveBattle(characterId: number): BattleState | null {
 export function startBattle(characterId: number, enemyGroupId: string): BattleState {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  const group = resolveEnemyGroup(enemyGroupId);
+  const group = resolveEnemyGroup(enemyGroupId, ch.level);
   if (!group) throw new Error('怪物群不存在');
   if (ch.hp <= 0) throw new Error('气血不足，请先回客栈休息或吃药');
 
   const isTower = enemyGroupId.startsWith('tower_');
+  const isEscort = enemyGroupId === 'escort_bandit';
+  const isWorldBoss = enemyGroupId.startsWith('world_boss:');
   const map = MAPS[ch.mapId] ?? MAPS.xuchang_jiao;
   const meta = ROLE_CLASS_META[ch.roleClass];
   const playerSprite = ch.gender === 'female' ? meta.femaleSprite : meta.maleSprite;
@@ -189,8 +204,8 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
     characterId,
     enemyGroupId,
     mapId: map.id,
-    mapName: isTower ? '天玄塔' : map.name,
-    battleBg: isTower ? 'f_bg7' : map.battleBg,
+    mapName: isTower ? '天玄塔' : isEscort ? '运镖官道' : isWorldBoss ? '整点星宿降临地' : map.name,
+    battleBg: isTower ? 'f_bg7' : isWorldBoss ? 'f_bg20' : map.battleBg,
     enemyGroupName: group.name,
     round: 1,
     status: 'ongoing',
@@ -373,7 +388,7 @@ export interface PlayerBattleCommand {
 export function performBattleAction(
   characterId: number,
   cmd: PlayerBattleCommand,
-): { battle: BattleState; character: CharacterView } {
+): { battle: BattleState; character: CharacterView; worldBroadcast?: string } {
   const battle = activeBattles.get(characterId);
   if (!battle || battle.status !== 'ongoing') {
     throw new Error('当前没有进行中的战斗');
@@ -386,7 +401,7 @@ export function performBattleAction(
   for (const u of battle.units) u.defending = false;
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
-  const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId);
+  const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId, ch.level);
 
   const aliveActors = battle.units.filter((u) => u.alive).sort((a, b) => b.spd - a.spd);
 
@@ -1026,6 +1041,16 @@ export function performBattleAction(
         const floor = Number(battle.enemyGroupId.slice(6));
         const towerMsg = recordTowerClear(characterId, floor);
         if (towerMsg) questUpdates.push(towerMsg);
+      } else if (battle.enemyGroupId === 'escort_bandit') {
+        const escortMsg = markEscortBanditCleared(characterId);
+        if (escortMsg) questUpdates.push(escortMsg);
+      } else if (battle.enemyGroupId.startsWith('world_boss:')) {
+        const bossId = battle.enemyGroupId.slice('world_boss:'.length);
+        const wbRes = recordWorldBossVictory(characterId, bossId);
+        questUpdates.push(wbRes.summary);
+        if (wbRes.broadcast) {
+          battle.worldBroadcast = wbRes.broadcast;
+        }
       }
       const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
       updatedChar = res.character;
@@ -1063,10 +1088,11 @@ export function performBattleAction(
   return {
     battle: stripInternal(battle),
     character: updatedChar,
+    worldBroadcast: battle.worldBroadcast,
   };
 }
 
 function stripInternal(b: ActiveBattle): BattleState {
-  const { characterId: _c, enemyGroupId: _e, arenaTargetId: _a, ...rest } = b;
+  const { characterId: _c, enemyGroupId: _e, arenaTargetId: _a, worldBroadcast: _w, ...rest } = b;
   return rest;
 }

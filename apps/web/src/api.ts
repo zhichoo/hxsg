@@ -477,6 +477,50 @@ export const api = {
       method: 'POST',
       body: { realmId, mailId },
     }),
+  answerKeju: (realmId: string, optionIndex: number) =>
+    callEndpoint<{
+      correct: boolean;
+      correctAnswerText: string;
+      explanation: string;
+      finished: boolean;
+      message: string;
+      character: CharacterView;
+    }>('dailyKejuAnswer', '/api/daily/keju/answer', {
+      method: 'POST',
+      body: { realmId, optionIndex },
+    }),
+  startEscort: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'dailyEscortStart',
+      '/api/daily/escort/start',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
+  battleEscortBandit: (realmId: string) =>
+    callEndpoint<{ battle: BattleState }>('dailyEscortBattle', '/api/daily/escort/battle', {
+      method: 'POST',
+      body: { realmId },
+    }),
+  claimEscort: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'dailyEscortClaim',
+      '/api/daily/escort/claim',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
+  challengeWorldBoss: (realmId: string) =>
+    callEndpoint<{ battle: BattleState }>(
+      'dailyWorldBossChallenge',
+      '/api/daily/world-boss/challenge',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
   gmGrant: (payload: {
     realmId: string;
     passcode?: string;

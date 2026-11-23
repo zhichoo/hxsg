@@ -185,6 +185,50 @@ export interface ArenaStateView {
   dailyRewardsLeft: number;
 }
 
+export interface KejuQuestionView {
+  index: number;
+  question: string;
+  options: [string, string, string, string];
+}
+
+export interface DailyKejuStateView {
+  totalQuestions: number;
+  answered: number;
+  correct: number;
+  completed: boolean;
+  currentQuestion: KejuQuestionView | null;
+}
+
+export interface DailyEscortStateView {
+  completedToday: boolean;
+  status: 'idle' | 'active' | 'ready';
+  originMapId?: string;
+  originMapName?: string;
+  targetMapId?: string;
+  targetMapName?: string;
+  rewardExp: number;
+  rewardSilver: number;
+  rewardGold: number;
+}
+
+export interface DailyWorldBossStateView {
+  hourKey: string;
+  bossId: string;
+  bossName: string;
+  title: string;
+  desc: string;
+  mapId: string;
+  mapName: string;
+  claimedToday: boolean;
+  nextRefreshMinutes: number;
+}
+
+export interface DailyStateView {
+  keju: DailyKejuStateView;
+  escort: DailyEscortStateView;
+  worldBoss: DailyWorldBossStateView;
+}
+
 export interface MailView {
   id: number;
   senderId: number;
@@ -248,6 +292,7 @@ export interface CharacterView {
   quests: CharacterQuestState;
   tower: TowerStateView;
   arena: ArenaStateView;
+  daily: DailyStateView;
   unreadMailCount: number;
 }
 
@@ -311,7 +356,7 @@ export interface MapFacility {
   name: string;
   desc: string;
   icon: string;
-  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'tower' | 'casino' | 'bank' | 'market' | 'arena' | 'gm';
+  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'tower' | 'casino' | 'bank' | 'market' | 'arena' | 'daily' | 'gm';
 }
 
 export interface MapNode {

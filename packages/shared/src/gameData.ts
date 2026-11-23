@@ -2132,6 +2132,7 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'blacksmith', name: '铁匠铺与马市', desc: '购置兵器、铠甲、战靴与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '招贤馆', desc: '招募名将与购买副将技能书', icon: 'ss_m_3.png', kind: 'tavern' },
       { id: 'tower', name: '天玄塔', desc: '50层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
+      { id: 'daily', name: '每日历练台', desc: '科举5题、单趟运镖与整点杀星', icon: 'ss_m_12.png', kind: 'daily' },
       { id: 'casino', name: '许昌赌坊', desc: '经典猜大小/豹子 与 赤壁押注', icon: 'ss_m_9.png', kind: 'casino' },
       { id: 'bank', name: '许昌钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
       { id: 'market', name: '许昌集市', desc: '玩家离线摆摊寄售装备/副将/秘籍', icon: 'ss_m_11.png', kind: 'market' },
@@ -2214,6 +2215,7 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'blacksmith', name: '洛阳兵马司', desc: '购置精良兵器防具与名驹', icon: 'ss_m_7.png', kind: 'blacksmith' },
       { id: 'tavern', name: '洛阳招贤馆', desc: '招募强力三国副将', icon: 'ss_m_3.png', kind: 'tavern' },
       { id: 'bank', name: '洛阳钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
+      { id: 'daily', name: '洛阳历练台', desc: '科举5题、单趟运镖与整点杀星', icon: 'ss_m_12.png', kind: 'daily' },
       { id: 'market', name: '洛阳集市', desc: '全区互通离线摆摊寄售', icon: 'ss_m_11.png', kind: 'market' },
     ],
   },
@@ -2345,6 +2347,7 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'blacksmith', name: '荆州兵甲坊', desc: '购置高阶兵器、铠甲与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '荆州招贤馆', desc: '招募中后期三国名将与技能书', icon: 'ss_m_3.png', kind: 'tavern' },
       { id: 'tower', name: '天玄塔分坛', desc: '50层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
+      { id: 'daily', name: '荆州历练台', desc: '科举5题、单趟运镖与整点杀星', icon: 'ss_m_12.png', kind: 'daily' },
       { id: 'bank', name: '荆州钱庄', desc: '全区互通存取银两金砖', icon: 'ss_m_10.png', kind: 'bank' },
       { id: 'market', name: '荆州集市', desc: '全区互通离线摆摊寄售', icon: 'ss_m_11.png', kind: 'market' },
     ],
@@ -2502,3 +2505,284 @@ export const MAPS: Record<string, MapNode> = {
     ],
   },
 };
+
+export interface KejuQuestionDef {
+  id: string;
+  question: string;
+  options: [string, string, string, string];
+  answerIndex: 0 | 1 | 2 | 3;
+  explanation: string;
+}
+
+export const KEJU_QUESTIONS: KejuQuestionDef[] = [
+  {
+    id: 'kj_01',
+    question: '《三国演义》中「桃园三结义」的地点位于哪座城池？',
+    options: ['许昌', '涿郡', '洛阳', '荆州'],
+    answerIndex: 1,
+    explanation: '刘备、关羽、张飞于幽州涿郡桃园结为异姓兄弟。',
+  },
+  {
+    id: 'kj_02',
+    question: '赤壁之战中，提出「苦肉计」并火烧曹军连环船的东吴老将是？',
+    options: ['程普', '韩当', '黄盖', '周泰'],
+    answerIndex: 2,
+    explanation: '老将黄盖愿打愿挨施展苦肉计，率火船冲入曹军水寨。',
+  },
+  {
+    id: 'kj_03',
+    question: '在《幻想三国》经典版中，文人职业的哪项技能可以让敌军敌我不分、自相残杀？',
+    options: ['定身计', '画地为牢', '离间计', '呼风唤雨'],
+    answerIndex: 2,
+    explanation: '【离间计】属于「乱」系控场，命中的目标会陷入混乱互相攻击。',
+  },
+  {
+    id: 'kj_04',
+    question: '「温酒斩华雄」发生于讨伐董卓的哪场战役前夕？',
+    options: ['官渡之战', '汜水关/虎牢关之战', '夷陵之战', '定军山之战'],
+    answerIndex: 1,
+    explanation: '关羽请缨出战，杯酒尚温便提华雄首级归营。',
+  },
+  {
+    id: 'kj_05',
+    question: '「一跃檀溪」救主脱险的名驹是哪一匹战马？',
+    options: ['赤兔', '的卢', '绝影', '爪黄飞电'],
+    answerIndex: 1,
+    explanation: '刘备乘的卢马一跃三丈飞渡檀溪，逃脱蔡瑁追杀。',
+  },
+  {
+    id: 'kj_06',
+    question: '在《幻想三国》中，群攻技能熟练度达到几阶时可以打满 5 个目标？',
+    options: ['2 阶', '3 阶', '4 阶', '5 阶'],
+    answerIndex: 2,
+    explanation: '1 阶打 2 个、2 阶打 3 个、3 阶打 4 个，4 阶起即可全屏打击 5 个目标！',
+  },
+  {
+    id: 'kj_07',
+    question: '官渡之战中，曹操奇袭袁绍哪处粮仓一举扭转战局？',
+    options: ['乌巢', '延津', '白马', '陈留'],
+    answerIndex: 0,
+    explanation: '许攸献计，曹操亲率轻骑夜袭乌巢烧毁袁军粮草。',
+  },
+  {
+    id: 'kj_08',
+    question: '「定军山斩夏侯渊」是蜀汉哪位五虎上将的成名绝战？',
+    options: ['马超', '赵云', '黄忠', '张飞'],
+    answerIndex: 2,
+    explanation: '老将黄忠在法正配合下居高临下突袭，阵斩曹魏大将夏侯渊。',
+  },
+  {
+    id: 'kj_09',
+    question: '下列哪位谋士素有「冢虎」之称，并在五丈原与诸葛亮对峙？',
+    options: ['郭嘉', '荀彧', '贾诩', '司马懿'],
+    answerIndex: 3,
+    explanation: '司马懿字仲达，人称冢虎，坚守不出耗尽蜀军粮草。',
+  },
+  {
+    id: 'kj_10',
+    question: '东吴大都督陆逊在夷陵之战中大破蜀军所使用的经典战术是？',
+    options: ['水淹七军', '火烧连营', '空城计', '背水一战'],
+    answerIndex: 1,
+    explanation: '刘备七百里连营犯兵家大忌，陆逊顺风纵火一战定局。',
+  },
+  {
+    id: 'kj_11',
+    question: '在《幻想三国》中，副将默契度达到 100（生死之交）可获得多少额外属性与抗性？',
+    options: ['+5%属性 / +5%抗性', '+10%属性 / +10%抗性', '+15%属性 / +15%抗性', '+25%属性 / +20%抗性'],
+    answerIndex: 2,
+    explanation: '满 100 默契度解锁「生死之交」，攻血+15%、全抗性+15%！',
+  },
+  {
+    id: 'kj_12',
+    question: '「白衣渡江」偷袭荆州的是东吴哪位名将？',
+    options: ['周瑜', '鲁肃', '吕蒙', '甘宁'],
+    answerIndex: 2,
+    explanation: '吕蒙令精兵扮作商贾白衣摇橹渡江，智取南郡。',
+  },
+  {
+    id: 'kj_13',
+    question: '历史上「威震逍遥津」以八百精骑击溃十万吴军的曹魏名将是？',
+    options: ['张辽', '徐晃', '于禁', '张郃'],
+    answerIndex: 0,
+    explanation: '张辽、李典、乐进守合肥，张辽率八百死士冲阵，威震江东。',
+  },
+  {
+    id: 'kj_14',
+    question: '在《幻想三国》中，被文人【画地为牢】（围）命中的目标会承受什么额外效果？',
+    options: ['每回合掉蓝', '所受伤害提高 25%', '攻击力翻倍', '无法被治疗'],
+    answerIndex: 1,
+    explanation: '被「围困」的目标无法普攻，且受到的伤害提高 25%！',
+  },
+  {
+    id: 'kj_15',
+    question: '「三顾茅庐」请出诸葛亮之前，向刘备极力举荐「卧龙、凤雏」的隐士是？',
+    options: ['左慈', '于吉', '司马徽（水镜先生）', '华佗'],
+    answerIndex: 2,
+    explanation: '水镜先生司马徽曾言「卧龙、凤雏，二人得一，可安天下」。',
+  },
+  {
+    id: 'kj_16',
+    question: '「单骑救主」于长坂坡七进七出的蜀汉名将是？',
+    options: ['关羽', '赵云', '马超', '魏延'],
+    answerIndex: 1,
+    explanation: '常山赵子龙怀抱幼主阿斗，于曹操大军中杀出重围。',
+  },
+  {
+    id: 'kj_17',
+    question: '曹操所乘名驹「绝影」是在哪一场战役中为救主身中数箭而亡？',
+    options: ['宛城之战', '赤壁之战', '官渡之战', '潼关之战'],
+    answerIndex: 0,
+    explanation: '宛城张绣夜袭，绝影马中箭仍奋力狂奔带曹操脱险。',
+  },
+  {
+    id: 'kj_18',
+    question: '在《幻想三国》中，武士的【连环突刺】在熟练度达到几阶后可触发 3 连击？',
+    options: ['2 阶', '3 阶', '4 阶', '5 阶'],
+    answerIndex: 1,
+    explanation: '连环突刺 1~2 阶为 2 连击，达到 3 阶以上即可触发强力 3 连击！',
+  },
+  {
+    id: 'kj_19',
+    question: '「刮骨疗毒」展现神医风范的名医是哪位历史人物？',
+    options: ['张仲景', '华佗', '扁鹊', '孙思邈'],
+    answerIndex: 1,
+    explanation: '华佗为关羽刮骨去毒，关羽一边饮酒弈棋谈笑自若。',
+  },
+  {
+    id: 'kj_20',
+    question: '「羽扇纶巾，谈笑间，樯橹灰飞烟灭」词句赞颂的是哪位三国名将？',
+    options: ['诸葛亮', '周瑜', '庞统', '陆逊'],
+    answerIndex: 1,
+    explanation: '苏轼《念奴娇·赤壁怀古》以此句盛赞东吴大都督周瑜。',
+  },
+  {
+    id: 'kj_21',
+    question: '三国时期「八门金锁阵」出自曹魏哪位善于守城的大将之手？',
+    options: ['曹仁', '曹洪', '夏侯惇', '许褚'],
+    answerIndex: 0,
+    explanation: '曹仁在新野与樊城之战中以守备著称，曾布八门金锁阵。',
+  },
+  {
+    id: 'kj_22',
+    question: '在《幻想三国》中，副将进行 1 转与 2 转所需的等级分别是多少？',
+    options: ['10级 / 20级', '20级 / 40级', '30级 / 50级', '40级 / 60级'],
+    answerIndex: 1,
+    explanation: '当前长线版本中，副将 20 级可 1 转、40 级可 2 转，转生后永久提升成长与初值。',
+  },
+  {
+    id: 'kj_23',
+    question: '「煮酒论英雄」中，曹操对刘备说出「今天下英雄，惟使君与操耳」是在何处？',
+    options: ['许昌', '成都', '建业', '邺城'],
+    answerIndex: 0,
+    explanation: '刘备寄居许昌后园种菜韬光养晦，曹操青梅煮酒试探其志。',
+  },
+  {
+    id: 'kj_24',
+    question: '「锦帆贼」出身、后成为东吴猛将并百骑劫魏营的人物是？',
+    options: ['太史慈', '甘宁', '凌统', '丁奉'],
+    answerIndex: 1,
+    explanation: '甘宁早年系铃锦帆纵横江上，归吴后百骑夜袭曹营扬名天下。',
+  },
+  {
+    id: 'kj_25',
+    question: '「凤雏」庞统是在攻取益州的哪处险地不幸中箭身亡？',
+    options: ['剑门关', '落凤坡', '葭萌关', '白帝城'],
+    answerIndex: 1,
+    explanation: '庞统乘白马行至落凤坡，遭西川大将张任伏兵乱箭射杀。',
+  },
+];
+
+export interface WorldBossDef {
+  id: string;
+  title: string;
+  name: string;
+  roleClass: RoleClass;
+  spriteKey: string;
+  desc: string;
+}
+
+export const WORLD_BOSS_ROSTER: WorldBossDef[] = [
+  { id: 'wb_zhangliao', title: '天魁星', name: '威震逍遥津·张辽', roleClass: 'wushi', spriteKey: 'r1', desc: '整点巡弋中原的曹魏五子良将之首，刀法迅捷凌厉。' },
+  { id: 'wb_ganning', title: '天罡星', name: '锦帆百骑·甘宁', roleClass: 'wushi', spriteKey: 'r1', desc: '江东悍将突袭而来，高攻高速压迫力极强。' },
+  { id: 'wb_zuoci', title: '天机星', name: '乌角仙人·左慈', roleClass: 'yiren', spriteKey: 'r3', desc: '道法通玄的乱世仙人，善引九天玄雷与幻术。' },
+  { id: 'wb_dianwei', title: '天勇星', name: '古之恶来·典韦', roleClass: 'wushi', spriteKey: 'r1', desc: '手持双铁戟力大无穷，气血雄厚。' },
+  { id: 'wb_guojia', title: '天闲星', name: '鬼才军师·郭嘉', roleClass: 'wenren', spriteKey: 'r2', desc: '奇谋百出的曹营谋主，擅长群体控场与谋略打击。' },
+  { id: 'wb_taishici', title: '天雄星', name: '北海神射·太史慈', roleClass: 'wushi', spriteKey: 'r1', desc: '猿臂善射的东吴虎将，连击破甲威不可挡。' },
+  { id: 'wb_pangde', title: '天威星', name: '抬棺死战·庞德', roleClass: 'wushi', spriteKey: 'r1', desc: '白马将军庞令明，背水死战攻势狂猛。' },
+  { id: 'wb_sunce', title: '天英星', name: '江东小霸王·孙策', roleClass: 'wushi', spriteKey: 'r1', desc: '霸王枪势如破竹，江东豪杰争锋试金石。' },
+];
+
+const WORLD_BOSS_MAPS = [
+  'changshe',
+  'luoyang_wai',
+  'hulaoguan',
+  'guandu',
+  'chibi',
+  'jiangling',
+  'yizhou',
+  'hanzhong',
+  'yiling',
+  'wuzhangyuan',
+];
+
+export function getCurrentWorldBoss(now = new Date()): {
+  hourKey: string;
+  boss: WorldBossDef;
+  mapId: string;
+  mapName: string;
+  nextRefreshMinutes: number;
+} {
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const h = now.getHours();
+  const hourKey = `${y}-${m}-${d}-${String(h).padStart(2, '0')}`;
+  const slot = Math.floor(now.getTime() / 3_600_000);
+  const boss = WORLD_BOSS_ROSTER[slot % WORLD_BOSS_ROSTER.length];
+  const mapId = WORLD_BOSS_MAPS[(slot * 3 + 1) % WORLD_BOSS_MAPS.length];
+  const mapName = MAPS[mapId]?.name ?? mapId;
+  const nextRefreshMinutes = Math.max(1, 60 - now.getMinutes());
+  return { hourKey, boss, mapId, mapName, nextRefreshMinutes };
+}
+
+export function buildEscortBanditGroup(level: number): EnemyGroupDef {
+  const lv = Math.max(3, Math.min(60, Math.floor(level)));
+  const hpBase = Math.round(130 + lv * 95 + lv * lv * 1.15);
+  const atkBase = Math.round(22 + lv * 8.5 + (lv > 20 ? (lv - 20) * 1.6 : 0));
+  const spdBase = Math.round(16 + lv * 2.5);
+  return {
+    id: 'escort_bandit',
+    name: '劫镖黑风寨匪徒',
+    mapId: 'xuchang',
+    minLevel: lv,
+    silverReward: Math.round(180 + lv * 35),
+    expReward: Math.round(220 + lv * 95),
+    enemies: [
+      { name: '劫镖山贼', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.95), mp: 60, atk: atkBase, spd: spdBase },
+      { name: '黑风大当家', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.35), mp: 100, atk: Math.round(atkBase * 1.15), spd: spdBase + 4 },
+      { name: '山寨狗头军师', level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.82), mp: 180, atk: Math.round(atkBase * 0.96), spd: spdBase + 6 },
+    ],
+  };
+}
+
+export function buildWorldBossEnemyGroup(bossId: string, level: number): EnemyGroupDef {
+  const boss = WORLD_BOSS_ROSTER.find((b) => b.id === bossId) ?? WORLD_BOSS_ROSTER[0];
+  const lv = Math.max(6, Math.min(60, Math.floor(level)));
+  const hpBase = Math.round(220 + lv * 125 + lv * lv * 1.55);
+  const atkBase = Math.round(32 + lv * 9.8 + (lv > 20 ? (lv - 20) * 2.1 : 0));
+  const spdBase = Math.round(20 + lv * 2.8);
+  return {
+    id: `world_boss:${boss.id}`,
+    name: `【${boss.title}】${boss.name}`,
+    mapId: getCurrentWorldBoss().mapId,
+    minLevel: lv,
+    silverReward: Math.round(260 + lv * 45),
+    expReward: Math.round(320 + lv * 120),
+    enemies: [
+      { name: `${boss.title}·先锋护卫`, level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 0.95), mp: 80, atk: Math.round(atkBase * 0.96), spd: spdBase + 2 },
+      { name: boss.name, level: lv + 2, roleClass: boss.roleClass, spriteKey: boss.spriteKey, hp: Math.round(hpBase * 1.6), mp: 300, atk: Math.round(atkBase * 1.24), spd: spdBase + 8 },
+      { name: `${boss.title}·随军谋士`, level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.82), mp: 220, atk: Math.round(atkBase * 0.94), spd: spdBase + 10 },
+      { name: `${boss.title}·道法护法`, level: lv, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 0.88), mp: 240, atk: Math.round(atkBase * 1.02), spd: spdBase + 5 },
+    ],
+  };
+}

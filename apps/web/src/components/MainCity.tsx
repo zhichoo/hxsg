@@ -127,6 +127,7 @@ export function MainCity({
     { label: '物品', onClick: () => onOpenPanel('items') },
     { label: '副将', onClick: () => onOpenPanel('generals') },
     { label: '任务', onClick: () => onOpenPanel('quests') },
+    { label: '历练', onClick: () => onOpenPanel('daily') },
     { label: '跑环', onClick: () => onOpenPanel('paohuan') },
     { label: '天玄塔', onClick: () => onOpenPanel('tower') },
     { label: '赌坊', onClick: () => onOpenPanel('casino') },
@@ -309,6 +310,20 @@ export function MainCity({
           <div className="flex-1 overflow-y-auto hx-scroll space-y-1.5 pr-0.5">
             {tab === 'npc' && (
               <>
+                {character.daily?.worldBoss?.mapId === currentMap.id && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenPanel('daily')}
+                    className="w-full flex items-center justify-between px-2 py-1.5 bg-[#471035]/90 border border-[#f5c249] hover:bg-[#66194d] transition text-left"
+                  >
+                    <span className="text-[13px] font-bold text-[#ffe985] hx-stroke truncate pr-1">
+                      ★【{character.daily.worldBoss.title}】{character.daily.worldBoss.bossName}
+                    </span>
+                    <span className="px-2 py-0.5 text-[10.5px] font-bold border bg-[#99153a] text-[#fff2a6] border-[#ffca63] shrink-0">
+                      {character.daily.worldBoss.claimedToday ? '已领奖' : '整点杀星'}
+                    </span>
+                  </button>
+                )}
                 {currentMap.npcs.map((npc) => {
                   const badge = getNpcBadge(npc);
                   return (
@@ -347,6 +362,7 @@ export function MainCity({
                       else if (fac.kind === 'blacksmith') onOpenPanel('blacksmith');
                       else if (fac.kind === 'tavern') onOpenPanel('tavern');
                       else if (fac.kind === 'tower') onOpenPanel('tower');
+                      else if (fac.kind === 'daily') onOpenPanel('daily');
                       else if (fac.kind === 'casino') onOpenPanel('casino');
                       else if (fac.kind === 'bank') onOpenPanel('bank');
                       else if (fac.kind === 'market') onOpenPanel('market');

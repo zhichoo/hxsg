@@ -240,6 +240,14 @@ const newCols: Array<[string, string]> = [
   ['arena_losses', 'INTEGER NOT NULL DEFAULT 0'],
   ['arena_daily_rewards', 'INTEGER NOT NULL DEFAULT 0'],
   ['arena_reward_date', 'TEXT DEFAULT NULL'],
+  ['keju_date', 'TEXT DEFAULT NULL'],
+  ['keju_answered', 'INTEGER NOT NULL DEFAULT 0'],
+  ['keju_correct', 'INTEGER NOT NULL DEFAULT 0'],
+  ['escort_date', 'TEXT DEFAULT NULL'],
+  ['escort_status', "TEXT NOT NULL DEFAULT 'idle'"],
+  ['escort_origin_map_id', 'TEXT DEFAULT NULL'],
+  ['escort_target_map_id', 'TEXT DEFAULT NULL'],
+  ['world_boss_date', 'TEXT DEFAULT NULL'],
 ];
 
 for (const [col, def] of newCols) {

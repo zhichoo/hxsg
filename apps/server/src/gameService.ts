@@ -6,20 +6,24 @@ import {
   GENERAL_SKILL_BOOKS,
   GENERAL_TEMPLATES,
   getGeneralIntimacyInfo,
+  getCurrentWorldBoss,
   getSkillMaxTargets,
   getSkillTier,
   getTowerFloorMeta,
   ITEMS,
+  KEJU_QUESTIONS,
   MAIN_QUESTS,
   MAPS,
   REALMS,
   ROLE_CLASS_META,
   SKILLS,
   TOWER_MAX_FLOOR,
+  WORLD_BOSS_ROSTER,
   type CasinoChibiResult,
   type CasinoDiceResult,
   type CharacterQuestState,
   type CharacterView,
+  type DailyStateView,
   type EquipmentBonusSummary,
   type EquipmentQuality,
   type EquipmentSlot,
@@ -79,6 +83,14 @@ interface CharacterRow {
   arena_losses?: number;
   arena_daily_rewards?: number;
   arena_reward_date?: string | null;
+  keju_date?: string | null;
+  keju_answered?: number;
+  keju_correct?: number;
+  escort_date?: string | null;
+  escort_status?: string | null;
+  escort_origin_map_id?: string | null;
+  escort_target_map_id?: string | null;
+  world_boss_date?: string | null;
 }
 
 interface GeneralRow {
@@ -426,6 +438,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
         5 - (row.arena_reward_date === getTodayDateStr() ? (row.arena_daily_rewards ?? 0) : 0),
       ),
     },
+    daily: buildDailyState(row),
     unreadMailCount: (
       db
         .prepare('SELECT COUNT(*) AS cnt FROM mails WHERE recipient_id = ? AND is_read = 0')
@@ -3032,4 +3045,340 @@ export function recordArenaOutcome(
   }
 
   return { exp, silver, summary };
+}
+
+// ============================================================
+// Stage 2: Daily Low-Burden Loops (Keju 5Q / Escort 1x / World Boss 1x)
+// ============================================================
+
+const KEJU_DAILY_TOTAL = 5;
+
+function getDailyKejuQuestions(dateStr: string, characterId: number) {
+  // Deterministic Fisher-Yates seeded by dateStr + characterId
+  let seed = characterId * 2654435761;
+  for (let i = 0; i < dateStr.length; i++) {
+    seed = ((seed << 5) - seed + dateStr.charCodeAt(i)) | 0;
+  }
+  const indices = KEJU_QUESTIONS.map((_, idx) => idx);
+  let state = Math.abs(seed) || 1337;
+  for (let i = indices.length - 1; i > 0; i--) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const j = state % (i + 1);
+    const tmp = indices[i];
+    indices[i] = indices[j];
+    indices[j] = tmp;
+  }
+  return indices.slice(0, KEJU_DAILY_TOTAL).map((idx) => KEJU_QUESTIONS[idx]);
+}
+
+function calcEscortReward(level: number) {
+  const lv = Math.max(1, level);
+  const exp = Math.round(700 + lv * 520 + (lv > 15 ? Math.pow(lv - 15, 1.65) * 180 : 0));
+  const silver = Math.round(1600 + lv * 280);
+  const gold = 40;
+  return { exp, silver, gold };
+}
+
+function buildDailyState(row: CharacterRow): DailyStateView {
+  const today = getTodayDateStr();
+  const kejuSameDay = row.keju_date === today;
+  const answered = kejuSameDay ? Math.min(KEJU_DAILY_TOTAL, Math.max(0, row.keju_answered ?? 0)) : 0;
+  const correct = kejuSameDay ? Math.min(answered, Math.max(0, row.keju_correct ?? 0)) : 0;
+  const completed = answered >= KEJU_DAILY_TOTAL;
+  const questions = getDailyKejuQuestions(today, row.id);
+  const nextQ = !completed ? questions[answered] : null;
+
+  const escortSameDay = row.escort_date === today;
+  const rawEscortStatus = escortSameDay ? (row.escort_status ?? 'idle') : 'idle';
+  const escortCompleted = rawEscortStatus === 'done';
+  const escortStatus: 'idle' | 'active' | 'ready' =
+    rawEscortStatus === 'active' || rawEscortStatus === 'ready' ? rawEscortStatus : 'idle';
+  const escortOriginId = escortSameDay && escortStatus !== 'idle' ? (row.escort_origin_map_id ?? undefined) : undefined;
+  const escortTargetId = escortSameDay && escortStatus !== 'idle' ? (row.escort_target_map_id ?? undefined) : undefined;
+  const escortRew = calcEscortReward(row.level);
+
+  const wb = getCurrentWorldBoss();
+  const claimedToday = row.world_boss_date === today;
+
+  return {
+    keju: {
+      totalQuestions: KEJU_DAILY_TOTAL,
+      answered,
+      correct,
+      completed,
+      currentQuestion: nextQ
+        ? {
+            index: answered,
+            question: nextQ.question,
+            options: nextQ.options,
+          }
+        : null,
+    },
+    escort: {
+      completedToday: escortCompleted,
+      status: escortStatus,
+      originMapId: escortOriginId,
+      originMapName: escortOriginId ? (MAPS[escortOriginId]?.name ?? escortOriginId) : undefined,
+      targetMapId: escortTargetId,
+      targetMapName: escortTargetId ? (MAPS[escortTargetId]?.name ?? escortTargetId) : undefined,
+      rewardExp: escortRew.exp,
+      rewardSilver: escortRew.silver,
+      rewardGold: escortRew.gold,
+    },
+    worldBoss: {
+      hourKey: wb.hourKey,
+      bossId: wb.boss.id,
+      bossName: wb.boss.name,
+      title: wb.boss.title,
+      desc: wb.boss.desc,
+      mapId: wb.mapId,
+      mapName: wb.mapName,
+      claimedToday,
+      nextRefreshMinutes: wb.nextRefreshMinutes,
+    },
+  };
+}
+
+export function answerKejuQuestion(
+  characterId: number,
+  optionIndex: number,
+): {
+  correct: boolean;
+  correctAnswerText: string;
+  explanation: string;
+  finished: boolean;
+  message: string;
+  broadcast?: string;
+  character: CharacterView;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex > 3) {
+    throw new Error('无效的答案选项');
+  }
+  if (ch.daily.keju.completed) {
+    throw new Error('今日科举 5 题已全部作答完毕，明日再来吧');
+  }
+
+  const today = getTodayDateStr();
+  const questions = getDailyKejuQuestions(today, characterId);
+  const qIdx = ch.daily.keju.answered;
+  const q = questions[qIdx];
+  if (!q) throw new Error('题目不存在');
+
+  const isCorrect = optionIndex === q.answerIndex;
+  const nextAnswered = qIdx + 1;
+  const nextCorrect = ch.daily.keju.correct + (isCorrect ? 1 : 0);
+
+  const lv = ch.level;
+  const fullExp = Math.round(180 + lv * 150 + (lv > 15 ? Math.pow(lv - 15, 1.55) * 65 : 0));
+  const fullSilver = Math.round(220 + lv * 60);
+  const expGain = isCorrect ? fullExp : Math.round(fullExp * 0.35);
+  const silverGain = isCorrect ? fullSilver : Math.round(fullSilver * 0.35);
+
+  db.prepare(
+    `UPDATE characters
+     SET keju_date = ?, keju_answered = ?, keju_correct = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(today, nextAnswered, nextCorrect, Date.now(), characterId);
+
+  applyExpAndSilver(characterId, expGain, silverGain);
+
+  const parts: string[] = [
+    isCorrect ? `回答正确！` : `回答有误（正确答案：${q.options[q.answerIndex]}）。`,
+    `经验+${expGain}、银两+${silverGain}`,
+  ];
+
+  const finished = nextAnswered >= KEJU_DAILY_TOTAL;
+  let broadcast: string | undefined;
+
+  if (finished) {
+    if (nextCorrect === KEJU_DAILY_TOTAL) {
+      db.prepare('UPDATE characters SET gold = gold + 50, updated_at = ? WHERE id = ?').run(
+        Date.now(),
+        characterId,
+      );
+      addItem(characterId, 'jiangling', 1);
+      addItem(characterId, 'xisuidan', 1);
+      addItem(characterId, 'baotu', 1);
+      parts.push('🏆 金榜状元（5/5 全对）加赠：金砖+50、招贤令×1、洗髓丹×1、藏宝图×1！');
+      broadcast = `【科举发榜】恭贺 ${ch.name} 在每日科举文试中 5 题全对高中状元，获赐招贤令与洗髓丹！`;
+    } else if (nextCorrect >= 3) {
+      db.prepare('UPDATE characters SET gold = gold + 30, updated_at = ? WHERE id = ?').run(
+        Date.now(),
+        characterId,
+      );
+      addItem(characterId, 'jingyandan', 2);
+      addItem(characterId, 'baotu', 1);
+      parts.push(`📜 科举进士（答对 ${nextCorrect}/5）加赠：金砖+30、副将经验丹×2、藏宝图×1！`);
+    } else {
+      db.prepare('UPDATE characters SET gold = gold + 15, updated_at = ? WHERE id = ?').run(
+        Date.now(),
+        characterId,
+      );
+      addItem(characterId, 'jingyandan', 1);
+      parts.push(`📜 科举举人（答对 ${nextCorrect}/5）加赠：金砖+15、副将经验丹×1！`);
+    }
+  }
+
+  return {
+    correct: isCorrect,
+    correctAnswerText: q.options[q.answerIndex],
+    explanation: q.explanation,
+    finished,
+    message: parts.join(' '),
+    broadcast,
+    character: getCharacterById(characterId)!,
+  };
+}
+
+export function startDailyEscort(characterId: number): {
+  character: CharacterView;
+  message: string;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.daily.escort.completedToday) {
+    throw new Error('今日运镖（每日 1 趟）已完成，明日再来接镖吧');
+  }
+  if (ch.daily.escort.status !== 'idle') {
+    throw new Error('你已有一趟进行中的押镖任务');
+  }
+
+  const today = getTodayDateStr();
+  const originMapId = MAPS[ch.mapId]?.isSafe ? ch.mapId : 'xuchang';
+  let targetMapId: string;
+  if (originMapId === 'xuchang') {
+    targetMapId = ch.level >= 22 ? 'jingzhou' : 'luoyang';
+  } else {
+    targetMapId = 'xuchang';
+  }
+
+  db.prepare(
+    `UPDATE characters
+     SET escort_date = ?, escort_status = 'active',
+         escort_origin_map_id = ?, escort_target_map_id = ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(today, originMapId, targetMapId, Date.now(), characterId);
+
+  const targetName = MAPS[targetMapId]?.name ?? targetMapId;
+  return {
+    character: getCharacterById(characterId)!,
+    message: `已接下皇家重镖！请先击退途中劫匪，随后将镖车护送至【${targetName}】交付领赏！`,
+  };
+}
+
+export function markEscortBanditCleared(characterId: number): string | null {
+  const ch = getCharacterById(characterId);
+  if (!ch || ch.daily.escort.status !== 'active') return null;
+  db.prepare(
+    `UPDATE characters SET escort_status = 'ready', updated_at = ? WHERE id = ?`,
+  ).run(Date.now(), characterId);
+  const targetName = ch.daily.escort.targetMapName ?? '目标城池';
+  return `🚚 已击退劫镖山贼！快前往【${targetName}】交付镖车领取今日运镖大奖！`;
+}
+
+export function claimDailyEscort(characterId: number): {
+  character: CharacterView;
+  message: string;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.daily.escort.completedToday) {
+    throw new Error('今日运镖奖励已领取');
+  }
+  if (ch.daily.escort.status === 'idle') {
+    throw new Error('请先接取今日运镖任务');
+  }
+  if (ch.daily.escort.status === 'active') {
+    throw new Error('途中仍有黑风寨劫匪拦路，请先迎战击退劫匪！');
+  }
+  const targetMapId = ch.daily.escort.targetMapId ?? 'luoyang';
+  const targetName = MAPS[targetMapId]?.name ?? targetMapId;
+  if (ch.mapId !== targetMapId) {
+    throw new Error(`请先移动至【${targetName}】再交付镖车`);
+  }
+
+  const rew = calcEscortReward(ch.level);
+  db.prepare(
+    `UPDATE characters
+     SET escort_status = 'done', gold = gold + ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(rew.gold, Date.now(), characterId);
+
+  applyExpAndSilver(characterId, rew.exp, rew.silver);
+  addItem(characterId, 'baotu', 2);
+  addItem(characterId, 'jingyandan', 2);
+
+  return {
+    character: getCharacterById(characterId)!,
+    message: `🚚 顺利护送重镖抵达【${targetName}】！获赏 经验+${rew.exp}、银两+${rew.silver}、金砖+${rew.gold}、藏宝图×2、副将经验丹×2！`,
+  };
+}
+
+export function recordWorldBossVictory(
+  characterId: number,
+  bossId: string,
+): { summary: string; broadcast?: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) return { summary: '击退整点名将' };
+  const boss = WORLD_BOSS_ROSTER.find((b) => b.id === bossId) ?? WORLD_BOSS_ROSTER[0];
+  const today = getTodayDateStr();
+
+  if (ch.daily.worldBoss.claimedToday) {
+    return {
+      summary: `⚔ 再次切磋击败【${boss.title}·${boss.name}】（今日整点星宿首杀大奖已领取）`,
+    };
+  }
+
+  const lv = ch.level;
+  const bonusExp = Math.round(900 + lv * 640 + (lv > 15 ? Math.pow(lv - 15, 1.7) * 220 : 0));
+  const bonusSilver = Math.round(1800 + lv * 320);
+  const bonusGold = 60;
+
+  db.prepare(
+    `UPDATE characters
+     SET world_boss_date = ?, gold = gold + ?, updated_at = ?
+     WHERE id = ?`,
+  ).run(today, bonusGold, Date.now(), characterId);
+
+  applyExpAndSilver(characterId, bonusExp, bonusSilver);
+  addItem(characterId, 'xisuidan', 1);
+
+  const parts: string[] = [
+    `经验+${bonusExp}`,
+    `银两+${bonusSilver}`,
+    `金砖+${bonusGold}`,
+    '洗髓丹×1',
+  ];
+
+  if (Math.random() < 0.5) {
+    const books = Object.keys(GENERAL_SKILL_BOOKS);
+    const bookId = books[Math.floor(Math.random() * books.length)];
+    addItem(characterId, bookId, 1);
+    parts.push(`${ITEMS[bookId].name}×1`);
+  } else {
+    addItem(characterId, 'jiangling', 2);
+    parts.push('招贤令×2');
+  }
+
+  const latest = getCharacterById(characterId)!;
+  if (Math.random() < 0.5 && latest.equipment.length < 30) {
+    const pool =
+      lv >= 48
+        ? ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue', 'bailong_ju']
+        : lv >= 33
+          ? ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv', 'zhuahuang_ma']
+          : lv >= 20
+            ? ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue', 'jueying_ma']
+            : ['longdan_qiang', 'huangjin_jia', 'chitu_ma', 'qixing_jian', 'dilu_ma'];
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    const eq = grantEquipmentToCharacter(characterId, picked, true);
+    parts.push(`极品战利品【${eq.name}】`);
+  }
+
+  return {
+    summary: `🌟 今日整点杀星首杀【${boss.title}·${boss.name}】！加赠：${parts.join('、')}`,
+    broadcast: `【整点杀星】豪杰 ${ch.name}(Lv.${ch.level}) 孤身击破【${boss.title}·${boss.name}】，满载重赏凯旋！`,
+  };
 }

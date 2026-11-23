@@ -250,6 +250,31 @@
       "method": "POST",
       "auth": "platform"
     },
+    "dailyKejuAnswer": {
+      "url": "__API_BASE__/api/daily/keju/answer",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "dailyEscortStart": {
+      "url": "__API_BASE__/api/daily/escort/start",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "dailyEscortBattle": {
+      "url": "__API_BASE__/api/daily/escort/battle",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "dailyEscortClaim": {
+      "url": "__API_BASE__/api/daily/escort/claim",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "dailyWorldBossChallenge": {
+      "url": "__API_BASE__/api/daily/world-boss/challenge",
+      "method": "POST",
+      "auth": "platform"
+    },
     "gmGrant": {
       "url": "__API_BASE__/api/gm/grant",
       "method": "POST",
