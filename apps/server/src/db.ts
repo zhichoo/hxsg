@@ -145,6 +145,32 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_characters_realm ON characters(realm_id);
   CREATE INDEX IF NOT EXISTS idx_chat_realm_channel ON chat_messages(realm_id, channel, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS character_main_quests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    character_id INTEGER NOT NULL,
+    quest_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    progress INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    UNIQUE(character_id, quest_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS character_paohuan (
+    character_id INTEGER PRIMARY KEY,
+    ring INTEGER NOT NULL DEFAULT 1,
+    completed_rounds INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'idle',
+    task_type TEXT,
+    target_id TEXT,
+    target_name TEXT,
+    target_map_id TEXT,
+    required_count INTEGER NOT NULL DEFAULT 1,
+    progress INTEGER NOT NULL DEFAULT 0,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
 `);
 
 // Safe online schema migration for existing DBs created in Phase 1

@@ -143,6 +143,31 @@
       "method": "POST",
       "auth": "platform"
     },
+    "questsMainAccept": {
+      "url": "__API_BASE__/api/quests/main/accept",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "questsMainClaim": {
+      "url": "__API_BASE__/api/quests/main/claim",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "questsPaohuanAccept": {
+      "url": "__API_BASE__/api/quests/paohuan/accept",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "questsPaohuanClaim": {
+      "url": "__API_BASE__/api/quests/paohuan/claim",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "questsPaohuanAbandon": {
+      "url": "__API_BASE__/api/quests/paohuan/abandon",
+      "method": "POST",
+      "auth": "platform"
+    },
     "gmGrant": {
       "url": "__API_BASE__/api/gm/grant",
       "method": "POST",

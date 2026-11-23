@@ -793,6 +793,15 @@ export function BattleStage({
                       {battle.rewards.capturedGeneral.growth}）
                     </div>
                   )}
+                  {battle.rewards.questUpdates && battle.rewards.questUpdates.length > 0 && (
+                    <div className="pt-1 mt-1 border-t border-white/15 space-y-0.5">
+                      {battle.rewards.questUpdates.map((msg, i) => (
+                        <div key={i} className="text-[#8cff9c] font-bold">
+                          📜 {msg}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </>
               ) : (
                 <div className="text-[#f3e4f7]">

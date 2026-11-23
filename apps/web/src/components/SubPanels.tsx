@@ -20,6 +20,8 @@ export type SubPanelType =
   | 'status'
   | 'items'
   | 'generals'
+  | 'quests'
+  | 'paohuan'
   | 'rank'
   | 'shop'
   | 'blacksmith'
@@ -82,6 +84,8 @@ const TITLES: Record<SubPanelType, string> = {
   status: '人物状态',
   items: '行囊与装备',
   generals: '副将营帐',
+  quests: '任务卷轴',
+  paohuan: '许昌跑环',
   rank: '排行榜',
   shop: '回春药铺',
   blacksmith: '铁匠铺与马市',
@@ -101,12 +105,20 @@ export function SubPanels({
   const [statusTab, setStatusTab] = useState<'stats' | 'resist' | 'skills'>('stats');
   const [bagTab, setBagTab] = useState<'equip' | 'consumable'>('equip');
   const [smithTab, setSmithTab] = useState<'gear' | 'mount'>('gear');
+  const [questTab, setQuestTab] = useState<'main' | 'paohuan'>(
+    panel === 'paohuan' ? 'paohuan' : 'main',
+  );
   const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
   const [gmCode, setGmCode] = useState('');
   const [announceText, setAnnounceText] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (panel === 'paohuan') setQuestTab('paohuan');
+    else if (panel === 'quests') setQuestTab('main');
+  }, [panel]);
 
   useEffect(() => {
     if (panel === 'rank') {
@@ -1063,13 +1075,407 @@ export function SubPanels({
             </div>
           )}
 
+          {/* QUESTS & PAOHUAN */}
+          {(panel === 'quests' || panel === 'paohuan') && (() => {
+            const mainQuests = character.quests?.mainQuests ?? [];
+            const paohuan = character.quests?.paohuan;
+            const currentMain =
+              mainQuests.find((q) => q.status === 'ready') ??
+              mainQuests.find((q) => q.status === 'active') ??
+              mainQuests.find((q) => q.status === 'available') ??
+              null;
+            const allMainClaimed =
+              mainQuests.length > 0 && mainQuests.every((q) => q.status === 'claimed');
+
+            const runQuestAction = async (
+              fn: () => Promise<{ character: CharacterView; message: string }>,
+            ) => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                const res = await fn();
+                onUpdateCharacter(res.character);
+                onNotify(res.message);
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '操作失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+
+            return (
+              <div className="space-y-2.5 text-xs">
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setQuestTab('main')}
+                    className={`py-1.5 font-bold border ${
+                      questTab === 'main'
+                        ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                        : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                    }`}
+                  >
+                    三国主线 ({mainQuests.filter((q) => q.status === 'claimed').length}/
+                    {mainQuests.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setQuestTab('paohuan')}
+                    className={`py-1.5 font-bold border ${
+                      questTab === 'paohuan'
+                        ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                        : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                    }`}
+                  >
+                    许昌跑环 (第{paohuan?.ring ?? 1}/10环)
+                  </button>
+                </div>
+
+                {questTab === 'main' && (
+                  <div className="space-y-2.5">
+                    {allMainClaimed ? (
+                      <div className="p-3 bg-[#1d2e14] border-2 border-[#7dff92] text-center space-y-1">
+                        <div className="text-[#ffe46e] font-black text-sm">
+                          🏆 三国主线八章全通 · 威震华夏！
+                        </div>
+                        <div className="text-[#d6ffd9]">
+                          少侠已历经黄巾、虎牢、官渡、赤壁诸大战役，可继续刷许昌跑环、培养转生名将！
+                        </div>
+                      </div>
+                    ) : (
+                      currentMain && (
+                        <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="font-black text-sm text-[#ffe678]">
+                              第{currentMain.chapter}章 · {currentMain.title}
+                            </div>
+                            <span
+                              className={`px-1.5 py-0.5 text-[10px] font-bold border ${
+                                currentMain.status === 'ready'
+                                  ? 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92]'
+                                  : currentMain.status === 'active'
+                                    ? 'bg-[#1a4dc2] text-white border-[#8bc0ff]'
+                                    : 'bg-[#945c10] text-[#fff2b3] border-[#ffd866]'
+                              }`}
+                            >
+                              {currentMain.status === 'ready'
+                                ? '已达成·可领奖'
+                                : currentMain.status === 'active'
+                                  ? '进行中'
+                                  : `推荐 Lv.${currentMain.recLevel}`}
+                            </span>
+                          </div>
+
+                          <div className="p-2 bg-black/35 border border-[#7c5a2d] text-[#f7e7fc] leading-relaxed">
+                            <span className="text-[#ffd46e] font-bold">
+                              【{currentMain.npcName}】：
+                            </span>
+                            {currentMain.dialogue}
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-[#ffeaad] font-bold">
+                                目标：
+                                {currentMain.objectiveKind === 'visit_map'
+                                  ? `前往【${currentMain.targetMapName}】`
+                                  : `在【${currentMain.targetMapName}】击败【${currentMain.targetName}】`}
+                              </span>
+                              <span className="text-[#8cff9c] font-bold">
+                                {currentMain.progress} / {currentMain.requiredCount}
+                              </span>
+                            </div>
+                            <div className="h-2 bg-black/60 border border-[#6e5028] overflow-hidden">
+                              <div
+                                className="h-full bg-gradient-to-r from-[#238a34] to-[#78ff8b]"
+                                style={{
+                                  width: `${Math.min(
+                                    100,
+                                    (currentMain.progress / Math.max(1, currentMain.requiredCount)) *
+                                      100,
+                                  )}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-black/30 p-1.5 border border-white/10 space-y-1">
+                            <div className="text-[10.5px] text-[#e7cfbb]">本章丰厚奖励：</div>
+                            <div className="flex flex-wrap gap-1.5 text-[11px]">
+                              <span className="px-1.5 py-0.5 bg-[#381642] border border-[#966a35] text-[#ffe88a]">
+                                经验 +{currentMain.rewards.exp}
+                              </span>
+                              <span className="px-1.5 py-0.5 bg-[#381642] border border-[#966a35] text-[#f0f0f0]">
+                                银两 +{currentMain.rewards.silver}
+                              </span>
+                              {currentMain.rewards.gold && (
+                                <span className="px-1.5 py-0.5 bg-[#4a320a] border border-[#f5c842] text-[#ffe159] font-bold">
+                                  金砖 +{currentMain.rewards.gold}
+                                </span>
+                              )}
+                              {currentMain.rewards.item && (
+                                <span className="px-1.5 py-0.5 bg-[#19354d] border border-[#68b8ff] text-[#b8e2ff]">
+                                  {currentMain.rewards.item.name}×{currentMain.rewards.item.quantity}
+                                </span>
+                              )}
+                              {currentMain.rewards.equipName && (
+                                <span className="px-1.5 py-0.5 bg-[#1b3d24] border border-[#6fe085] text-[#baffc6] font-bold">
+                                  装备·{currentMain.rewards.equipName}
+                                </span>
+                              )}
+                              {currentMain.rewards.generalName && (
+                                <span className="px-1.5 py-0.5 bg-[#541717] border border-[#ff8b59] text-[#ffd49c] font-bold">
+                                  副将·{currentMain.rewards.generalName}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-end gap-2 pt-0.5">
+                            {currentMain.status === 'available' && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void runQuestAction(() =>
+                                    api.acceptMainQuest(realmId, currentMain.questId),
+                                  )
+                                }
+                                className="hx-btn-gold px-4 py-1.5 text-xs"
+                              >
+                                接取本章主线
+                              </button>
+                            )}
+                            {currentMain.status === 'ready' && (
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() =>
+                                  void runQuestAction(() =>
+                                    api.claimMainQuest(realmId, currentMain.questId),
+                                  )
+                                }
+                                className="hx-btn-red px-4 py-1.5 text-xs ring-1 ring-[#ffe678]"
+                              >
+                                交付领奖！
+                              </button>
+                            )}
+                            {currentMain.status === 'active' && (
+                              <div className="text-[11px] text-[#e8cde9]">
+                                请先点主界面「移动」前往【{currentMain.targetMapName}】完成目标
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    )}
+
+                    {/* All Chapters Overview */}
+                    <div className="space-y-1">
+                      <div className="text-[11px] text-[#e7cfbb] font-bold">三国剧情总览</div>
+                      {mainQuests.map((q) => (
+                        <div
+                          key={q.questId}
+                          className={`flex items-center justify-between px-2 py-1.5 border ${
+                            q.status === 'claimed'
+                              ? 'bg-[#1a2618]/80 border-[#4b7d48] text-[#bfeec2]'
+                              : q.status === 'active' || q.status === 'ready'
+                                ? 'bg-[#361140] border-[#e0b84e] text-white'
+                                : 'bg-[#1b0820]/70 border-[#5e4266] text-[#a792ad]'
+                          }`}
+                        >
+                          <div className="truncate pr-2">
+                            <span className="font-bold">
+                              第{q.chapter}章 {q.title}
+                            </span>
+                            <span className="text-[10px] ml-1.5 opacity-85">
+                              (Lv.{q.recLevel} · {q.targetMapName})
+                            </span>
+                          </div>
+                          <span className="text-[10.5px] shrink-0 font-bold">
+                            {q.status === 'claimed'
+                              ? '已完成 ✓'
+                              : q.status === 'ready'
+                                ? '可领奖'
+                                : q.status === 'active'
+                                  ? `${q.progress}/${q.requiredCount}`
+                                  : q.status === 'available'
+                                    ? '可接取'
+                                    : '未解锁'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {questTab === 'paohuan' && paohuan && (
+                  <div className="space-y-2.5">
+                    <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-black text-sm text-[#ffe678]">
+                            许昌经典跑环 · 第 {paohuan.ring} / 10 环
+                          </div>
+                          <div className="text-[10.5px] text-[#e7cfbb]">
+                            环数越高经验银两越丰厚 · 累计大满贯 {paohuan.completedRounds} 轮
+                          </div>
+                        </div>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] font-bold border ${
+                            paohuan.status === 'ready'
+                              ? 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92]'
+                              : paohuan.status === 'active'
+                                ? 'bg-[#1a4dc2] text-white border-[#8bc0ff]'
+                                : 'bg-[#8a5410] text-[#fff2b3] border-[#ffd866]'
+                          }`}
+                        >
+                          {paohuan.status === 'ready'
+                            ? '可交环'
+                            : paohuan.status === 'active'
+                              ? '跑环中'
+                              : '待接环'}
+                        </span>
+                      </div>
+
+                      {/* 10-ring progress beads */}
+                      <div className="grid grid-cols-10 gap-1">
+                        {Array.from({ length: 10 }, (_, idx) => {
+                          const num = idx + 1;
+                          const done = num < paohuan.ring;
+                          const curr = num === paohuan.ring;
+                          const special = num === 5 || num === 10;
+                          return (
+                            <div
+                              key={num}
+                              className={`h-5 flex items-center justify-center text-[10px] font-bold border ${
+                                done
+                                  ? 'bg-[#1f6b2c] border-[#78ff8c] text-[#d6ffdc]'
+                                  : curr
+                                    ? 'bg-[#c98b1e] border-[#fff08c] text-[#220a04]'
+                                    : special
+                                      ? 'bg-[#4f1930] border-[#ff89b8] text-[#ffd4e5]'
+                                      : 'bg-black/40 border-[#6e5275] text-[#b49ab8]'
+                              }`}
+                            >
+                              {num}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {paohuan.status === 'idle' ? (
+                        <div className="p-2 bg-black/35 border border-[#7c5a2d] text-[#f5e3fa] leading-relaxed">
+                          【跑环使者】：少侠今日精力充沛，快来接取第{' '}
+                          <span className="text-[#ffe46e] font-bold">{paohuan.ring}</span>{' '}
+                          环差事！根据当前等级（Lv.{character.level}）派发除害或送信任务。
+                        </div>
+                      ) : (
+                        <div className="space-y-1.5 p-2 bg-black/35 border border-[#7c5a2d]">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-[#ffeaad]">
+                              本环差事：{paohuan.targetName}
+                            </span>
+                            <span className="text-[#8cff9c] font-bold">
+                              {paohuan.progress} / {paohuan.requiredCount}
+                            </span>
+                          </div>
+                          {paohuan.targetMapName && (
+                            <div className="text-[11px] text-[#a9d6ff]">
+                              目标地点：【{paohuan.targetMapName}】
+                              {paohuan.taskType === 'visit_map'
+                                ? '（移动到该地图即自动达成）'
+                                : '（击败对应怪物即可计数）'}
+                            </div>
+                          )}
+                          <div className="h-2 bg-black/60 border border-[#6e5028] overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-[#238a34] to-[#78ff8b]"
+                              style={{
+                                width: `${Math.min(
+                                  100,
+                                  (paohuan.progress / Math.max(1, paohuan.requiredCount)) * 100,
+                                )}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-black/30 p-1.5 border border-white/10 space-y-1">
+                        <div className="flex flex-wrap gap-1.5 text-[11px]">
+                          <span className="px-1.5 py-0.5 bg-[#381642] border border-[#966a35] text-[#ffe88a]">
+                            本环经验 +{paohuan.rewardExp}
+                          </span>
+                          <span className="px-1.5 py-0.5 bg-[#381642] border border-[#966a35] text-[#f0f0f0]">
+                            本环银两 +{paohuan.rewardSilver}
+                          </span>
+                        </div>
+                        {paohuan.bonusHint && (
+                          <div className="text-[11px] text-[#ffcf54] font-bold">
+                            ★ {paohuan.bonusHint}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-0.5">
+                        {paohuan.status !== 'idle' ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void runQuestAction(() => api.abandonPaohuan(realmId))
+                            }
+                            className="px-2.5 py-1 bg-[#3a1220] border border-[#a8516b] text-[#f5bfd0] text-[11px] hover:brightness-110"
+                          >
+                            放弃重来
+                          </button>
+                        ) : (
+                          <span className="text-[10.5px] text-[#cbb6cf]">
+                            第5环赠丹药/宝图 · 第10环必出金砖+神装
+                          </span>
+                        )}
+
+                        {paohuan.status === 'idle' && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void runQuestAction(() => api.acceptPaohuan(realmId))
+                            }
+                            className="hx-btn-gold px-4 py-1.5 text-xs"
+                          >
+                            接取第 {paohuan.ring} 环
+                          </button>
+                        )}
+                        {paohuan.status === 'ready' && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              void runQuestAction(() => api.claimPaohuan(realmId))
+                            }
+                            className="hx-btn-red px-4 py-1.5 text-xs ring-1 ring-[#ffe678]"
+                          >
+                            交付领奖！
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* NOTICE */}
           {panel === 'notice' && (
             <div className="space-y-2 text-xs leading-relaxed text-[#f7ebfa]">
-              <div className="text-[#ffe473] font-bold text-sm">幻想三国 · 经典版 v0.1</div>
+              <div className="text-[#ffe473] font-bold text-sm">幻想三国 · 经典版 v0.2</div>
               <p>· 1:1 复刻经典版美术切图与像素回合制战斗舞台。</p>
               <p>· 支持手机触控与电脑键盘快捷键（战斗中按 1~7 快速出招）。</p>
-              <p>· 当前已开放：许昌/郊外/长社/洛阳/城外/涿郡、三大职业技能、副将招募/招降/出战、药铺/客栈、实时区/派/商/世聊天、全服排行榜与 GM 面板。</p>
+              <p>· 已开放地图：许昌、许昌郊外、长社、洛阳、洛阳城外、虎牢关、官渡、赤壁、涿郡。</p>
+              <p>· 已开放玩法：三国 8 章主线剧情与剧情 BOSS、许昌经典 10 环跑环、自由加点与 5 项抗性、技能熟练度、5 槽经典装备与战马、藏宝图挖宝、招贤令寻访名将、副将洗髓/1~2转与专属技战斗。</p>
             </div>
           )}
 

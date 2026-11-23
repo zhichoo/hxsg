@@ -1,15 +1,18 @@
 import {
   calcRoleStats,
+  ENEMY_GROUPS,
   EQUIPMENT_TEMPLATES,
   expRequiredForLevel,
   GENERAL_TEMPLATES,
   getSkillMaxTargets,
   getSkillTier,
   ITEMS,
+  MAIN_QUESTS,
   MAPS,
   REALMS,
   ROLE_CLASS_META,
   SKILLS,
+  type CharacterQuestState,
   type CharacterView,
   type EquipmentBonusSummary,
   type EquipmentQuality,
@@ -18,6 +21,9 @@ import {
   type Gender,
   type GeneralView,
   type InventoryItemView,
+  type MainQuestView,
+  type PaohuanStateView,
+  type QuestObjectiveKind,
   type RankEntry,
   type RoleClass,
   type SkillProgressView,
@@ -374,6 +380,138 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     skills,
     generals,
     inventory,
+    quests: hydrateQuestState(row.id, row.level),
+  };
+}
+
+function calcPaohuanReward(level: number, ring: number) {
+  const safeRing = Math.max(1, Math.min(10, ring));
+  const exp = Math.round((75 + level * 42) * (1 + (safeRing - 1) * 0.22));
+  const silver = Math.round((95 + level * 36) * (1 + (safeRing - 1) * 0.25));
+  let bonusHint: string | undefined;
+  if (safeRing === 10) {
+    bonusHint = '第 10 环大满贯：必得金砖 +25、稀有道具与随机精良/极品装备！';
+  } else if (safeRing === 5) {
+    bonusHint = '第 5 环节点：额外加赠 副将经验丹 或 藏宝图 ×1！';
+  }
+  return { exp, silver, bonusHint };
+}
+
+function hydrateQuestState(characterId: number, level: number): CharacterQuestState {
+  const mainRows = db
+    .prepare('SELECT quest_id, status, progress FROM character_main_quests WHERE character_id = ?')
+    .all(characterId) as unknown as Array<{
+    quest_id: string;
+    status: string;
+    progress: number;
+  }>;
+  const rowMap = new Map(mainRows.map((r) => [r.quest_id, r]));
+
+  let prevClaimed = true;
+  let activeMainQuestId: string | null = null;
+
+  const mainQuests: MainQuestView[] = MAIN_QUESTS.map((def) => {
+    const rec = rowMap.get(def.questId);
+    let status: MainQuestView['status'];
+    let progress = rec?.progress ?? 0;
+
+    if (rec?.status === 'claimed') {
+      status = 'claimed';
+      progress = def.requiredCount;
+    } else if (rec?.status === 'active') {
+      status = progress >= def.requiredCount ? 'ready' : 'active';
+      activeMainQuestId = def.questId;
+      prevClaimed = false;
+    } else if (prevClaimed) {
+      status = 'available';
+      prevClaimed = false;
+    } else {
+      status = 'locked';
+    }
+
+    const equipTpl = def.rewards.equipTemplateId
+      ? EQUIPMENT_TEMPLATES[def.rewards.equipTemplateId]
+      : undefined;
+    const genTpl = def.rewards.generalTemplateId
+      ? GENERAL_TEMPLATES[def.rewards.generalTemplateId]
+      : undefined;
+    const itemTpl = def.rewards.item ? ITEMS[def.rewards.item.itemId] : undefined;
+
+    return {
+      questId: def.questId,
+      chapter: def.chapter,
+      title: def.title,
+      recLevel: def.recLevel,
+      npcName: def.npcName,
+      dialogue: def.dialogue,
+      objectiveKind: def.objectiveKind,
+      targetId: def.targetId,
+      targetName: def.targetName,
+      targetMapId: def.targetMapId,
+      targetMapName: MAPS[def.targetMapId]?.name ?? def.targetMapId,
+      requiredCount: def.requiredCount,
+      progress: Math.min(def.requiredCount, progress),
+      status,
+      rewards: {
+        exp: def.rewards.exp,
+        silver: def.rewards.silver,
+        gold: def.rewards.gold,
+        item:
+          def.rewards.item && itemTpl
+            ? { itemId: itemTpl.itemId, name: itemTpl.name, quantity: def.rewards.item.quantity }
+            : undefined,
+        equipTemplateId: equipTpl?.templateId,
+        equipName: equipTpl?.name,
+        generalTemplateId: genTpl?.templateId,
+        generalName: genTpl?.name,
+      },
+    };
+  });
+
+  const phRow = db
+    .prepare('SELECT * FROM character_paohuan WHERE character_id = ?')
+    .get(characterId) as
+    | {
+        ring: number;
+        completed_rounds: number;
+        status: 'idle' | 'active' | 'ready';
+        task_type: QuestObjectiveKind | null;
+        target_id: string | null;
+        target_name: string | null;
+        target_map_id: string | null;
+        required_count: number;
+        progress: number;
+      }
+    | undefined;
+
+  const ring = phRow?.ring ?? 1;
+  const reward = calcPaohuanReward(level, ring);
+  const status: PaohuanStateView['status'] = phRow
+    ? phRow.status === 'active' && phRow.progress >= phRow.required_count
+      ? 'ready'
+      : phRow.status
+    : 'idle';
+
+  const paohuan: PaohuanStateView = {
+    ring,
+    completedRounds: phRow?.completed_rounds ?? 0,
+    status,
+    taskType: phRow?.task_type ?? undefined,
+    targetId: phRow?.target_id ?? undefined,
+    targetName: phRow?.target_name ?? undefined,
+    targetMapId: phRow?.target_map_id ?? undefined,
+    targetMapName: phRow?.target_map_id ? (MAPS[phRow.target_map_id]?.name ?? phRow.target_map_id) : undefined,
+    requiredCount: phRow?.required_count ?? 1,
+    progress: phRow?.progress ?? 0,
+    rewardExp: reward.exp,
+    rewardSilver: reward.silver,
+    bonusHint: reward.bonusHint,
+  };
+
+  return {
+    mainQuests,
+    activeMainQuestId,
+    paohuan,
   };
 }
 
@@ -461,6 +599,12 @@ export function createCharacter(params: {
   addItem(characterId, 'baotu', 1);
   addItem(characterId, 'jingyandan', 1);
   addItem(characterId, 'xisuidan', 1);
+
+  // Auto-accept Chapter 1 main quest for new characters
+  db.prepare(
+    `INSERT OR IGNORE INTO character_main_quests (character_id, quest_id, status, progress, updated_at)
+     VALUES (?, 'main_01', 'active', 0, ?)`,
+  ).run(characterId, now);
 
   return getCharacterById(characterId)!;
 }
@@ -608,7 +752,377 @@ export function moveCharacter(characterId: number, targetMapId: string): Charact
     Date.now(),
     characterId,
   );
+  recordQuestMapVisit(characterId, targetMapId);
   return getCharacterById(characterId)!;
+}
+
+export function acceptMainQuest(
+  characterId: number,
+  questId?: string,
+): { character: CharacterView; message: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const nextQuest = questId
+    ? ch.quests.mainQuests.find((q) => q.questId === questId)
+    : ch.quests.mainQuests.find((q) => q.status === 'available');
+  if (!nextQuest || nextQuest.status !== 'available') {
+    throw new Error('当前没有可接取的主线任务');
+  }
+  const initProgress =
+    nextQuest.objectiveKind === 'visit_map' && ch.mapId === nextQuest.targetMapId
+      ? nextQuest.requiredCount
+      : 0;
+  db.prepare(
+    `INSERT OR REPLACE INTO character_main_quests (character_id, quest_id, status, progress, updated_at)
+     VALUES (?, ?, 'active', ?, ?)`,
+  ).run(characterId, nextQuest.questId, initProgress, Date.now());
+  return {
+    character: getCharacterById(characterId)!,
+    message: `已接取主线【第${nextQuest.chapter}章 · ${nextQuest.title}】！`,
+  };
+}
+
+export function claimMainQuest(
+  characterId: number,
+  questId?: string,
+): { character: CharacterView; message: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const target = questId
+    ? ch.quests.mainQuests.find((q) => q.questId === questId)
+    : ch.quests.mainQuests.find((q) => q.status === 'ready');
+  if (!target || target.status !== 'ready') {
+    throw new Error('该主线任务尚未达成条件');
+  }
+  const def = MAIN_QUESTS.find((q) => q.questId === target.questId);
+  if (!def) throw new Error('任务配置不存在');
+
+  db.prepare(
+    `UPDATE character_main_quests SET status = 'claimed', progress = ?, updated_at = ?
+     WHERE character_id = ? AND quest_id = ?`,
+  ).run(def.requiredCount, Date.now(), characterId, def.questId);
+
+  const rewardParts: string[] = [`经验+${def.rewards.exp}`, `银两+${def.rewards.silver}`];
+  applyExpAndSilver(characterId, def.rewards.exp, def.rewards.silver);
+
+  if (def.rewards.gold && def.rewards.gold > 0) {
+    db.prepare('UPDATE characters SET gold = gold + ?, updated_at = ? WHERE id = ?').run(
+      def.rewards.gold,
+      Date.now(),
+      characterId,
+    );
+    rewardParts.push(`金砖+${def.rewards.gold}`);
+  }
+  if (def.rewards.item) {
+    addItem(characterId, def.rewards.item.itemId, def.rewards.item.quantity);
+    const itName = ITEMS[def.rewards.item.itemId]?.name ?? def.rewards.item.itemId;
+    rewardParts.push(`${itName}×${def.rewards.item.quantity}`);
+  }
+  if (def.rewards.equipTemplateId && EQUIPMENT_TEMPLATES[def.rewards.equipTemplateId]) {
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const eq = grantEquipmentToCharacter(characterId, def.rewards.equipTemplateId, false);
+      rewardParts.push(`装备【${eq.name}】`);
+    } else {
+      db.prepare('UPDATE characters SET silver = silver + 500 WHERE id = ?').run(characterId);
+      rewardParts.push('装备栏满折现银两+500');
+    }
+  }
+  if (def.rewards.generalTemplateId && GENERAL_TEMPLATES[def.rewards.generalTemplateId]) {
+    const latest = getCharacterById(characterId)!;
+    if (latest.generals.length < 12) {
+      const g = grantGeneralToCharacter(characterId, def.rewards.generalTemplateId, Math.max(1, latest.level));
+      rewardParts.push(`副将【${g.name}】`);
+    } else {
+      addItem(characterId, 'jiangling', 1);
+      rewardParts.push('副将栏满改赠【招贤令】×1');
+    }
+  }
+
+  return {
+    character: getCharacterById(characterId)!,
+    message: `完成主线【${def.title}】！获得 ${rewardParts.join('、')}`,
+  };
+}
+
+export function acceptPaohuan(characterId: number): { character: CharacterView; message: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const ph = ch.quests.paohuan;
+  if (ph.status === 'active' || ph.status === 'ready') {
+    throw new Error('当前已有进行中的跑环任务');
+  }
+
+  const ring = ph.ring;
+  const doVisit = ring < 10 && Math.random() < 0.32;
+  let taskType: QuestObjectiveKind;
+  let targetId: string;
+  let targetName: string;
+  let targetMapId: string;
+  let requiredCount = 1;
+
+  if (doVisit) {
+    const visitPool = ['zhuojun', 'luoyang', 'xuchang_jiao', 'changshe'].filter((m) => m !== ch.mapId);
+    targetMapId = visitPool[Math.floor(Math.random() * visitPool.length)] ?? 'zhuojun';
+    taskType = 'visit_map';
+    targetId = targetMapId;
+    targetName = `火速送信至【${MAPS[targetMapId]?.name ?? targetMapId}】`;
+    requiredCount = 1;
+  } else {
+    let killPool: string[];
+    if (ch.level < 5) {
+      killPool = ['xuchang_dipi', 'xuchang_shibing'];
+    } else if (ch.level < 10) {
+      killPool = ['changshe_daoshi'];
+    } else if (ch.level < 14) {
+      killPool = ['luoyang_weidui', 'hulao_xiliang'];
+    } else if (ch.level < 18) {
+      killPool = ['hulao_xiliang', 'guandu_yuanjun'];
+    } else {
+      killPool = ['guandu_yuanjun', 'chibi_shuijun'];
+    }
+    const groupId = killPool[Math.floor(Math.random() * killPool.length)];
+    const grp = ENEMY_GROUPS[groupId] ?? ENEMY_GROUPS.xuchang_dipi;
+    taskType = 'kill';
+    targetId = grp.id;
+    targetName = `剿灭【${grp.name}】`;
+    targetMapId = grp.mapId;
+    requiredCount = ring === 10 || Math.random() < 0.45 ? 2 : 1;
+  }
+
+  db.prepare(
+    `INSERT INTO character_paohuan (
+      character_id, ring, completed_rounds, status, task_type, target_id, target_name, target_map_id, required_count, progress, updated_at
+    ) VALUES (?, ?, ?, 'active', ?, ?, ?, ?, ?, 0, ?)
+    ON CONFLICT(character_id) DO UPDATE SET
+      status = 'active',
+      task_type = excluded.task_type,
+      target_id = excluded.target_id,
+      target_name = excluded.target_name,
+      target_map_id = excluded.target_map_id,
+      required_count = excluded.required_count,
+      progress = 0,
+      updated_at = excluded.updated_at`,
+  ).run(
+    characterId,
+    ring,
+    ph.completedRounds,
+    taskType,
+    targetId,
+    targetName,
+    targetMapId,
+    requiredCount,
+    Date.now(),
+  );
+
+  return {
+    character: getCharacterById(characterId)!,
+    message: `已接取跑环第 ${ring}/10 环：${targetName}${taskType === 'kill' ? ` ×${requiredCount}` : ''}！`,
+  };
+}
+
+export function claimPaohuan(characterId: number): { character: CharacterView; message: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const ph = ch.quests.paohuan;
+  if (ph.status !== 'ready') {
+    throw new Error('当前跑环任务尚未完成');
+  }
+
+  const ring = ph.ring;
+  const reward = calcPaohuanReward(ch.level, ring);
+  const parts: string[] = [`经验+${reward.exp}`, `银两+${reward.silver}`];
+
+  applyExpAndSilver(characterId, reward.exp, reward.silver);
+
+  if (ring === 5) {
+    const bonusItem = Math.random() < 0.5 ? 'jingyandan' : 'baotu';
+    addItem(characterId, bonusItem, 1);
+    parts.push(`第5环礼【${ITEMS[bonusItem].name}】×1`);
+  }
+
+  let nextRing = ring + 1;
+  let nextRounds = ph.completedRounds;
+
+  if (ring >= 10) {
+    nextRing = 1;
+    nextRounds += 1;
+    db.prepare('UPDATE characters SET gold = gold + 25, updated_at = ? WHERE id = ?').run(
+      Date.now(),
+      characterId,
+    );
+    parts.push('金砖+25');
+    const r = Math.random();
+    const rareItem = r < 0.4 ? 'jiangling' : r < 0.75 ? 'xisuidan' : 'baotu';
+    addItem(characterId, rareItem, 1);
+    parts.push(`【${ITEMS[rareItem].name}】×1`);
+
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const equipPool =
+        ch.level >= 10
+          ? ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma']
+          : ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
+      const picked = equipPool[Math.floor(Math.random() * equipPool.length)];
+      const eq = grantEquipmentToCharacter(characterId, picked, true);
+      parts.push(`装备【${eq.name}】`);
+    }
+  }
+
+  db.prepare(
+    `UPDATE character_paohuan
+     SET ring = ?, completed_rounds = ?, status = 'idle',
+         task_type = NULL, target_id = NULL, target_name = NULL, target_map_id = NULL,
+         required_count = 1, progress = 0, updated_at = ?
+     WHERE character_id = ?`,
+  ).run(nextRing, nextRounds, Date.now(), characterId);
+
+  return {
+    character: getCharacterById(characterId)!,
+    message:
+      ring >= 10
+        ? `🎉 跑环十环大满贯！获得 ${parts.join('、')}`
+        : `完成跑环第 ${ring}/10 环！获得 ${parts.join('、')}`,
+  };
+}
+
+export function abandonPaohuan(characterId: number): { character: CharacterView; message: string } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  db.prepare(
+    `UPDATE character_paohuan
+     SET ring = 1, status = 'idle',
+         task_type = NULL, target_id = NULL, target_name = NULL, target_map_id = NULL,
+         required_count = 1, progress = 0, updated_at = ?
+     WHERE character_id = ?`,
+  ).run(Date.now(), characterId);
+  return {
+    character: getCharacterById(characterId)!,
+    message: '已放弃当前跑环，环数已重置为第 1 环',
+  };
+}
+
+export function recordQuestBattleVictory(characterId: number, enemyGroupId: string): string[] {
+  const updates: string[] = [];
+  const now = Date.now();
+
+  // 1. Main quest kill progress
+  const activeMain = db
+    .prepare(
+      `SELECT id, quest_id, progress FROM character_main_quests
+       WHERE character_id = ? AND status = 'active'`,
+    )
+    .all(characterId) as unknown as Array<{ id: number; quest_id: string; progress: number }>;
+
+  for (const row of activeMain) {
+    const def = MAIN_QUESTS.find((q) => q.questId === row.quest_id);
+    if (
+      def &&
+      def.objectiveKind === 'kill' &&
+      def.targetId === enemyGroupId &&
+      row.progress < def.requiredCount
+    ) {
+      const next = Math.min(def.requiredCount, row.progress + 1);
+      db.prepare('UPDATE character_main_quests SET progress = ?, updated_at = ? WHERE id = ?').run(
+        next,
+        now,
+        row.id,
+      );
+      updates.push(
+        `主线【${def.title}】(${next}/${def.requiredCount})${next >= def.requiredCount ? ' 已达成，可领奖！' : ''}`,
+      );
+    }
+  }
+
+  // 2. Paohuan kill progress
+  const ph = db
+    .prepare(
+      `SELECT ring, status, task_type, target_id, target_name, required_count, progress
+       FROM character_paohuan WHERE character_id = ?`,
+    )
+    .get(characterId) as
+    | {
+        ring: number;
+        status: string;
+        task_type: string | null;
+        target_id: string | null;
+        target_name: string | null;
+        required_count: number;
+        progress: number;
+      }
+    | undefined;
+
+  if (
+    ph &&
+    ph.status === 'active' &&
+    ph.task_type === 'kill' &&
+    ph.target_id === enemyGroupId &&
+    ph.progress < ph.required_count
+  ) {
+    const next = Math.min(ph.required_count, ph.progress + 1);
+    const nextStatus = next >= ph.required_count ? 'ready' : 'active';
+    db.prepare(
+      'UPDATE character_paohuan SET progress = ?, status = ?, updated_at = ? WHERE character_id = ?',
+    ).run(next, nextStatus, now, characterId);
+    updates.push(
+      `跑环第 ${ph.ring} 环 (${next}/${ph.required_count})${nextStatus === 'ready' ? ' 已完成，可交环领奖！' : ''}`,
+    );
+  }
+
+  return updates;
+}
+
+export function recordQuestMapVisit(characterId: number, mapId: string): void {
+  const now = Date.now();
+  const activeMain = db
+    .prepare(
+      `SELECT id, quest_id, progress FROM character_main_quests
+       WHERE character_id = ? AND status = 'active'`,
+    )
+    .all(characterId) as unknown as Array<{ id: number; quest_id: string; progress: number }>;
+
+  for (const row of activeMain) {
+    const def = MAIN_QUESTS.find((q) => q.questId === row.quest_id);
+    if (
+      def &&
+      def.objectiveKind === 'visit_map' &&
+      def.targetId === mapId &&
+      row.progress < def.requiredCount
+    ) {
+      db.prepare('UPDATE character_main_quests SET progress = ?, updated_at = ? WHERE id = ?').run(
+        def.requiredCount,
+        now,
+        row.id,
+      );
+    }
+  }
+
+  const ph = db
+    .prepare(
+      `SELECT status, task_type, target_id, required_count, progress
+       FROM character_paohuan WHERE character_id = ?`,
+    )
+    .get(characterId) as
+    | {
+        status: string;
+        task_type: string | null;
+        target_id: string | null;
+        required_count: number;
+        progress: number;
+      }
+    | undefined;
+
+  if (
+    ph &&
+    ph.status === 'active' &&
+    ph.task_type === 'visit_map' &&
+    ph.target_id === mapId &&
+    ph.progress < ph.required_count
+  ) {
+    db.prepare(
+      `UPDATE character_paohuan SET progress = ?, status = 'ready', updated_at = ? WHERE character_id = ?`,
+    ).run(ph.required_count, now, characterId);
+  }
 }
 
 export function restAtInn(characterId: number): CharacterView {

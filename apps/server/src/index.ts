@@ -14,10 +14,15 @@ import {
 } from './battleEngine.js';
 import { dbPath } from './db.js';
 import {
+  abandonPaohuan,
+  acceptMainQuest,
+  acceptPaohuan,
   allocateCharacterResist,
   allocateCharacterStats,
   buyEquipment,
   buyShopItem,
+  claimMainQuest,
+  claimPaohuan,
   createCharacter,
   digTreasureMap,
   dismissGeneral,
@@ -395,6 +400,46 @@ app.post('/api/battle/action', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return performBattleAction(current.id, body);
+});
+
+app.post('/api/quests/main/accept', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; questId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return acceptMainQuest(current.id, body.questId);
+});
+
+app.post('/api/quests/main/claim', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; questId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return claimMainQuest(current.id, body.questId);
+});
+
+app.post('/api/quests/paohuan/accept', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return acceptPaohuan(current.id);
+});
+
+app.post('/api/quests/paohuan/claim', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return claimPaohuan(current.id);
+});
+
+app.post('/api/quests/paohuan/abandon', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return abandonPaohuan(current.id);
 });
 
 app.post('/api/gm/grant', async (req) => {

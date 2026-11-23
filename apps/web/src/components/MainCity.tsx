@@ -51,7 +51,39 @@ export function MainCity({
     (slot) => character.generals.find((g) => g.slot === slot) ?? null,
   );
 
+  const mainQuests = character.quests?.mainQuests ?? [];
+  const currentMainQuest =
+    mainQuests.find((q) => q.status === 'ready') ??
+    mainQuests.find((q) => q.status === 'active') ??
+    mainQuests.find((q) => q.status === 'available') ??
+    null;
+  const paohuan = character.quests?.paohuan;
+
+  const questTargetMaps = new Set<string>();
+  if (currentMainQuest && currentMainQuest.status === 'active') {
+    questTargetMaps.add(currentMainQuest.targetMapId);
+  }
+  if (paohuan && paohuan.status === 'active' && paohuan.targetMapId) {
+    questTargetMaps.add(paohuan.targetMapId);
+  }
+
   const handleNpcClick = (npc: MapNpc) => {
+    if (npc.id === 'npc_main') {
+      onOpenPanel('quests');
+      return;
+    }
+    if (npc.id === 'npc_paohuan') {
+      onOpenPanel('paohuan');
+      return;
+    }
+    if (
+      npc.id === 'npc_taoyuan' &&
+      currentMainQuest?.questId === 'main_02' &&
+      (currentMainQuest.status === 'active' || currentMainQuest.status === 'ready')
+    ) {
+      onOpenPanel('quests');
+      return;
+    }
     if (npc.action === 'battle' && npc.enemyGroupId) {
       onStartBattle(npc.enemyGroupId);
     } else if (npc.dialogue) {
@@ -59,19 +91,50 @@ export function MainCity({
     }
   };
 
+  const getNpcBadge = (npc: MapNpc): { label: string; cls: string } => {
+    if (npc.id === 'npc_main') {
+      if (currentMainQuest?.status === 'ready') {
+        return { label: '可交!', cls: 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92] animate-pulse' };
+      }
+      if (currentMainQuest?.status === 'available') {
+        return { label: '可接!', cls: 'bg-[#b87612] text-[#fff6cc] border-[#ffe16b]' };
+      }
+      return { label: '主线', cls: 'bg-[#1a4dc2] text-white border-[#8bc0ff]' };
+    }
+    if (npc.id === 'npc_paohuan') {
+      if (paohuan?.status === 'ready') {
+        return { label: '交环!', cls: 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92] animate-pulse' };
+      }
+      if (paohuan?.status === 'idle') {
+        return { label: `第${paohuan.ring}环`, cls: 'bg-[#b87612] text-[#fff6cc] border-[#ffe16b]' };
+      }
+      return { label: '跑环', cls: 'bg-[#1a4dc2] text-white border-[#8bc0ff]' };
+    }
+    if (npc.action === 'battle') {
+      const isBoss = npc.enemyGroupId?.startsWith('boss_');
+      return {
+        label: isBoss ? 'BOSS' : '战斗',
+        cls: isBoss
+          ? 'bg-[#8f0d46] text-[#ffe999] border-[#ff8bc8]'
+          : 'bg-[#c41b1b] text-[#fff2a6] border-[#f4c653]',
+      };
+    }
+    return { label: '对话', cls: 'bg-[#1a4dc2] text-white border-[#8bc0ff]' };
+  };
+
   const funcItems: Array<{ label: string; onClick: () => void }> = [
     { label: '状态', onClick: () => onOpenPanel('status') },
     { label: '物品', onClick: () => onOpenPanel('items') },
     { label: '副将', onClick: () => onOpenPanel('generals') },
-    { label: '组队', onClick: () => onNotify('组队副本将在第二阶段上线，当前可先带3名副将出战！') },
+    { label: '任务', onClick: () => onOpenPanel('quests') },
+    { label: '跑环', onClick: () => onOpenPanel('paohuan') },
     { label: '排行', onClick: () => onOpenPanel('rank') },
-    { label: '好友', onClick: () => onNotify(`同图在线 ${mapPlayers.length} 人，可在下方频道直接聊天`) },
-    { label: '邮件', onClick: () => onNotify('暂无新飞鸽传书') },
-    { label: '任务', onClick: () => setDialogue({ npc: '新手指引', text: '1. 去许昌郊外打地痞群升级并尝试「招降」；2. 攒够银两去招贤馆招关平/赵云；3. 5级后前往长社挑战黄巾道士！' }) },
+    { label: '招贤', onClick: () => onOpenPanel('tavern') },
+    { label: '铁匠', onClick: () => onOpenPanel('blacksmith') },
+    { label: '药铺', onClick: () => onOpenPanel('shop') },
+    { label: '客栈', onClick: () => onRestInn() },
     { label: '擂台', onClick: () => onStartBattle('xuchang_shibing') },
-    { label: '教派', onClick: () => onNotify('教派系统将在第三阶段开放') },
-    { label: '训练', onClick: () => onRestInn() },
-    { label: '宝库', onClick: () => onOpenPanel('shop') },
+    { label: '好友', onClick: () => onNotify(`同图在线 ${mapPlayers.length} 人，可在下方频道直接聊天`) },
     { label: '公告', onClick: () => onOpenPanel('notice') },
     { label: 'GM', onClick: () => onOpenPanel('gm') },
     { label: '登出', onClick: onLogout },
@@ -234,25 +297,26 @@ export function MainCity({
           <div className="flex-1 overflow-y-auto hx-scroll space-y-1.5 pr-0.5">
             {tab === 'npc' && (
               <>
-                {currentMap.npcs.map((npc) => (
-                  <button
-                    key={npc.id}
-                    type="button"
-                    onClick={() => handleNpcClick(npc)}
-                    className="w-full flex items-center justify-between px-2 py-1.5 bg-[#2a0a07]/80 border-b border-[#a67c32]/40 hover:bg-[#5e1b13] transition text-left"
-                  >
-                    <span className="text-[14px] font-bold text-white hx-stroke">{npc.name}</span>
-                    <span
-                      className={`px-2 py-0.5 text-[11px] font-bold border ${
-                        npc.action === 'battle'
-                          ? 'bg-[#c41b1b] text-[#fff2a6] border-[#f4c653]'
-                          : 'bg-[#1a4dc2] text-white border-[#8bc0ff]'
-                      }`}
+                {currentMap.npcs.map((npc) => {
+                  const badge = getNpcBadge(npc);
+                  return (
+                    <button
+                      key={npc.id}
+                      type="button"
+                      onClick={() => handleNpcClick(npc)}
+                      className="w-full flex items-center justify-between px-2 py-1.5 bg-[#2a0a07]/80 border-b border-[#a67c32]/40 hover:bg-[#5e1b13] transition text-left"
                     >
-                      {npc.action === 'battle' ? '战斗' : '对话'}
-                    </span>
-                  </button>
-                ))}
+                      <span className="text-[14px] font-bold text-white hx-stroke truncate pr-1">
+                        {npc.name}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 text-[11px] font-bold border shrink-0 ${badge.cls}`}
+                      >
+                        {badge.label}
+                      </span>
+                    </button>
+                  );
+                })}
                 {currentMap.npcs.length === 0 && (
                   <div className="text-xs text-[#e0c4a0] py-4 text-center">此处空无一人</div>
                 )}
@@ -314,8 +378,13 @@ export function MainCity({
                           className="w-6 h-5 object-contain pixelated"
                         />
                         <div className="text-left">
-                          <div className="text-[13px] font-bold text-white hx-stroke">
-                            {target.name}
+                          <div className="text-[13px] font-bold text-white hx-stroke flex items-center gap-1">
+                            <span>{target.name}</span>
+                            {questTargetMaps.has(nid) && (
+                              <span className="text-[9.5px] px-1 bg-[#1b6e29] border border-[#7cff90] text-[#e6ffe9] font-bold">
+                                任务
+                              </span>
+                            )}
                           </div>
                           <div className="text-[10px] text-[#e0c29e]">{target.region}</div>
                         </div>
@@ -364,6 +433,42 @@ export function MainCity({
           </div>
         </div>
       </div>
+
+      {/* 2.5 Compact Quest Tracker Strip */}
+      {(currentMainQuest || (paohuan && paohuan.status !== 'idle')) && (
+        <button
+          type="button"
+          onClick={() =>
+            onOpenPanel(
+              paohuan?.status === 'ready'
+                ? 'paohuan'
+                : currentMainQuest?.status === 'ready'
+                  ? 'quests'
+                  : currentMainQuest
+                    ? 'quests'
+                    : 'paohuan',
+            )
+          }
+          className="h-[25px] px-2 bg-[#1c0c1f] border-b border-[#7c5c28] flex items-center justify-between gap-2 text-[11px] hover:bg-[#2c1232] shrink-0 text-left"
+        >
+          <span className="truncate text-[#ffe899] font-bold">
+            {paohuan?.status === 'ready'
+              ? `📜 跑环第${paohuan.ring}环已完成！点击领奖`
+              : currentMainQuest
+                ? currentMainQuest.status === 'ready'
+                  ? `📜 主线【${currentMainQuest.title}】已达成！点击领奖`
+                  : currentMainQuest.status === 'available'
+                    ? `📜 新主线可接：第${currentMainQuest.chapter}章·${currentMainQuest.title}`
+                    : `📜 主线·${currentMainQuest.title}：${currentMainQuest.targetMapName}·${currentMainQuest.targetName} (${currentMainQuest.progress}/${currentMainQuest.requiredCount})`
+                : paohuan && paohuan.status === 'active'
+                  ? `📜 跑环第${paohuan.ring}环：${paohuan.targetName} (${paohuan.progress}/${paohuan.requiredCount})`
+                  : ''}
+          </span>
+          <span className="text-[10px] px-1.5 bg-[#4a1a52] border border-[#c89b3c] text-[#fff0ad] shrink-0">
+            任务卷轴
+          </span>
+        </button>
+      )}
 
       {/* 3. Classic 4 Main Tab Buttons using REAL official PNGs (gnk_1..4 & gnk_s1..4) */}
       <div className="grid grid-cols-4 bg-black border-b border-[#5c4820] shrink-0">

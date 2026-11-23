@@ -87,6 +87,59 @@ export interface SkillProgressView {
   desc: string;
 }
 
+export type QuestObjectiveKind = 'kill' | 'visit_map';
+
+export interface QuestRewardView {
+  exp: number;
+  silver: number;
+  gold?: number;
+  item?: { itemId: string; name: string; quantity: number };
+  equipTemplateId?: string;
+  equipName?: string;
+  generalTemplateId?: string;
+  generalName?: string;
+}
+
+export interface MainQuestView {
+  questId: string;
+  chapter: number;
+  title: string;
+  recLevel: number;
+  npcName: string;
+  dialogue: string;
+  objectiveKind: QuestObjectiveKind;
+  targetId: string;
+  targetName: string;
+  targetMapId: string;
+  targetMapName: string;
+  requiredCount: number;
+  progress: number;
+  status: 'locked' | 'available' | 'active' | 'ready' | 'claimed';
+  rewards: QuestRewardView;
+}
+
+export interface PaohuanStateView {
+  ring: number; // 1..10
+  completedRounds: number;
+  status: 'idle' | 'active' | 'ready';
+  taskType?: QuestObjectiveKind;
+  targetId?: string;
+  targetName?: string;
+  targetMapId?: string;
+  targetMapName?: string;
+  requiredCount: number;
+  progress: number;
+  rewardExp: number;
+  rewardSilver: number;
+  bonusHint?: string;
+}
+
+export interface CharacterQuestState {
+  mainQuests: MainQuestView[];
+  activeMainQuestId: string | null;
+  paohuan: PaohuanStateView;
+}
+
 export interface CharacterView {
   id: number;
   accountId: number;
@@ -116,6 +169,7 @@ export interface CharacterView {
   skills: SkillProgressView[];
   generals: GeneralView[];
   inventory: InventoryItemView[];
+  quests: CharacterQuestState;
 }
 
 export interface GeneralView {
@@ -280,6 +334,7 @@ export interface BattleState {
     droppedItem?: { itemId: string; name: string; quantity: number };
     droppedEquipment?: { name: string; quality: EquipmentQuality; slot: EquipmentSlot };
     capturedGeneral?: { name: string; growth: number };
+    questUpdates?: string[];
   };
 }
 

@@ -291,6 +291,51 @@ export const api = {
         body: payload,
       },
     ),
+  acceptMainQuest: (realmId: string, questId?: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'questsMainAccept',
+      '/api/quests/main/accept',
+      {
+        method: 'POST',
+        body: { realmId, questId },
+      },
+    ),
+  claimMainQuest: (realmId: string, questId?: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'questsMainClaim',
+      '/api/quests/main/claim',
+      {
+        method: 'POST',
+        body: { realmId, questId },
+      },
+    ),
+  acceptPaohuan: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'questsPaohuanAccept',
+      '/api/quests/paohuan/accept',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
+  claimPaohuan: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'questsPaohuanClaim',
+      '/api/quests/paohuan/claim',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
+  abandonPaohuan: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'questsPaohuanAbandon',
+      '/api/quests/paohuan/abandon',
+      {
+        method: 'POST',
+        body: { realmId },
+      },
+    ),
   gmGrant: (payload: {
     realmId: string;
     passcode?: string;

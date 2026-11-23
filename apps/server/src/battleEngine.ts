@@ -23,6 +23,7 @@ import {
   getCharacterById,
   grantEquipmentToCharacter,
   grantGeneralToCharacter,
+  recordQuestBattleVictory,
 } from './gameService.js';
 
 interface ActiveBattle extends BattleState {
@@ -693,9 +694,20 @@ export function performBattleAction(
       | undefined;
     if (Math.random() < 0.28 && ch.equipment.length < 30) {
       let pool: string[];
-      if (battle.enemyGroupId === 'luoyang_weidui') {
+      if (
+        battle.enemyGroupId === 'luoyang_weidui' ||
+        battle.enemyGroupId === 'hulao_xiliang' ||
+        battle.enemyGroupId === 'boss_huaxiong' ||
+        battle.enemyGroupId === 'guandu_yuanjun' ||
+        battle.enemyGroupId === 'boss_yanliang' ||
+        battle.enemyGroupId === 'chibi_shuijun' ||
+        battle.enemyGroupId === 'boss_caojun'
+      ) {
         pool = ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma', 'chitu_ma', 'longdan_qiang'];
-      } else if (battle.enemyGroupId === 'changshe_daoshi') {
+      } else if (
+        battle.enemyGroupId === 'changshe_daoshi' ||
+        battle.enemyGroupId === 'boss_zhangjiao'
+      ) {
         pool = ['bailian_dao', 'tiekui', 'suozi_jia', 'tayun_lv', 'wuzhui_ma'];
       } else {
         pool = ['qingtong_qiang', 'taomu_jian', 'bujin_mao', 'cubu_yi', 'caoxie', 'huangbiao_ma'];
@@ -705,6 +717,7 @@ export function performBattleAction(
       droppedEquipment = { name: eq.name, quality: eq.quality, slot: eq.slot };
     }
 
+    const questUpdates = recordQuestBattleVictory(characterId, battle.enemyGroupId);
     const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
     updatedChar = res.character;
     battle.rewards = {
@@ -715,6 +728,7 @@ export function performBattleAction(
       droppedItem,
       droppedEquipment,
       capturedGeneral,
+      questUpdates: questUpdates.length > 0 ? questUpdates : undefined,
     };
     activeBattles.delete(characterId);
   } else if (playersLeft === 0) {
