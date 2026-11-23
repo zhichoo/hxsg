@@ -35,8 +35,8 @@ const TITLES: Record<SubPanelType, string> = {
   rank: '排行榜',
   shop: '回春药铺',
   tavern: '许昌招贤馆',
-  notice: '亲友服公告',
-  gm: '亲友服 GM 面板',
+  notice: '游戏公告',
+  gm: 'GM 管理面板',
 };
 
 export function SubPanels({
@@ -96,8 +96,8 @@ export function SubPanels({
           {panel === 'status' && (
             <div className="space-y-3">
               <div className="flex items-center gap-3 p-2.5 bg-[#26072c]/90 border border-[#b78f3c]">
-                <div className="w-[74px] h-[82px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
-                  <PixelSprite spriteKey={mySprite} scale={1.7} />
+                <div className="w-[90px] h-[90px] bg-[#2a3820] border border-[#e0b84f] flex items-center justify-center shrink-0">
+                  <PixelSprite spriteKey={mySprite} scale={2} />
                 </div>
                 <div className="space-y-0.5 text-xs">
                   <div className="text-base font-bold text-[#ffe678]">{character.name}</div>
@@ -372,11 +372,11 @@ export function SubPanels({
 
           {/* NOTICE */}
           {panel === 'notice' && (
-            <div className="space-y-2 text-xs leading-relaxed text-[#f2def7]">
-              <div className="text-[#ffe473] font-bold text-sm">幻想三国 · 经典版 亲友怀旧服 v0.1</div>
-              <p>· 本服 1:1 复刻汉风经典版（A版）美术切图与像素回合制战斗舞台。</p>
-              <p>· 支持手机浏览器触控与电脑键盘快捷键（战斗中按 1~7 快速出招）。</p>
-              <p>· 第一阶段已开放：许昌/郊外/长社/洛阳/城外/涿郡、三大职业技能、副将招募/招降/出战、药铺/客栈、实时区/派/商/世聊天、全服排行榜与亲友 GM 面板。</p>
+            <div className="space-y-2 text-xs leading-relaxed text-[#f7ebfa]">
+              <div className="text-[#ffe473] font-bold text-sm">幻想三国 · 经典版 v0.1</div>
+              <p>· 1:1 复刻经典版美术切图与像素回合制战斗舞台。</p>
+              <p>· 支持手机触控与电脑键盘快捷键（战斗中按 1~7 快速出招）。</p>
+              <p>· 当前已开放：许昌/郊外/长社/洛阳/城外/涿郡、三大职业技能、副将招募/招降/出战、药铺/客栈、实时区/派/商/世聊天、全服排行榜与 GM 面板。</p>
             </div>
           )}
 
@@ -386,7 +386,7 @@ export function SubPanels({
               <div className="p-2 bg-[#2a082f] border border-[#d9aa42] text-[#ffea88]">
                 {character.isGm
                   ? '当前账号为【服主GM】，可直接免口令操作。'
-                  : '普通账号需输入亲友服 GM 口令（默认 hxsg888）方可使用。'}
+                  : '普通账号需输入 GM 口令（默认 hxsg888）方可使用。'}
               </div>
               {!character.isGm && (
                 <input

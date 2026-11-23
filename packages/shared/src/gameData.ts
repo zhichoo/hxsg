@@ -4,8 +4,8 @@ export const REALMS: ServerRealm[] = [
   {
     id: 'dingjunshan',
     name: '定军山',
-    tag: '亲友主服',
-    desc: '经典怀旧亲友一区 · 1:1 冒泡老味道',
+    tag: '推荐',
+    desc: '经典怀旧一区 · 1:1 复古三国世界',
     bgImg: 'f_bg2_5.png',
     onlineBase: 1,
   },
@@ -386,7 +386,7 @@ export const MAPS: Record<string, MapNode> = {
         id: 'npc_main',
         name: '主线任务',
         action: 'talk',
-        dialogue: '欢迎回到汉风幻想三国经典亲友服！先去许昌郊外清理地痞群，再到招贤馆招募得力副将吧。',
+        dialogue: '欢迎来到幻想三国经典版！先去许昌郊外清理地痞群，再到招贤馆招募得力副将吧。',
       },
       {
         id: 'npc_paohuan',
@@ -405,7 +405,7 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'inn', name: '许昌客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '回春药铺', desc: '购买金创药、大还丹、凝神散', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'tavern', name: '招贤馆', desc: '招募关平、黄月英、于吉、赵云', icon: 'ss_m_3.png', kind: 'tavern' },
-      { id: 'gm', name: '亲友GM驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
+      { id: 'gm', name: '福利驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
     ],
   },
   xuchang_jiao: {
@@ -513,7 +513,7 @@ export const MAPS: Record<string, MapNode> = {
         id: 'npc_taoyuan',
         name: '桃园老丈',
         action: 'talk',
-        dialogue: '当年刘关张在此结拜，今日各位亲友齐聚于此，何不把酒言欢！',
+        dialogue: '当年刘关张在此结拜，今日各位豪杰齐聚于此，何不把酒言欢！',
       },
     ],
     facilities: [

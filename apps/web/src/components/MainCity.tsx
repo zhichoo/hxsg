@@ -117,39 +117,41 @@ export function MainCity({
         {/* LEFT COLUMN */}
         <div className="p-1.5 flex flex-col gap-1.5 bg-gradient-to-b from-[#3f140d] to-[#230906] border-r border-[#805c22]">
           {/* Avatar + Name + HP/MP bars over real sc_bg_1.png */}
-          <div className="relative w-full aspect-[482/230]">
-            <img
-              src="/assets/hxsg/sc_bg_1.png"
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover pixelated"
-            />
-            {/* Character Portrait inside golden circle */}
-            <img
-              src={`/assets/hxsg/portraits/${character.portrait}`}
-              alt={character.name}
-              className="absolute left-[9%] top-[24%] w-[21%] aspect-square rounded-full object-cover pixelated border border-[#734a13]"
-            />
-            {/* Name */}
-            <div className="absolute left-[36%] top-[4%] right-[4%] text-[12px] font-bold text-[#fff8cc] truncate hx-stroke">
-              {character.name}
-            </div>
-            {/* HP Bar */}
-            <div className="absolute left-[35%] top-[33%] right-[5%] h-[13%] bg-[#1a0505] overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#b81212] via-[#ef2c1a] to-[#ff6742]"
-                style={{ width: `${hpPct}%` }}
+          <div className="flex flex-col">
+            <div className="relative w-full aspect-[482/205]">
+              <img
+                src="/assets/hxsg/sc_bg_1.png"
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover object-top pixelated"
               />
-            </div>
-            {/* MP Bar */}
-            <div className="absolute left-[35%] top-[53%] right-[5%] h-[13%] bg-[#061029] overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-[#1131a8] via-[#2262e8] to-[#5aa8ff]"
-                style={{ width: `${mpPct}%` }}
+              {/* Character Portrait inside golden circle */}
+              <img
+                src={`/assets/hxsg/portraits/${character.portrait}`}
+                alt={character.name}
+                className="absolute left-[9%] top-[27%] w-[21%] aspect-square rounded-full object-cover pixelated border border-[#734a13]"
               />
+              {/* Name */}
+              <div className="absolute left-[35%] top-[5%] right-[4%] text-[13px] font-bold text-[#fff8cc] truncate hx-stroke">
+                {character.name}
+              </div>
+              {/* HP Bar */}
+              <div className="absolute left-[35%] top-[37%] right-[5%] h-[14%] bg-[#1a0505] overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#b81212] via-[#ef2c1a] to-[#ff6742]"
+                  style={{ width: `${hpPct}%` }}
+                />
+              </div>
+              {/* MP Bar */}
+              <div className="absolute left-[35%] top-[59%] right-[5%] h-[14%] bg-[#061029] overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#1131a8] via-[#2262e8] to-[#5aa8ff]"
+                  style={{ width: `${mpPct}%` }}
+                />
+              </div>
             </div>
-            <div className="absolute left-[4%] right-[4%] bottom-[2%] flex justify-between text-[10px] text-[#e7cf9e] px-0.5">
-              <span>血:{character.hp}/{character.maxHp}</span>
-              <span>精:{character.mp}/{character.maxMp}</span>
+            <div className="flex justify-between text-[11px] font-bold text-[#fff2d1] bg-[#160705] border border-[#6e4c1d] px-1.5 py-0.5">
+              <span>血 {character.hp}/{character.maxHp}</span>
+              <span className="text-[#99d0ff]">精 {character.mp}/{character.maxMp}</span>
             </div>
           </div>
 
@@ -195,9 +197,9 @@ export function MainCity({
                 <button
                   type="button"
                   onClick={() => onOpenPanel('gm')}
-                  className="px-1.5 py-0.5 bg-[#d61a1a] text-white text-[10px] font-bold border border-[#ffb870] hover:brightness-110"
+                  className="px-1.5 py-0.5 bg-[#c71a1a] text-white text-[11px] font-bold border border-[#ffb870] hover:brightness-110"
                 >
-                  亲友GM
+                  福利GM
                 </button>
               </div>
             </div>
@@ -338,9 +340,9 @@ export function MainCity({
             )}
           </div>
 
-          {/* Bottom-right Classic Blue-Outlined Section Title (matches classic_3.jpg) */}
+          {/* Bottom-right Classic Blue-Outlined Section Title */}
           <div className="pt-1 flex items-center justify-between border-t border-[#a97d2e]/40">
-            <span className="text-[10px] text-[#d8b48b] truncate max-w-[115px]">
+            <span className="text-[11px] text-[#f7e4c8] truncate max-w-[125px]">
               {currentMap.desc}
             </span>
             <span className="text-[20px] font-black italic tracking-wider text-[#f3faff] hx-stroke-blue shrink-0 leading-none">

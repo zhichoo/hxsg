@@ -217,7 +217,7 @@ app.post('/api/gm/grant', async (req) => {
     announce?: string;
   };
   if (!auth.isGm && body.passcode !== GM_PASSCODE) {
-    throw new Error('无 GM 权限（需服主账号或输入亲友服 GM 口令）');
+    throw new Error('无 GM 权限（需服主账号或输入 GM 口令）');
   }
   const realmId = body.realmId || 'dingjunshan';
   const current = getCharacterByAccountAndRealm(auth.accountId, realmId);

@@ -64,8 +64,8 @@ export function ServerSelect({
             选择分区
           </span>
         </div>
-        <div className="mt-1 text-[11px] text-[#9eb8ff] tracking-wide">
-          幻想三国 · 经典版 Web 亲友怀旧服
+        <div className="mt-1 text-[12px] text-[#bfd2ff] tracking-wide font-medium">
+          幻想三国 · 经典版 Web
         </div>
       </div>
 
@@ -180,8 +180,8 @@ export function ServerSelect({
                 className="w-full px-2.5 py-1.5 bg-[#030821] border border-[#516eb3] text-sm text-white placeholder-[#6980ba] focus:outline-none focus:border-[#ffd85c]"
               />
               <div className="flex items-center justify-between gap-2 pt-0.5">
-                <span className="text-[11px] text-[#8ea8e8]">
-                  {mode === 'register' ? '首个注册账号自动获得 GM 权限' : '亲友测试可直接点右侧注册'}
+                <span className="text-[11px] text-[#b4c8ff]">
+                  {mode === 'register' ? '首个注册账号自动获得 GM 权限' : '没有账号可点上方「快速注册」'}
                 </span>
                 <button
                   type="submit"

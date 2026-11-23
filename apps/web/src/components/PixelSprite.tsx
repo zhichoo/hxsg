@@ -9,11 +9,14 @@ interface PixelSpriteProps {
 
 export function PixelSprite({
   spriteKey,
-  scale = 2,
+  scale = 1,
   flipX = false,
   className = '',
 }: PixelSpriteProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const intScale = Math.max(1, Math.round(scale));
+  const logicalW = 44 * intScale;
+  const logicalH = 44 * intScale;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -40,7 +43,7 @@ export function PixelSprite({
       if (cancelled) return;
       const draw = (now: number) => {
         if (cancelled) return;
-        const bob = Math.sin(now / 260) > 0 ? 1 : 0;
+        const bob = Math.sin(now / 260) > 0 ? intScale : 0;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.imageSmoothingEnabled = false;
         ctx.save();
@@ -48,8 +51,8 @@ export function PixelSprite({
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
-        const cx = canvas.width / 2;
-        const baseY = canvas.height - 6;
+        const cx = Math.floor(canvas.width / 2);
+        const baseY = canvas.height - 4 * intScale;
 
         if (legs) {
           const fw = Math.floor(legs.width / 2);
@@ -59,10 +62,10 @@ export function PixelSprite({
             0,
             fw,
             legs.height,
-            Math.round(cx - (fw * scale) / 2),
-            Math.round(baseY - legs.height * scale),
-            fw * scale,
-            legs.height * scale,
+            cx - Math.floor((fw * intScale) / 2),
+            baseY - legs.height * intScale,
+            fw * intScale,
+            legs.height * intScale,
           );
         }
         if (body) {
@@ -73,10 +76,10 @@ export function PixelSprite({
             0,
             bw,
             body.height,
-            Math.round(cx - (bw * scale) / 2),
-            Math.round(baseY - (body.height + 6) * scale + bob),
-            bw * scale,
-            body.height * scale,
+            cx - Math.floor((bw * intScale) / 2),
+            baseY - (body.height + 6) * intScale + bob,
+            bw * intScale,
+            body.height * intScale,
           );
         }
         if (head) {
@@ -86,10 +89,10 @@ export function PixelSprite({
             0,
             head.width,
             head.height,
-            Math.round(cx - (head.width * scale) / 2),
-            Math.round(baseY - (head.height + 17) * scale + bob),
-            head.width * scale,
-            head.height * scale,
+            cx - Math.floor((head.width * intScale) / 2),
+            baseY - (head.height + 16) * intScale + bob,
+            head.width * intScale,
+            head.height * intScale,
           );
         }
         ctx.restore();
@@ -102,13 +105,14 @@ export function PixelSprite({
       cancelled = true;
       cancelAnimationFrame(rafId);
     };
-  }, [spriteKey, scale, flipX]);
+  }, [spriteKey, intScale, flipX]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={Math.round(40 * scale)}
-      height={Math.round(44 * scale)}
+      width={logicalW}
+      height={logicalH}
+      style={{ width: logicalW, height: logicalH }}
       className={`pixelated ${className}`}
     />
   );

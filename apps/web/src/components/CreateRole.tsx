@@ -88,7 +88,7 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
             {/* Gender & Live Pixel Preview */}
             <div className="p-3 bg-[#1d0524]/85 border border-[#a58038] flex items-center gap-3">
               <div className="flex flex-col items-center shrink-0">
-                <div className="w-[84px] h-[92px] bg-[#2a3820] border-2 border-[#d4a946] flex items-center justify-center">
+                <div className="w-[92px] h-[92px] bg-[#2a3820] border-2 border-[#d4a946] flex items-center justify-center">
                   <PixelSprite spriteKey={spriteKey} scale={2} />
                 </div>
                 <div className="flex gap-1 mt-1.5">

@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  --hx-font: "SimSun", "NSimSun", "Songti SC", "PingFang SC", "Microsoft YaHei", monospace;
+  --hx-font: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
 }
 
 html,
@@ -12,7 +12,8 @@ body,
   padding: 0;
   background: #09090d;
   font-family: var(--hx-font);
-  -webkit-font-smoothing: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .pixelated {
@@ -20,31 +21,31 @@ body,
   image-rendering: crisp-edges;
 }
 
-/* Classic Version A outlined retro text */
+/* Crisp readable dark outline for text over retro textures */
 .hx-stroke {
   text-shadow:
     -1px -1px 0 #000,
      1px -1px 0 #000,
     -1px  1px 0 #000,
      1px  1px 0 #000,
-     0px  1px 2px rgba(0, 0, 0, 0.85);
+     0px  1px 3px rgba(0, 0, 0, 0.95);
 }
 
 .hx-stroke-blue {
   text-shadow:
-    -1px -1px 0 #0b3aa4,
-     1px -1px 0 #0b3aa4,
-    -1px  1px 0 #0b3aa4,
-     1px  1px 0 #0b3aa4,
-     0px  2px 0 #072268;
+    -1.5px -1.5px 0 #0b3aa4,
+     1.5px -1.5px 0 #0b3aa4,
+    -1.5px  1.5px 0 #0b3aa4,
+     1.5px  1.5px 0 #0b3aa4,
+     0px    2px   0 #072268;
 }
 
-/* Classic Version A golden-yellow gradient button (进入游戏 / 返回 / 翻页) */
+/* Classic Version A golden-yellow gradient button (进入游戏 / 返回) */
 .hx-btn-gold {
-  background: linear-gradient(180deg, #fff59a 0%, #f4c623 50%, #c9860c 100%);
-  border: 2px solid #91240a;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(0, 0, 0, 0.7);
-  color: #1c1000;
+  background: linear-gradient(180deg, #fff394 0%, #f0be1f 52%, #c27e08 100%);
+  border: 2px solid #8a2209;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 3px rgba(0, 0, 0, 0.75);
+  color: #1c0f00;
   font-weight: 800;
 }
 .hx-btn-gold:active {
@@ -54,24 +55,24 @@ body,
 
 /* Classic Version A red-gold button (自动 / 战斗) */
 .hx-btn-red {
-  background: linear-gradient(180deg, #f05a4f 0%, #b81e18 55%, #750c09 100%);
+  background: linear-gradient(180deg, #e84e43 0%, #b31b15 55%, #720b08 100%);
   border: 2px solid #e7c268;
-  box-shadow: inset 0 1px 0 rgba(255, 220, 180, 0.45), 0 1px 3px rgba(0, 0, 0, 0.8);
-  color: #fff5c8;
+  box-shadow: inset 0 1px 0 rgba(255, 220, 180, 0.45), 0 1px 3px rgba(0, 0, 0, 0.85);
+  color: #fff8d6;
   font-weight: 800;
 }
 
-/* Classic Version A yellow diamond / pennant button in Function grid */
+/* Classic Version A warm-gold pennant button in Function grid (high contrast) */
 .hx-pennant {
-  background: linear-gradient(135deg, #d79c18 0%, #ffe657 52%, #a8680a 100%);
+  background: linear-gradient(135deg, #a8680a 0%, #dda118 52%, #8c4f06 100%);
   clip-path: polygon(0% 10%, 72% 0%, 100% 50%, 72% 100%, 0% 90%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow: inset 0 1px 0 rgba(255, 240, 175, 0.45);
 }
 
 /* Classic Version A battle diamond button */
 .hx-diamond-btn {
-  width: 52px;
-  height: 52px;
+  width: 50px;
+  height: 50px;
   position: relative;
   display: flex;
   align-items: center;
@@ -84,12 +85,12 @@ body,
   position: absolute;
   inset: 7px;
   transform: rotate(45deg);
-  background: linear-gradient(135deg, #fff48a 0%, #f5b91a 50%, #c86f07 100%);
-  border: 2px solid #6b2406;
-  box-shadow: inset 0 0 0 1px rgba(255, 248, 190, 0.8), 0 2px 4px rgba(0, 0, 0, 0.75);
+  background: linear-gradient(135deg, #fce26a 0%, #df9b11 52%, #a65405 100%);
+  border: 2px solid #591c04;
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 185, 0.75), 0 2px 4px rgba(0, 0, 0, 0.8);
 }
 .hx-diamond-btn.active::before {
-  background: linear-gradient(135deg, #ff9966 0%, #e53218 55%, #8f0f08 100%);
+  background: linear-gradient(135deg, #ff8855 0%, #d82b14 55%, #820c06 100%);
   border-color: #ffe87c;
 }
 .hx-diamond-btn:hover::before {
@@ -98,34 +99,35 @@ body,
 .hx-diamond-btn > span {
   position: relative;
   z-index: 1;
-  font-size: 16px;
-  font-weight: 900;
+  font-size: 14px;
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: -1px;
   color: #ffffff;
   text-shadow:
-    -1.5px -1.5px 0 #2a0d00,
-     1.5px -1.5px 0 #2a0d00,
-    -1.5px  1.5px 0 #2a0d00,
-     1.5px  1.5px 0 #2a0d00;
+    -1.5px -1.5px 0 #1f0900,
+     1.5px -1.5px 0 #1f0900,
+    -1.5px  1.5px 0 #1f0900,
+     1.5px  1.5px 0 #1f0900,
+     0px    1px   2px #000;
 }
 .hx-diamond-btn.primary > span {
-  color: #ffef6b;
+  color: #fff68a;
   text-shadow:
-    -1.5px -1.5px 0 #8a0600,
-     1.5px -1.5px 0 #8a0600,
-    -1.5px  1.5px 0 #8a0600,
-     1.5px  1.5px 0 #8a0600;
+    -1.5px -1.5px 0 #7a0500,
+     1.5px -1.5px 0 #7a0500,
+    -1.5px  1.5px 0 #7a0500,
+     1.5px  1.5px 0 #7a0500,
+     0px    1px   2px #000;
 }
 
 /* Deep purple cloud-framed subpanel (classic_5.jpg) */
 .hx-purple-bg {
   background: repeating-linear-gradient(
     180deg,
-    #3d1244 0px,
-    #3d1244 28px,
-    #4c1d54 28px,
-    #4c1d54 56px
+    #350e3c 0px,
+    #350e3c 28px,
+    #43174b 28px,
+    #43174b 56px
   );
 }
 
@@ -136,7 +138,6 @@ body,
   background-size: 18px 36px;
 }
 
-/* Scrollbar styling */
 .hx-scroll::-webkit-scrollbar {
   width: 4px;
 }

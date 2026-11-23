@@ -75,25 +75,25 @@ export function ChatDock({ messages, onSend, compact = false }: ChatDockProps) {
       >
         <div
           ref={listRef}
-          className="flex-1 overflow-y-auto hx-scroll px-2 py-1 space-y-0.5 text-[12.5px] leading-[1.35] bg-[#1f292b]/75"
+          className="flex-1 overflow-y-auto hx-scroll px-2 py-1 space-y-0.5 text-[13px] leading-[1.4] bg-[#141c1e]/88"
         >
           {filtered.length === 0 ? (
-            <div className="text-[#9bb0b3] text-xs py-1">
-              欢迎来到亲友怀旧服，点右侧「发言」和兄弟们吹水吧！
+            <div className="text-[#c8dcde] text-xs py-1">
+              欢迎进入三国世界，点右侧「发言」发送聊天消息。
             </div>
           ) : (
             filtered.slice(-30).map((m) => (
               <div key={m.id} className="break-words">
-                <span className="text-[#aebec0] mr-1">{m.time}</span>
+                <span className="text-[#c2d4d6] mr-1">{m.time}</span>
                 {m.isSystem ? (
                   <>
-                    <span className="text-[#ff5959] font-bold">【系统】</span>
-                    <span className="text-[#ffea84]">{m.content}</span>
+                    <span className="text-[#ff6b6b] font-bold">【系统】</span>
+                    <span className="text-[#ffec8b]">{m.content}</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-[#d7f554] font-bold">{m.senderName}:</span>
-                    <span className="text-[#f2f6f7] ml-0.5">{m.content}</span>
+                    <span className="text-[#dcff63] font-bold">{m.senderName}:</span>
+                    <span className="text-[#ffffff] ml-1">{m.content}</span>
                   </>
                 )}
               </div>
