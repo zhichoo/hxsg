@@ -175,11 +175,11 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       position: idx,
       statuses: [],
       resist: {
-        phys: Math.min(25, e.level * 1),
-        chaos: Math.min(35, e.level * 2),
-        seal: Math.min(35, e.level * 2),
-        trap: Math.min(30, e.level * 2),
-        magic: Math.min(25, e.level * 1),
+        phys: Math.min(40, e.level * 1.5),
+        chaos: Math.min(45, e.level * 2),
+        seal: Math.min(45, e.level * 2),
+        trap: Math.min(40, e.level * 2),
+        magic: Math.min(40, e.level * 1.5),
       },
     });
   });
@@ -699,15 +699,15 @@ export function performBattleAction(
         .map((id) => SKILLS.find((s) => s.id === id))
         .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
-      // Smart heal if general learned 妙手回春 and any ally is wounded (< 65% HP)
+      // Smart heal if general learned 妙手回春 and any ally is wounded (< 55% HP)
       const healSkill = knownSkills.find((s) => s.kind === 'heal' && actor.mp >= s.mpCost);
       const injuredAlly = [...alivePlayers]
-        .filter((p) => p.hp / p.maxHp < 0.65)
+        .filter((p) => p.hp / p.maxHp < 0.55)
         .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
 
-      if (healSkill && injuredAlly) {
+      if (healSkill && injuredAlly && Math.random() < 0.72) {
         actor.mp -= healSkill.mpCost;
-        const healVal = Math.max(30, Math.round(injuredAlly.maxHp * 0.42));
+        const healVal = Math.max(30, Math.round(injuredAlly.maxHp * 0.34));
         injuredAlly.hp = Math.min(injuredAlly.maxHp, injuredAlly.hp + healVal);
         logs.push({
           actorUid: actor.uid,
@@ -809,52 +809,85 @@ export function performBattleAction(
         message: `副将 ${actor.name} 出击 ${target.name}，造成 ${damage} 点伤害！`,
       });
     } else {
-      // Enemy AI
+      // Enemy AI (smarter high-level & boss AOE / control / heavy cleave)
       const target = alivePlayers[Math.floor(Math.random() * alivePlayers.length)];
-      const useControl = actor.roleClass === 'wenren' && actor.mp >= 20 && Math.random() < 0.35;
-      const useSkill = actor.roleClass !== 'wushi' && actor.mp >= 20 && Math.random() < 0.35;
+      const isStrong = actor.level >= 10 || battle.enemyGroupId.startsWith('boss_') || battle.enemyGroupId.startsWith('tower_');
+      const useControl = actor.roleClass === 'wenren' && actor.mp >= 20 && Math.random() < (isStrong ? 0.42 : 0.32);
+      const useMagic = actor.roleClass !== 'wushi' && actor.mp >= 20 && Math.random() < (isStrong ? 0.48 : 0.35);
+      const useWushiSkill = actor.roleClass === 'wushi' && isStrong && actor.mp >= 20 && Math.random() < 0.38;
 
       if (useControl) {
         actor.mp -= 20;
         const kind: ControlKind = Math.random() < 0.5 ? 'chaos' : 'seal';
-        const resPct = target.resist?.[kind] ?? 0;
-        const hit = Math.random() < calcControlChance(0.55, 0, resPct);
-        if (hit) applyStatus(target, kind, 2);
+        const ctrlTargets = isStrong && alivePlayers.length >= 2 ? alivePlayers.slice(0, 2) : [target];
+        const targetResults = ctrlTargets.map((t) => {
+          const resPct = t.resist?.[kind] ?? 0;
+          const hit = Math.random() < calcControlChance(isStrong ? 0.62 : 0.52, 0, resPct);
+          if (hit) applyStatus(t, kind, 2);
+          return {
+            uid: t.uid,
+            name: t.name,
+            damage: 0,
+            appliedStatus: hit ? kind : undefined,
+            resisted: !hit,
+          };
+        });
+        const hitNames = targetResults.filter((r) => r.appliedStatus).map((r) => r.name);
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'skill',
           skillName: kind === 'chaos' ? '妖言惑众' : '定身咒',
           effect: kind,
-          targets: [
-            {
-              uid: target.uid,
-              name: target.name,
-              damage: 0,
-              appliedStatus: hit ? kind : undefined,
-              resisted: !hit,
-            },
-          ],
-          message: hit
-            ? `${actor.name} 施展诡计，使 ${target.name} 陷入【${STATUS_LABEL[kind]}】！`
-            : `${actor.name} 企图控制 ${target.name}，被高抗性成功抵挡！`,
+          targets: targetResults,
+          message:
+            hitNames.length > 0
+              ? `${actor.name} 施展诡计，使 ${hitNames.join('、')} 陷入【${STATUS_LABEL[kind]}】！`
+              : `${actor.name} 企图控场，被我军高抗性成功抵挡！`,
         });
-      } else if (useSkill) {
+      } else if (useMagic) {
         actor.mp -= 20;
-        const { damage, crit } = calcDamage(actor.atk, target.defending, 1.25, {
-          resistPct: target.resist?.magic,
-          targetTrapped: hasStatus(target, 'trap'),
+        const aoeTargets = isStrong && alivePlayers.length >= 2 ? alivePlayers.slice(0, 3) : [target];
+        const mult = aoeTargets.length > 1 ? 0.92 : 1.28;
+        const targetResults = aoeTargets.map((t) => {
+          const { damage, crit } = calcDamage(actor.atk, t.defending, mult, {
+            resistPct: t.resist?.magic,
+            targetTrapped: hasStatus(t, 'trap'),
+          });
+          t.hp = Math.max(0, t.hp - damage);
+          if (t.hp === 0) t.alive = false;
+          return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
         });
-        target.hp = Math.max(0, target.hp - damage);
-        if (target.hp === 0) target.alive = false;
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'skill',
-          skillName: actor.roleClass === 'yiren' ? '落雷术' : '火计',
+          skillName: actor.roleClass === 'yiren' ? (aoeTargets.length > 1 ? '天雷破阵' : '落雷术') : '烈火焚营',
           effect: actor.roleClass === 'yiren' ? 'lei' : 'fire',
-          targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
-          message: `${actor.name} 施放法术袭击 ${target.name}，造成 ${damage} 点伤害！`,
+          targets: targetResults,
+          message: `${actor.name} 施放法术袭击 ${aoeTargets.length > 1 ? `我军 ${aoeTargets.length} 人` : target.name}，共造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害！`,
+        });
+      } else if (useWushiSkill) {
+        actor.mp -= 20;
+        const cleaveTargets = alivePlayers.length >= 2 && Math.random() < 0.5 ? alivePlayers.slice(0, 2) : [target];
+        const mult = cleaveTargets.length > 1 ? 0.96 : 1.38;
+        const targetResults = cleaveTargets.map((t) => {
+          const { damage, crit } = calcDamage(actor.atk, t.defending, mult, {
+            resistPct: t.resist?.phys,
+            targetTrapped: hasStatus(t, 'trap'),
+          });
+          t.hp = Math.max(0, t.hp - damage);
+          if (t.hp === 0) t.alive = false;
+          return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
+        });
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'skill',
+          skillName: cleaveTargets.length > 1 ? '横扫千军' : '破军重斩',
+          effect: cleaveTargets.length > 1 ? 'fg' : 'slash',
+          targets: targetResults,
+          message: `${actor.name} 发动猛技【${cleaveTargets.length > 1 ? '横扫千军' : '破军重斩'}】，共造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害！`,
         });
       } else {
         if (hasStatus(actor, 'trap')) {

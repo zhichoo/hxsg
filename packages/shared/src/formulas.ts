@@ -41,7 +41,7 @@ export function calcRoleStats(
   const intel = Math.max(0, alloc.int ?? 0);
   const agi = Math.max(0, alloc.agi ?? 0);
 
-  const hpGain = roleClass === 'wushi' ? 24 : roleClass === 'yiren' ? 18 : 16;
+  const hpGain = roleClass === 'wushi' ? 24 : roleClass === 'yiren' ? 19 : 18;
   const mpGain = roleClass === 'wushi' ? 8 : 20;
   const atkGain = roleClass === 'wushi' ? 6 : roleClass === 'yiren' ? 5 : 4;
   const defGain = roleClass === 'wushi' ? 3 : 2;

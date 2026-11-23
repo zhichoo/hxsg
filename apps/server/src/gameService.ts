@@ -459,7 +459,7 @@ function buildTowerState(highestFloor: number, sweepDate: string | null) {
 function calcPaohuanReward(level: number, ring: number) {
   const safeRing = Math.max(1, Math.min(10, ring));
   const exp = Math.round((75 + level * 42) * (1 + (safeRing - 1) * 0.22));
-  const silver = Math.round((95 + level * 36) * (1 + (safeRing - 1) * 0.25));
+  const silver = Math.round((55 + level * 20) * (1 + (safeRing - 1) * 0.2));
   let bonusHint: string | undefined;
   if (safeRing === 10) {
     bonusHint = '第 10 环大满贯：必得金砖 +25、稀有道具与随机精良/极品装备！';
