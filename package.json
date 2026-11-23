@@ -1,0 +1,17 @@
+{
+  "name": "hxsg-classic-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets:sync": "node scripts/sync-assets.mjs",
+    "dev": "pnpm --parallel --filter @hxsg/server --filter @hxsg/web dev",
+    "dev:server": "pnpm --filter @hxsg/server dev",
+    "dev:web": "pnpm --filter @hxsg/web dev",
+    "build": "pnpm --filter @hxsg/shared build && pnpm --filter @hxsg/server build && pnpm --filter @hxsg/web build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

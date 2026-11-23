@@ -1,0 +1,430 @@
+import { useState } from 'react';
+import {
+  MAPS,
+  ROLE_CLASS_META,
+  type CharacterView,
+  type ChatChannel,
+  type ChatMessage,
+  type MapNpc,
+  type OnlinePlayerSummary,
+} from '@hxsg/shared';
+import { ChatDock } from './ChatDock';
+import type { SubPanelType } from './SubPanels';
+
+type MainTab = 'npc' | 'facility' | 'move' | 'func';
+
+interface MainCityProps {
+  character: CharacterView;
+  mapPlayers: OnlinePlayerSummary[];
+  messages: ChatMessage[];
+  onSendChat: (channel: ChatChannel, content: string) => void;
+  onMoveMap: (mapId: string) => void;
+  onStartBattle: (enemyGroupId: string) => void;
+  onRestInn: () => void;
+  onOpenPanel: (panel: SubPanelType) => void;
+  onLogout: () => void;
+  onNotify: (msg: string) => void;
+}
+
+export function MainCity({
+  character,
+  mapPlayers,
+  messages,
+  onSendChat,
+  onMoveMap,
+  onStartBattle,
+  onRestInn,
+  onOpenPanel,
+  onLogout,
+  onNotify,
+}: MainCityProps) {
+  const [tab, setTab] = useState<MainTab>('npc');
+  const [dialogue, setDialogue] = useState<{ npc: string; text: string } | null>(null);
+
+  const currentMap = MAPS[character.mapId] ?? MAPS.xuchang;
+  const classMeta = ROLE_CLASS_META[character.roleClass];
+  const hpPct = Math.max(0, Math.min(100, (character.hp / character.maxHp) * 100));
+  const mpPct = Math.max(0, Math.min(100, (character.mp / character.maxMp) * 100));
+  const expRemain = Math.max(0, character.expToNext - character.exp);
+  const activeGenerals = [0, 1, 2].map(
+    (slot) => character.generals.find((g) => g.slot === slot) ?? null,
+  );
+
+  const handleNpcClick = (npc: MapNpc) => {
+    if (npc.action === 'battle' && npc.enemyGroupId) {
+      onStartBattle(npc.enemyGroupId);
+    } else if (npc.dialogue) {
+      setDialogue({ npc: npc.name, text: npc.dialogue });
+    }
+  };
+
+  const funcItems: Array<{ label: string; onClick: () => void }> = [
+    { label: '状态', onClick: () => onOpenPanel('status') },
+    { label: '物品', onClick: () => onOpenPanel('items') },
+    { label: '副将', onClick: () => onOpenPanel('generals') },
+    { label: '组队', onClick: () => onNotify('组队副本将在第二阶段上线，当前可先带3名副将出战！') },
+    { label: '排行', onClick: () => onOpenPanel('rank') },
+    { label: '好友', onClick: () => onNotify(`同图在线 ${mapPlayers.length} 人，可在下方频道直接聊天`) },
+    { label: '邮件', onClick: () => onNotify('暂无新飞鸽传书') },
+    { label: '任务', onClick: () => setDialogue({ npc: '新手指引', text: '1. 去许昌郊外打地痞群升级并尝试「招降」；2. 攒够银两去招贤馆招关平/赵云；3. 5级后前往长社挑战黄巾道士！' }) },
+    { label: '擂台', onClick: () => onStartBattle('xuchang_shibing') },
+    { label: '教派', onClick: () => onNotify('教派系统将在第三阶段开放') },
+    { label: '训练', onClick: () => onRestInn() },
+    { label: '宝库', onClick: () => onOpenPanel('shop') },
+    { label: '公告', onClick: () => onOpenPanel('notice') },
+    { label: 'GM', onClick: () => onOpenPanel('gm') },
+    { label: '登出', onClick: onLogout },
+  ];
+
+  const tabAssets: Array<{ id: MainTab; normal: string; active: string; alt: string }> = [
+    { id: 'npc', normal: 'gnk_1.png', active: 'gnk_s1.png', alt: '人物' },
+    { id: 'facility', normal: 'gnk_2.png', active: 'gnk_s2.png', alt: '设施' },
+    { id: 'move', normal: 'gnk_3.png', active: 'gnk_s3.png', alt: '移动' },
+    { id: 'func', normal: 'gnk_4.png', active: 'gnk_s4.png', alt: '功能' },
+  ];
+
+  const rightTitleLabel: Record<MainTab, string> = {
+    npc: '人物',
+    facility: '设施',
+    move: '移动',
+    func: '功能',
+  };
+
+  return (
+    <div className="flex-1 flex flex-col bg-[#1b0c0c] overflow-hidden">
+      {/* 1. Top Classic Location Header (matches classic_3.jpg) */}
+      <div
+        className="relative h-[38px] flex items-center justify-center border-b border-[#4c6165] shrink-0"
+        style={{ backgroundImage: 'url(/assets/hxsg/tit_bg.png)', backgroundSize: 'cover' }}
+      >
+        <div className="absolute left-0 top-0 bottom-0 w-[96px] overflow-hidden border-r border-black/60">
+          <img
+            src={`/assets/hxsg/${currentMap.battleBg}_5.png`}
+            alt={currentMap.name}
+            className="w-full h-full object-cover pixelated opacity-90"
+          />
+        </div>
+        <span className="text-[17px] font-bold tracking-widest text-white hx-stroke">
+          {currentMap.name}
+        </span>
+        <span className="absolute right-2 text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80]">
+          {currentMap.recommendedLevel}
+        </span>
+      </div>
+
+      {/* 2. Main Split Panel: Left Hero Info + Right Function/NPC/Move/Facility */}
+      <div className="grid grid-cols-[44%_56%] bg-[#2d0c09] border-b border-[#5e3b1b] shrink-0">
+        {/* LEFT COLUMN */}
+        <div className="p-1.5 flex flex-col gap-1.5 bg-gradient-to-b from-[#3f140d] to-[#230906] border-r border-[#805c22]">
+          {/* Avatar + Name + HP/MP bars over real sc_bg_1.png */}
+          <div className="relative w-full aspect-[482/230]">
+            <img
+              src="/assets/hxsg/sc_bg_1.png"
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover pixelated"
+            />
+            {/* Character Portrait inside golden circle */}
+            <img
+              src={`/assets/hxsg/portraits/${character.portrait}`}
+              alt={character.name}
+              className="absolute left-[9%] top-[24%] w-[21%] aspect-square rounded-full object-cover pixelated border border-[#734a13]"
+            />
+            {/* Name */}
+            <div className="absolute left-[36%] top-[4%] right-[4%] text-[12px] font-bold text-[#fff8cc] truncate hx-stroke">
+              {character.name}
+            </div>
+            {/* HP Bar */}
+            <div className="absolute left-[35%] top-[33%] right-[5%] h-[13%] bg-[#1a0505] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#b81212] via-[#ef2c1a] to-[#ff6742]"
+                style={{ width: `${hpPct}%` }}
+              />
+            </div>
+            {/* MP Bar */}
+            <div className="absolute left-[35%] top-[53%] right-[5%] h-[13%] bg-[#061029] overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-[#1131a8] via-[#2262e8] to-[#5aa8ff]"
+                style={{ width: `${mpPct}%` }}
+              />
+            </div>
+            <div className="absolute left-[4%] right-[4%] bottom-[2%] flex justify-between text-[10px] text-[#e7cf9e] px-0.5">
+              <span>血:{character.hp}/{character.maxHp}</span>
+              <span>精:{character.mp}/{character.maxMp}</span>
+            </div>
+          </div>
+
+          {/* 3 General Slots using real sc_fjbg.png */}
+          <button
+            type="button"
+            onClick={() => onOpenPanel('generals')}
+            className="relative w-full aspect-[441/117] group"
+            title="点击管理出战副将"
+          >
+            <img
+              src="/assets/hxsg/sc_fjbg.png"
+              alt="副将槽位"
+              className="w-full h-full object-contain pixelated"
+            />
+            <div className="absolute inset-0 grid grid-cols-3 px-[10%] py-[12%] gap-2 items-center">
+              {activeGenerals.map((g, idx) => (
+                <div
+                  key={idx}
+                  className="w-full h-full flex items-center justify-center overflow-hidden"
+                >
+                  {g && (
+                    <img
+                      src={`/assets/hxsg/${g.spriteKey}_h.png`}
+                      alt={g.name}
+                      className="w-6 h-6 pixelated drop-shadow-[0_1px_1px_#000]"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </button>
+
+          {/* Black Gold-Bordered Character Stats Box (matches classic_3.jpg) */}
+          <div className="flex-1 bg-[#140d09] border-2 border-[#b9964e] p-1.5 text-[12px] leading-[1.45] flex flex-col justify-between">
+            <div>
+              <div className="text-white font-bold">
+                职业:{character.level}级{classMeta.label}
+              </div>
+              <div className="text-[#e8e8e8]">银:{character.silver}</div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[#ffe04b] font-bold">金:{character.gold}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenPanel('gm')}
+                  className="px-1.5 py-0.5 bg-[#d61a1a] text-white text-[10px] font-bold border border-[#ffb870] hover:brightness-110"
+                >
+                  亲友GM
+                </button>
+              </div>
+            </div>
+            <div className="pt-1 border-t border-white/15">
+              <div className="text-[#f0e6cc] text-[11px]">升级还需经验:</div>
+              <div className="text-center text-[#ffe678] font-bold text-[13px]">{expRemain}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN (sc_bg_5 dark crimson gold-corner frame) */}
+        <div
+          className="relative p-2 flex flex-col justify-between min-h-[246px] bg-[#4a120d]"
+          style={{
+            border: '2px solid #c99d3b',
+            boxShadow: 'inset 0 0 0 2px #2a0906',
+          }}
+        >
+          {/* Tab Content */}
+          <div className="flex-1 overflow-y-auto hx-scroll space-y-1.5 pr-0.5">
+            {tab === 'npc' && (
+              <>
+                {currentMap.npcs.map((npc) => (
+                  <button
+                    key={npc.id}
+                    type="button"
+                    onClick={() => handleNpcClick(npc)}
+                    className="w-full flex items-center justify-between px-2 py-1.5 bg-[#2a0a07]/80 border-b border-[#a67c32]/40 hover:bg-[#5e1b13] transition text-left"
+                  >
+                    <span className="text-[14px] font-bold text-white hx-stroke">{npc.name}</span>
+                    <span
+                      className={`px-2 py-0.5 text-[11px] font-bold border ${
+                        npc.action === 'battle'
+                          ? 'bg-[#c41b1b] text-[#fff2a6] border-[#f4c653]'
+                          : 'bg-[#1a4dc2] text-white border-[#8bc0ff]'
+                      }`}
+                    >
+                      {npc.action === 'battle' ? '战斗' : '对话'}
+                    </span>
+                  </button>
+                ))}
+                {currentMap.npcs.length === 0 && (
+                  <div className="text-xs text-[#e0c4a0] py-4 text-center">此处空无一人</div>
+                )}
+              </>
+            )}
+
+            {tab === 'facility' && (
+              <>
+                {currentMap.facilities.map((fac) => (
+                  <button
+                    key={fac.id}
+                    type="button"
+                    onClick={() => {
+                      if (fac.kind === 'inn') onRestInn();
+                      else if (fac.kind === 'pharmacy') onOpenPanel('shop');
+                      else if (fac.kind === 'tavern') onOpenPanel('tavern');
+                      else if (fac.kind === 'gm') onOpenPanel('gm');
+                    }}
+                    className="w-full flex items-center gap-2 px-1.5 py-1.5 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5b1d12] text-left"
+                  >
+                    <img
+                      src={`/assets/hxsg/${fac.icon}`}
+                      alt={fac.name}
+                      className="w-9 h-8 object-contain pixelated shrink-0"
+                    />
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-bold text-[#ffe67e] truncate">
+                        {fac.name}
+                      </div>
+                      <div className="text-[10.5px] text-[#e7cfbb] truncate">{fac.desc}</div>
+                    </div>
+                  </button>
+                ))}
+                {currentMap.facilities.length === 0 && (
+                  <div className="text-xs text-[#e0c4a0] py-5 text-center">
+                    野外荒郊暂无城池设施，可点「移动」回许昌或洛阳。
+                  </div>
+                )}
+              </>
+            )}
+
+            {tab === 'move' && (
+              <>
+                {currentMap.neighbors.map((nid) => {
+                  const target = MAPS[nid];
+                  if (!target) return null;
+                  return (
+                    <button
+                      key={nid}
+                      type="button"
+                      onClick={() => onMoveMap(nid)}
+                      className="w-full flex items-center justify-between px-2 py-1.5 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5c1e12]"
+                    >
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={`/assets/hxsg/${target.thumb}`}
+                          alt=""
+                          className="w-6 h-5 object-contain pixelated"
+                        />
+                        <div className="text-left">
+                          <div className="text-[13px] font-bold text-white hx-stroke">
+                            {target.name}
+                          </div>
+                          <div className="text-[10px] text-[#e0c29e]">{target.region}</div>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 border ${
+                          target.isSafe
+                            ? 'bg-[#1b4a26] border-[#6bd182] text-[#c8ffcf]'
+                            : 'bg-[#6b1a12] border-[#f0a050] text-[#ffe0a8]'
+                        }`}
+                      >
+                        {target.recommendedLevel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {tab === 'func' && (
+              <div className="grid grid-cols-3 gap-x-1 gap-y-2 pt-0.5">
+                {funcItems.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={item.onClick}
+                    className="hx-pennant h-[29px] flex items-center justify-center pr-2 hover:brightness-110 active:scale-95"
+                  >
+                    <span className="text-[13px] font-black text-white hx-stroke">
+                      {item.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Bottom-right Classic Blue-Outlined Section Title (matches classic_3.jpg) */}
+          <div className="pt-1 flex items-center justify-between border-t border-[#a97d2e]/40">
+            <span className="text-[10px] text-[#d8b48b] truncate max-w-[115px]">
+              {currentMap.desc}
+            </span>
+            <span className="text-[20px] font-black italic tracking-wider text-[#f3faff] hx-stroke-blue shrink-0 leading-none">
+              {rightTitleLabel[tab]}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Classic 4 Main Tab Buttons using REAL official PNGs (gnk_1..4 & gnk_s1..4) */}
+      <div className="grid grid-cols-4 bg-black border-b border-[#5c4820] shrink-0">
+        {tabAssets.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className="relative h-[46px] bg-black overflow-hidden active:brightness-90"
+            >
+              <img
+                src={`/assets/hxsg/${active ? t.active : t.normal}`}
+                alt={t.alt}
+                className="w-full h-full object-fill pixelated"
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 4. Same-Map Online Players Pixel Avatar Strip (matches classic_3.jpg) */}
+      <div className="h-[34px] px-2 bg-[#080708] border-b border-[#3c4d50] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          {mapPlayers.slice(0, 7).map((p) => (
+            <div
+              key={p.id}
+              title={`${p.name} (Lv.${p.level})`}
+              className="flex items-center gap-0.5 bg-[#1b191d] border border-[#5c4e32] px-1 py-0.5"
+            >
+              <img
+                src={`/assets/hxsg/${p.avatarSprite}`}
+                alt={p.name}
+                className="w-5 h-5 pixelated"
+              />
+            </div>
+          ))}
+          {mapPlayers.length === 0 && (
+            <span className="text-[11px] text-[#7c8a8c]">当前地图仅你一人</span>
+          )}
+        </div>
+        <span className="text-[12px] text-[#9eb6ff] font-bold shrink-0">
+          在线({mapPlayers.length})
+        </span>
+      </div>
+
+      {/* 5. Bottom Real-Time Chat Dock (区 派 商 世) */}
+      <ChatDock messages={messages} onSend={onSendChat} />
+
+      {/* NPC Dialogue Modal */}
+      {dialogue && (
+        <div
+          className="absolute inset-0 z-40 bg-black/70 flex items-center justify-center p-4"
+          onClick={() => setDialogue(null)}
+        >
+          <div
+            className="w-full max-w-[330px] bg-[#2e0c36] border-2 border-[#e0b850] p-3.5 shadow-2xl space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center text-[#ffe26b] font-bold text-base border-b border-[#9e7430] pb-1.5">
+              {dialogue.npc}
+            </div>
+            <p className="text-[13px] text-[#f5e7fa] leading-relaxed">{dialogue.text}</p>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={() => setDialogue(null)}
+                className="hx-btn-gold px-4 py-1 text-xs"
+              >
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
