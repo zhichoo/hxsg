@@ -301,7 +301,70 @@ export const ITEMS: Record<string, ItemTemplate> = {
     type: 'material',
     priceSilver: 260,
   },
+  book_lianji: {
+    itemId: 'book_lianji',
+    name: '《连环突刺》秘籍',
+    desc: '副将技能书：在副将营帐给副将打书，习得武士连击【连环突刺】。',
+    type: 'material',
+    priceSilver: 900,
+  },
+  book_psdh: {
+    itemId: 'book_psdh',
+    name: '《排山倒海》秘籍',
+    desc: '副将技能书：在副将营帐给副将打书，习得群攻绝技【排山倒海】。',
+    type: 'material',
+    priceSilver: 1200,
+  },
+  book_hunluan: {
+    itemId: 'book_hunluan',
+    name: '《离间计》兵书',
+    desc: '副将技能书：在副将营帐给副将打书，习得群体混乱【离间计】。',
+    type: 'material',
+    priceSilver: 1100,
+  },
+  book_fengyin: {
+    itemId: 'book_fengyin',
+    name: '《定身计》兵书',
+    desc: '副将技能书：在副将营帐给副将打书，习得强控封印【定身计】。',
+    type: 'material',
+    priceSilver: 1100,
+  },
+  book_wlhd: {
+    itemId: 'book_wlhd',
+    name: '《五雷轰顶》道书',
+    desc: '副将技能书：在副将营帐给副将打书，习得爆发雷法【五雷轰顶】。',
+    type: 'material',
+    priceSilver: 1100,
+  },
+  book_huigong: {
+    itemId: 'book_huigong',
+    name: '《妙手回春》医书',
+    desc: '副将技能书：副将在战斗中见主将或友军残血时自动施展【妙手回春】疗伤！',
+    type: 'material',
+    priceSilver: 1000,
+  },
 };
+
+export const GENERAL_SKILL_BOOKS: Record<string, string> = {
+  book_lianji: 'lianji',
+  book_psdh: 'psdh',
+  book_hunluan: 'hunluan',
+  book_fengyin: 'fengyin',
+  book_wlhd: 'wlhd',
+  book_huigong: 'huigong',
+};
+
+export function getGeneralIntimacyInfo(intimacy: number): {
+  title: string;
+  statPct: number;
+  resistBonus: number;
+} {
+  const val = Math.max(0, Math.min(100, Math.floor(intimacy)));
+  if (val >= 100) return { title: '生死之交', statPct: 15, resistBonus: 15 };
+  if (val >= 60) return { title: '莫逆之交', statPct: 8, resistBonus: 10 };
+  if (val >= 30) return { title: '同袍共战', statPct: 4, resistBonus: 5 };
+  return { title: '初识', statPct: 0, resistBonus: 0 };
+}
 
 export interface EquipmentTemplate {
   templateId: string;

@@ -3,6 +3,7 @@ import {
   calcControlChance,
   calcDamage,
   ENEMY_GROUPS,
+  GENERAL_SKILL_BOOKS,
   getSkillMaxTargets,
   getSkillPowerMultiplier,
   getSkillTier,
@@ -17,6 +18,7 @@ import {
   type ControlKind,
 } from '@hxsg/shared';
 import {
+  addActiveGeneralsIntimacy,
   addItem,
   addSkillProficiency,
   applyExpAndSilver,
@@ -114,6 +116,8 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       roleClass: g.roleClass,
       spriteKey: g.spriteKey,
       skillId: g.skillId,
+      skill2Id: g.skill2Id ?? undefined,
+      intimacy: g.intimacy,
       hp: Math.max(1, g.hp),
       maxHp: g.maxHp,
       mp: g.mp,
@@ -125,11 +129,11 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
       position: idx + 1,
       statuses: [],
       resist: {
-        phys: 5 + g.rebirth * 6,
-        chaos: 10 + g.rebirth * 8,
-        seal: 10 + g.rebirth * 8,
-        trap: 10 + g.rebirth * 8,
-        magic: 5 + g.rebirth * 6,
+        phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+        chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+        seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+        trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+        magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
       },
     });
   });
@@ -502,9 +506,42 @@ export function performBattleAction(
         message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
-      // Allied general: 45% chance to cast signature skill if enough MP
-      const sigSkill = actor.skillId ? SKILLS.find((s) => s.id === actor.skillId) : undefined;
-      if (sigSkill && actor.mp >= sigSkill.mpCost && Math.random() < 0.48) {
+      // Allied general: supports both innate skill (slot 1) & learned skill book (slot 2)
+      const knownSkills = [actor.skillId, actor.skill2Id]
+        .filter((id): id is string => Boolean(id))
+        .map((id) => SKILLS.find((s) => s.id === id))
+        .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+      // Smart heal if general learned 妙手回春 and any ally is wounded (< 65% HP)
+      const healSkill = knownSkills.find((s) => s.kind === 'heal' && actor.mp >= s.mpCost);
+      const injuredAlly = [...alivePlayers]
+        .filter((p) => p.hp / p.maxHp < 0.65)
+        .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+
+      if (healSkill && injuredAlly) {
+        actor.mp -= healSkill.mpCost;
+        const healVal = Math.max(30, Math.round(injuredAlly.maxHp * 0.42));
+        injuredAlly.hp = Math.min(injuredAlly.maxHp, injuredAlly.hp + healVal);
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'skill',
+          skillId: healSkill.id,
+          skillName: healSkill.name,
+          effect: 'heal',
+          targets: [{ uid: injuredAlly.uid, name: injuredAlly.name, damage: 0, heal: healVal }],
+          message: `副将 ${actor.name} 施展【${healSkill.name}】，为 ${injuredAlly.name} 恢复气血 ${healVal} 点！`,
+        });
+        continue;
+      }
+
+      const castableSkills = knownSkills.filter((s) => s.kind !== 'heal' && actor.mp >= s.mpCost);
+      const castChance = 0.48 + (actor.intimacy ?? 0) * 0.0018;
+      const sigSkill =
+        castableSkills.length > 0 && Math.random() < castChance
+          ? castableSkills[Math.floor(Math.random() * castableSkills.length)]
+          : undefined;
+      if (sigSkill) {
         actor.mp -= sigSkill.mpCost;
         if (sigSkill.kind === 'control' && sigSkill.controlKind) {
           const kind = sigSkill.controlKind;
@@ -522,7 +559,7 @@ export function performBattleAction(
             skillName: sigSkill.name,
             effect: sigSkill.effect,
             targets: targetResults,
-            message: `副将 ${actor.name} 施展专属技【${sigSkill.name}】控场！`,
+            message: `副将 ${actor.name} 施展【${sigSkill.name}】控场！`,
           });
           continue;
         }
@@ -681,7 +718,12 @@ export function performBattleAction(
     const silver = group.silverReward;
     const dropRoll = Math.random();
     let droppedItem: { itemId: string; name: string; quantity: number } | undefined;
-    if (dropRoll < 0.42) {
+    if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.35) {
+      const bookIds = Object.keys(GENERAL_SKILL_BOOKS);
+      const bookId = bookIds[Math.floor(Math.random() * bookIds.length)];
+      addItem(characterId, bookId, 1);
+      droppedItem = { itemId: bookId, name: ITEMS[bookId].name, quantity: 1 };
+    } else if (dropRoll < 0.42) {
       const dropId =
         dropRoll < 0.14 ? 'baotu' : dropRoll < 0.28 ? 'jinchuang' : 'ningshen';
       addItem(characterId, dropId, 1);
@@ -717,6 +759,7 @@ export function performBattleAction(
       droppedEquipment = { name: eq.name, quality: eq.quality, slot: eq.slot };
     }
 
+    addActiveGeneralsIntimacy(characterId, 2);
     const questUpdates = recordQuestBattleVictory(characterId, battle.enemyGroupId);
     const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
     updatedChar = res.character;

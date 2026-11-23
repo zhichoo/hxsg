@@ -197,6 +197,12 @@ export interface GeneralView {
   rarity: EquipmentQuality;
   skillId: string;
   skillName: string;
+  skill2Id: string | null;
+  skill2Name: string | null;
+  intimacy: number;
+  intimacyTitle: string;
+  intimacyStatPct: number;
+  intimacyResistBonus: number;
   slot: number | null; // 0, 1, 2 for active battle slots; null for bench
 }
 
@@ -274,6 +280,8 @@ export interface BattleUnit {
   roleClass: RoleClass;
   spriteKey: string;
   skillId?: string;
+  skill2Id?: string;
+  intimacy?: number;
   hp: number;
   maxHp: number;
   mp: number;

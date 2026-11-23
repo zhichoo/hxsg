@@ -127,6 +127,11 @@
       "method": "POST",
       "auth": "platform"
     },
+    "generalsLearnSkill": {
+      "url": "__API_BASE__/api/generals/learn-skill",
+      "method": "POST",
+      "auth": "platform"
+    },
     "rankings": {
       "url": "__API_BASE__/api/rankings",
       "method": "GET",

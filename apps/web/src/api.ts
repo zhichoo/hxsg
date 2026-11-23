@@ -267,6 +267,15 @@ export const api = {
       method: 'POST',
       body: { realmId, generalId, slot },
     }),
+  learnGeneralSkill: (realmId: string, generalId: number, bookItemId: string) =>
+    callEndpoint<{ general: GeneralView; character: CharacterView; message: string }>(
+      'generalsLearnSkill',
+      '/api/generals/learn-skill',
+      {
+        method: 'POST',
+        body: { realmId, generalId, bookItemId },
+      },
+    ),
   getRankings: (realmId: string, sort: 'level' | 'silver' | 'gold' = 'level') =>
     callEndpoint<{ rankings: RankEntry[] }>('rankings', '/api/rankings', {
       query: { realmId, sort },

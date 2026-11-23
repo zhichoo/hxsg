@@ -240,6 +240,8 @@ const newGeneralCols: Array<[string, string]> = [
   ['rebirth', 'INTEGER NOT NULL DEFAULT 0'],
   ['rarity', "TEXT NOT NULL DEFAULT 'common'"],
   ['skill_id', "TEXT NOT NULL DEFAULT 'liandao'"],
+  ['skill2_id', 'TEXT DEFAULT NULL'],
+  ['intimacy', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 for (const [col, def] of newGeneralCols) {

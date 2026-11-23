@@ -32,6 +32,7 @@ import {
   getCharacterByAccountAndRealm,
   getRankings,
   gmGrant,
+  learnGeneralSkillBook,
   moveCharacter,
   rebirthGeneral,
   recruitGeneral,
@@ -371,6 +372,14 @@ app.post('/api/generals/slot', async (req) => {
   return {
     character: setGeneralSlot(current.id, Number(body.generalId), body.slot ?? null),
   };
+});
+
+app.post('/api/generals/learn-skill', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number; bookItemId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return learnGeneralSkillBook(current.id, Number(body.generalId), body.bookItemId || '');
 });
 
 app.get('/api/rankings', async (req) => {

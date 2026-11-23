@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_TEMPLATES,
+  GENERAL_SKILL_BOOKS,
   GENERAL_TEMPLATES,
   ITEMS,
   ROLE_CLASS_META,
@@ -105,6 +106,8 @@ export function SubPanels({
   const [statusTab, setStatusTab] = useState<'stats' | 'resist' | 'skills'>('stats');
   const [bagTab, setBagTab] = useState<'equip' | 'consumable'>('equip');
   const [smithTab, setSmithTab] = useState<'gear' | 'mount'>('gear');
+  const [tavernTab, setTavernTab] = useState<'recruit' | 'books'>('recruit');
+  const [learningGenId, setLearningGenId] = useState<number | null>(null);
   const [questTab, setQuestTab] = useState<'main' | 'paohuan'>(
     panel === 'paohuan' ? 'paohuan' : 'main',
   );
@@ -722,6 +725,10 @@ export function SubPanels({
               {character.generals.map((g) => {
                 const rebirthReq = g.rebirth === 0 ? 10 : g.rebirth === 1 ? 20 : 999;
                 const canRebirth = g.rebirth < 2 && g.level >= rebirthReq;
+                const ownedBooks = character.inventory.filter(
+                  (it) => Boolean(GENERAL_SKILL_BOOKS[it.itemId]) && it.quantity > 0,
+                );
+                const showBooks = learningGenId === g.id;
                 return (
                   <div
                     key={g.id}
@@ -756,7 +763,12 @@ export function SubPanels({
                             )}
                           </div>
                           <div className="text-[11px] text-[#9be8ff]">
-                            成长 {g.growth.toFixed(2)} · 专属技【{g.skillName}】
+                            成长 {g.growth.toFixed(2)} · 专属【{g.skillName}】
+                            {g.skill2Name ? (
+                              <span className="text-[#ffe273]"> · 秘籍【{g.skill2Name}】</span>
+                            ) : (
+                              <span className="text-[#bba3c4]"> · 秘籍槽空</span>
+                            )}
                           </div>
                           <div className="text-[11px] text-[#e8d2ee]">
                             当前：血{g.maxHp} · 精{g.maxMp} · 攻{g.atk} · 速{g.spd}
@@ -764,6 +776,16 @@ export function SubPanels({
                           <div className="text-[10.5px] text-[#cbb0d4]">
                             初值：血{g.baseHp} / 精{g.baseMp} / 攻{g.baseAtk} / 速{g.baseSpd} · 经验
                             {g.exp}/{g.expToNext}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5 text-[10.5px]">
+                            <span className="text-[#ff9ed2] font-bold">
+                              默契 {g.intimacy}/100 ({g.intimacyTitle})
+                            </span>
+                            {g.intimacyStatPct > 0 && (
+                              <span className="text-[#8cff9c]">
+                                攻血+{g.intimacyStatPct}% 全抗+{g.intimacyResistBonus}%
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -843,6 +865,14 @@ export function SubPanels({
                       >
                         洗髓重洗
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setLearningGenId(showBooks ? null : g.id)}
+                        className="px-2 py-0.5 text-[11px] bg-[#1e5c35] border border-[#7cff9c] text-[#e6ffec] font-bold"
+                      >
+                        {showBooks ? '收起打书' : `打书(${ownedBooks.length})`}
+                      </button>
                       {g.rebirth < 2 && (
                         <button
                           type="button"
@@ -884,6 +914,49 @@ export function SubPanels({
                         </button>
                       )}
                     </div>
+
+                    {showBooks && (
+                      <div className="p-2 bg-black/35 border border-[#6e9c78] space-y-1.5">
+                        <div className="text-[11px] text-[#a6ffba] font-bold">
+                          选择秘籍打入【秘籍槽2】（将覆盖旧秘籍，不影响专属技，默契 +8）：
+                        </div>
+                        {ownedBooks.length === 0 ? (
+                          <div className="text-[11px] text-[#e2cce8]">
+                            行囊中暂无副将技能书，可去「招贤馆 → 武学秘籍」购买或击杀剧情 BOSS 掉落！
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap gap-1.5">
+                            {ownedBooks.map((bk) => (
+                              <button
+                                key={bk.itemId}
+                                type="button"
+                                disabled={busy}
+                                onClick={async () => {
+                                  setBusy(true);
+                                  try {
+                                    const res = await api.learnGeneralSkill(
+                                      realmId,
+                                      g.id,
+                                      bk.itemId,
+                                    );
+                                    onUpdateCharacter(res.character);
+                                    onNotify(res.message);
+                                    setLearningGenId(null);
+                                  } catch (err) {
+                                    onNotify(err instanceof Error ? err.message : '打书失败');
+                                  } finally {
+                                    setBusy(false);
+                                  }
+                                }}
+                                className="px-2 py-1 bg-[#3b1547] border border-[#e0b84e] text-[#ffea99] text-[11px] hover:bg-[#571e69]"
+                              >
+                                {bk.name} ×{bk.quantity}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -952,7 +1025,9 @@ export function SubPanels({
           {panel === 'shop' && (
             <div className="space-y-2">
               <div className="text-xs text-[#ffe27a]">当前银两：{character.silver} 两</div>
-              {Object.values(ITEMS).map((it) => (
+              {Object.values(ITEMS)
+                .filter((it) => !GENERAL_SKILL_BOOKS[it.itemId])
+                .map((it) => (
                 <div
                   key={it.itemId}
                   className="p-2 bg-[#27082e]/90 border border-[#8e6299] flex items-center justify-between gap-2"
@@ -979,9 +1054,69 @@ export function SubPanels({
             </div>
           )}
 
-          {/* TAVERN (RECRUIT & DRAW GENERALS) */}
+          {/* TAVERN (RECRUIT, DRAW GENERALS & SKILL BOOKS) */}
           {panel === 'tavern' && (
             <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTavernTab('recruit')}
+                  className={`py-1.5 font-bold border ${
+                    tavernTab === 'recruit'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  招贤纳士
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTavernTab('books')}
+                  className={`py-1.5 font-bold border ${
+                    tavernTab === 'books'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  武学秘籍（副将打书）
+                </button>
+              </div>
+
+              {tavernTab === 'books' ? (
+                <div className="space-y-2">
+                  <div className="text-xs text-[#ffe27a] flex items-center justify-between">
+                    <span>当前银两：{character.silver} 两</span>
+                    <span className="text-[#d7bddf]">购后在「副将营帐」点击打书</span>
+                  </div>
+                  {Object.values(ITEMS)
+                    .filter((it) => Boolean(GENERAL_SKILL_BOOKS[it.itemId]))
+                    .map((it) => (
+                      <div
+                        key={it.itemId}
+                        className="p-2 bg-[#27082e]/90 border border-[#8e6299] flex items-center justify-between gap-2"
+                      >
+                        <div>
+                          <div className="font-bold text-[#ffe678] text-xs">
+                            {it.name}{' '}
+                            <span className="text-[#a4e8ff]">{it.priceSilver} 银/本</span>
+                          </div>
+                          <div className="text-[11px] text-[#e0c7e8]">{it.desc}</div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            run(() => api.buyItem(realmId, it.itemId, 1), `已购买【${it.name}】×1`)
+                          }
+                          className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                        >
+                          购买
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <>
               {/* Token Draw Banner */}
               <div className="p-2.5 bg-[#36110e] border-2 border-[#e5b642] flex items-center justify-between gap-2 text-xs">
                 <div>
@@ -1072,6 +1207,8 @@ export function SubPanels({
                     </div>
                   ))}
               </div>
+                </>
+              )}
             </div>
           )}
 

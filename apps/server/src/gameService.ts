@@ -3,7 +3,9 @@ import {
   ENEMY_GROUPS,
   EQUIPMENT_TEMPLATES,
   expRequiredForLevel,
+  GENERAL_SKILL_BOOKS,
   GENERAL_TEMPLATES,
+  getGeneralIntimacyInfo,
   getSkillMaxTargets,
   getSkillTier,
   ITEMS,
@@ -88,6 +90,8 @@ interface GeneralRow {
   rebirth: number;
   rarity: EquipmentQuality;
   skill_id: string;
+  skill2_id: string | null;
+  intimacy: number;
   slot: number | null;
 }
 
@@ -271,6 +275,13 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     const tpl = GENERAL_TEMPLATES[g.template_id];
     const skillId = g.skill_id || tpl?.skillId || 'liandao';
     const skillDef = SKILLS.find((s) => s.id === skillId);
+    const skill2Id = g.skill2_id || null;
+    const skill2Def = skill2Id ? SKILLS.find((s) => s.id === skill2Id) : undefined;
+    const intimacy = Math.max(0, Math.min(100, g.intimacy ?? 0));
+    const intInfo = getGeneralIntimacyInfo(intimacy);
+    const statMult = 1 + intInfo.statPct / 100;
+    const effMaxHp = Math.round(g.max_hp * statMult);
+    const effAtk = Math.round(g.atk * statMult);
     return {
       id: g.id,
       templateId: g.template_id,
@@ -281,11 +292,11 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       level: g.level,
       exp: g.exp,
       expToNext: expRequiredForLevel(g.level),
-      hp: g.hp,
-      maxHp: g.max_hp,
+      hp: Math.min(effMaxHp, Math.round(g.hp * statMult)),
+      maxHp: effMaxHp,
       mp: g.mp,
       maxMp: g.max_mp,
-      atk: g.atk,
+      atk: effAtk,
       spd: g.spd,
       baseHp: g.base_hp || tpl?.baseHp || g.max_hp,
       baseMp: g.base_mp || tpl?.baseMp || g.max_mp,
@@ -296,6 +307,12 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       rarity: (g.rarity as EquipmentQuality) || 'common',
       skillId,
       skillName: skillDef?.name ?? '力劈华山',
+      skill2Id,
+      skill2Name: skill2Def?.name ?? null,
+      intimacy,
+      intimacyTitle: intInfo.title,
+      intimacyStatPct: intInfo.statPct,
+      intimacyResistBonus: intInfo.resistBonus,
       slot: g.slot,
     };
   });
@@ -1515,6 +1532,12 @@ export function grantGeneralToCharacter(
     rarity,
     skillId: tpl.skillId,
     skillName: skillDef?.name ?? '力劈华山',
+    skill2Id: null,
+    skill2Name: null,
+    intimacy: 0,
+    intimacyTitle: '初识',
+    intimacyStatPct: 0,
+    intimacyResistBonus: 0,
     slot: freeSlot,
   };
 }
@@ -1587,9 +1610,53 @@ export function feedGeneralExpPill(characterId: number, generalId: number): Char
     lv,
   );
   db.prepare(
-    'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ? WHERE id = ?',
+    'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?, intimacy = MIN(100, intimacy + 5) WHERE id = ?',
   ).run(lv, exp, stats.maxHp, stats.maxHp, stats.maxMp, stats.maxMp, stats.atk, stats.spd, g.id);
   return getCharacterById(characterId)!;
+}
+
+export function learnGeneralSkillBook(
+  characterId: number,
+  generalId: number,
+  bookItemId: string,
+): { general: GeneralView; character: CharacterView; message: string } {
+  const skillId = GENERAL_SKILL_BOOKS[bookItemId];
+  if (!skillId) throw new Error('无效的副将技能书');
+  const skillDef = SKILLS.find((s) => s.id === skillId);
+  if (!skillDef) throw new Error('技能配置不存在');
+
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  if (g.skillId === skillId || g.skill2Id === skillId) {
+    throw new Error(`${g.name} 已掌握【${skillDef.name}】，无需重复学习`);
+  }
+
+  const owned = ch.inventory.find((i) => i.itemId === bookItemId);
+  if (!owned || owned.quantity <= 0) {
+    throw new Error(`行囊中没有【${ITEMS[bookItemId]?.name ?? bookItemId}】`);
+  }
+
+  addItem(characterId, bookItemId, -1);
+  db.prepare('UPDATE generals SET skill2_id = ?, intimacy = MIN(100, intimacy + 8) WHERE id = ?').run(
+    skillId,
+    g.id,
+  );
+  const updated = getCharacterById(characterId)!;
+  const updatedGen = updated.generals.find((x) => x.id === g.id)!;
+  return {
+    general: updatedGen,
+    character: updated,
+    message: `打书成功！${updatedGen.name} 习得秘籍技【${skillDef.name}】（默契度 +8）！`,
+  };
+}
+
+export function addActiveGeneralsIntimacy(characterId: number, delta: number): void {
+  if (delta <= 0) return;
+  db.prepare(
+    'UPDATE generals SET intimacy = MIN(100, intimacy + ?) WHERE character_id = ? AND slot IS NOT NULL',
+  ).run(delta, characterId);
 }
 
 export function washGeneral(characterId: number, generalId: number): {
