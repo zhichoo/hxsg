@@ -173,6 +173,26 @@
       "method": "POST",
       "auth": "platform"
     },
+    "towerChallenge": {
+      "url": "__API_BASE__/api/tower/challenge",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "towerSweep": {
+      "url": "__API_BASE__/api/tower/sweep",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "casinoDice": {
+      "url": "__API_BASE__/api/casino/dice",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "casinoChibi": {
+      "url": "__API_BASE__/api/casino/chibi",
+      "method": "POST",
+      "auth": "platform"
+    },
     "gmGrant": {
       "url": "__API_BASE__/api/gm/grant",
       "method": "POST",

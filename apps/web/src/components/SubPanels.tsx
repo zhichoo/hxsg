@@ -4,8 +4,12 @@ import {
   EQUIPMENT_TEMPLATES,
   GENERAL_SKILL_BOOKS,
   GENERAL_TEMPLATES,
+  getTowerFloorMeta,
   ITEMS,
   ROLE_CLASS_META,
+  type BattleState,
+  type CasinoChibiResult,
+  type CasinoDiceResult,
   type CharacterView,
   type EquipmentQuality,
   type EquipmentSlot,
@@ -23,6 +27,8 @@ export type SubPanelType =
   | 'generals'
   | 'quests'
   | 'paohuan'
+  | 'tower'
+  | 'casino'
   | 'rank'
   | 'shop'
   | 'blacksmith'
@@ -77,6 +83,7 @@ interface SubPanelsProps {
   realmId: string;
   character: CharacterView;
   onUpdateCharacter: (ch: CharacterView) => void;
+  onEnterBattle?: (battle: BattleState) => void;
   onClose: () => void;
   onNotify: (msg: string) => void;
 }
@@ -87,6 +94,8 @@ const TITLES: Record<SubPanelType, string> = {
   generals: '副将营帐',
   quests: '任务卷轴',
   paohuan: '许昌跑环',
+  tower: '天玄塔试炼',
+  casino: '许昌赌坊',
   rank: '排行榜',
   shop: '回春药铺',
   blacksmith: '铁匠铺与马市',
@@ -100,6 +109,7 @@ export function SubPanels({
   realmId,
   character,
   onUpdateCharacter,
+  onEnterBattle,
   onClose,
   onNotify,
 }: SubPanelsProps) {
@@ -111,6 +121,11 @@ export function SubPanels({
   const [questTab, setQuestTab] = useState<'main' | 'paohuan'>(
     panel === 'paohuan' ? 'paohuan' : 'main',
   );
+  const [casinoTab, setCasinoTab] = useState<'dice' | 'chibi'>('dice');
+  const [betCurrency, setBetCurrency] = useState<'silver' | 'gold'>('silver');
+  const [betAmount, setBetAmount] = useState<number>(200);
+  const [diceResult, setDiceResult] = useState<CasinoDiceResult | null>(null);
+  const [chibiResult, setChibiResult] = useState<CasinoChibiResult | null>(null);
   const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
@@ -1604,6 +1619,339 @@ export function SubPanels({
               </div>
             );
           })()}
+
+          {/* TOWER (天玄塔20层爬塔与每日扫荡) */}
+          {panel === 'tower' && (
+            <div className="space-y-2.5 text-xs">
+              <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="font-black text-sm text-[#ffe678]">
+                      天玄塔 · 最高通关 {character.tower.highestFloor} / {character.tower.maxFloor} 层
+                    </div>
+                    <div className="text-[11px] text-[#e7cfbb]">
+                      检验主角与副将阵容实力的经典单人爬塔试炼
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || character.tower.highestFloor === 0 || character.tower.dailySwept}
+                    onClick={async () => {
+                      setBusy(true);
+                      try {
+                        const res = await api.sweepTower(realmId);
+                        onUpdateCharacter(res.character);
+                        onNotify(res.message);
+                      } catch (err) {
+                        onNotify(err instanceof Error ? err.message : '扫荡失败');
+                      } finally {
+                        setBusy(false);
+                      }
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold border shrink-0 ${
+                      character.tower.highestFloor > 0 && !character.tower.dailySwept
+                        ? 'hx-btn-gold'
+                        : 'bg-[#361c3d] border-[#6a4c73] text-[#9f82a8]'
+                    }`}
+                  >
+                    {character.tower.dailySwept ? '今日已扫荡' : '每日扫荡'}
+                  </button>
+                </div>
+
+                {/* Next floor card */}
+                <div className="p-2 bg-black/35 border border-[#7c5a2d] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#ffeaad]">
+                      下一挑战：{character.tower.nextFloorName}
+                    </span>
+                    <span className="text-[#9ee0ff]">
+                      推荐 Lv.{character.tower.nextFloorRecLevel}
+                    </span>
+                  </div>
+                  {character.tower.nextFloorMilestone && (
+                    <div className="text-[11px] text-[#ffcf54] font-bold">
+                      ★ {character.tower.nextFloorMilestone}
+                    </div>
+                  )}
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          const targetFloor = Math.min(
+                            character.tower.maxFloor,
+                            character.tower.highestFloor + 1,
+                          );
+                          const res = await api.challengeTower(realmId, targetFloor);
+                          onEnterBattle?.(res.battle);
+                        } catch (err) {
+                          onNotify(err instanceof Error ? err.message : '进入天玄塔失败');
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                      className="hx-btn-red px-4 py-1.5 text-xs"
+                    >
+                      {character.tower.highestFloor >= character.tower.maxFloor
+                        ? '再战第 20 层·无双吕布'
+                        : `挑战第 ${character.tower.highestFloor + 1} 层`}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Milestone Floors Overview */}
+              <div className="space-y-1">
+                <div className="text-[11px] text-[#e7cfbb] font-bold">镇塔名将层首通大奖</div>
+                {[5, 10, 15, 20].map((fl) => {
+                  const meta = getTowerFloorMeta(fl);
+                  const cleared = character.tower.highestFloor >= fl;
+                  return (
+                    <div
+                      key={fl}
+                      className={`p-2 border flex items-center justify-between gap-2 ${
+                        cleared
+                          ? 'bg-[#1a2618]/80 border-[#4b7d48] text-[#bfeec2]'
+                          : 'bg-[#26072d]/85 border-[#8e6299] text-[#f3e3f7]'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold">{meta.name}</div>
+                        <div className="text-[10.5px] text-[#ffd873]">{meta.milestone}</div>
+                      </div>
+                      <span className="text-[11px] font-bold shrink-0">
+                        {cleared ? '已首通 ✓' : `Lv.${meta.recLevel}`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* CASINO (许昌赌坊：猜大小/豹子 + 赤壁押注) */}
+          {panel === 'casino' && (
+            <div className="space-y-2.5 text-xs">
+              <div className="flex items-center justify-between bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
+                <span className="text-[#ffe27a] font-bold">银两：{character.silver}</span>
+                <span className="text-[#ffd24d] font-bold">金砖：{character.gold}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCasinoTab('dice')}
+                  className={`py-1.5 font-bold border ${
+                    casinoTab === 'dice'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  🎲 猜大小 / 豹子
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCasinoTab('chibi')}
+                  className={`py-1.5 font-bold border ${
+                    casinoTab === 'chibi'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  🔥 赤壁之战押注
+                </button>
+              </div>
+
+              {/* Currency & Stake Controls */}
+              <div className="p-2 bg-[#26072d]/90 border border-[#8e6299] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#e7cfbb]">下注货币：</span>
+                  <div className="flex gap-1.5">
+                    {(['silver', 'gold'] as const).map((cur) => (
+                      <button
+                        key={cur}
+                        type="button"
+                        onClick={() => {
+                          setBetCurrency(cur);
+                          setBetAmount(cur === 'gold' ? 20 : 200);
+                        }}
+                        className={`px-2.5 py-0.5 font-bold border ${
+                          betCurrency === cur
+                            ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                            : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                        }`}
+                      >
+                        {cur === 'silver' ? '银两' : '金砖'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[#e7cfbb]">筹码：</span>
+                  {(betCurrency === 'silver' ? [100, 500, 2000, 10000] : [10, 50, 200, 500]).map(
+                    (amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setBetAmount(amt)}
+                        className={`px-2 py-0.5 border font-bold ${
+                          betAmount === amt
+                            ? 'bg-[#b82018] border-[#ffd86b] text-[#fff6cc]'
+                            : 'bg-[#381440] border-[#8c6496] text-[#f0d9f5]'
+                        }`}
+                      >
+                        {amt}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+
+              {casinoTab === 'dice' && (
+                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
+                  <div className="text-[11px] text-[#f2dcf7]">
+                    三颗骰子开盅：大(11~18)/小(3~10)/单/双 赔率 <b className="text-[#ffe46e]">1:1</b>
+                    （开豹子通吃非豹子注），押中<b className="text-[#ff8cc8]">豹子</b>狂赢{' '}
+                    <b className="text-[#ffcf54]">1:15</b>！
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {(
+                      [
+                        ['big', '押 大 (11~18) 1:1'],
+                        ['small', '押 小 (3~10) 1:1'],
+                        ['odd', '押 单数 1:1'],
+                        ['even', '押 双数 1:1'],
+                      ] as const
+                    ).map(([bt, label]) => (
+                      <button
+                        key={bt}
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.playCasinoDice({
+                              realmId,
+                              betType: bt,
+                              currency: betCurrency,
+                              amount: betAmount,
+                            });
+                            onUpdateCharacter(res.character);
+                            setDiceResult(res.result);
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '下注失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="hx-btn-gold py-1.5 text-xs"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          const res = await api.playCasinoDice({
+                            realmId,
+                            betType: 'baozi',
+                            currency: betCurrency,
+                            amount: betAmount,
+                          });
+                          onUpdateCharacter(res.character);
+                          setDiceResult(res.result);
+                        } catch (err) {
+                          onNotify(err instanceof Error ? err.message : '下注失败');
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                      className="col-span-2 hx-btn-red py-1.5 text-xs"
+                    >
+                      🎲 搏一搏 · 押豹子（1:15 暴富！）
+                    </button>
+                  </div>
+
+                  {diceResult && (
+                    <div
+                      className={`p-2 border text-center space-y-1 ${
+                        diceResult.won
+                          ? 'bg-[#1a3319] border-[#7dff92] text-[#d6ffdc]'
+                          : 'bg-[#361116] border-[#d96c78] text-[#ffd4d8]'
+                      }`}
+                    >
+                      <div className="text-base font-black tracking-widest text-[#ffe878]">
+                        [ {diceResult.dice[0]} ] [ {diceResult.dice[1]} ] [ {diceResult.dice[2]} ]
+                      </div>
+                      <div className="font-bold">{diceResult.message}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {casinoTab === 'chibi' && (
+                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
+                  <div className="text-[11px] text-[#f2dcf7]">
+                    经典赤壁阵营押注：选择看好的阵营下注，即刻开战决胜负！
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(
+                      [
+                        ['wei', '押 魏军', '2.1倍', 'bg-[#1b3a6b] border-[#7cb5ff]'],
+                        ['wu', '押 吴军', '2.3倍', 'bg-[#6b1919] border-[#ff8b8b]'],
+                        ['shu', '押 蜀军', '4.2倍', 'bg-[#1d5428] border-[#82ff99]'],
+                      ] as const
+                    ).map(([pick, label, mult, cls]) => (
+                      <button
+                        key={pick}
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.playCasinoChibi({
+                              realmId,
+                              pick,
+                              currency: betCurrency,
+                              amount: betAmount,
+                            });
+                            onUpdateCharacter(res.character);
+                            setChibiResult(res.result);
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '押注失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className={`py-2 border text-white font-bold hover:brightness-110 ${cls}`}
+                      >
+                        <div>{label}</div>
+                        <div className="text-[10.5px] text-[#ffe678]">{mult}</div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {chibiResult && (
+                    <div
+                      className={`p-2 border space-y-1 ${
+                        chibiResult.won
+                          ? 'bg-[#1a3319] border-[#7dff92] text-[#d6ffdc]'
+                          : 'bg-[#361116] border-[#d96c78] text-[#ffd4d8]'
+                      }`}
+                    >
+                      <div className="text-[#ffe678] font-bold">⚔ {chibiResult.report}</div>
+                      <div className="font-bold">{chibiResult.message}</div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* NOTICE */}
           {panel === 'notice' && (

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyRequest } from 'fastify';
-import { REALMS, type EquipmentSlot, type Gender, type RoleClass } from '@hxsg/shared';
+import { REALMS, TOWER_MAX_FLOOR, type EquipmentSlot, type Gender, type RoleClass } from '@hxsg/shared';
 import { loginAccount, registerAccount, verifyToken, type AuthPayload } from './auth.js';
 import {
   getActiveBattle,
@@ -34,12 +34,15 @@ import {
   gmGrant,
   learnGeneralSkillBook,
   moveCharacter,
+  playCasinoChibi,
+  playCasinoDice,
   rebirthGeneral,
   recruitGeneral,
   resetCharacterStats,
   restAtInn,
   sellEquipment,
   setGeneralSlot,
+  sweepTowerDaily,
   unequipSlot,
   useInventoryItem,
   washGeneral,
@@ -449,6 +452,65 @@ app.post('/api/quests/paohuan/abandon', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return abandonPaohuan(current.id);
+});
+
+app.post('/api/tower/challenge', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; floor?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  const existing = getActiveBattle(current.id);
+  if (existing && existing.status === 'ongoing') {
+    return { battle: existing };
+  }
+  const maxAllowed = Math.min(TOWER_MAX_FLOOR, current.tower.highestFloor + 1);
+  const targetFloor = body.floor
+    ? Math.max(1, Math.min(maxAllowed, Math.floor(body.floor)))
+    : maxAllowed;
+  const battle = startBattle(current.id, `tower_${targetFloor}`);
+  return { battle };
+});
+
+app.post('/api/tower/sweep', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return sweepTowerDaily(current.id);
+});
+
+app.post('/api/casino/dice', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    betType?: 'big' | 'small' | 'odd' | 'even' | 'baozi';
+    currency?: 'silver' | 'gold';
+    amount?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return playCasinoDice(current.id, {
+    betType: body.betType || 'big',
+    currency: body.currency || 'silver',
+    amount: Number(body.amount ?? 100),
+  });
+});
+
+app.post('/api/casino/chibi', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    pick?: 'wei' | 'wu' | 'shu';
+    currency?: 'silver' | 'gold';
+    amount?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return playCasinoChibi(current.id, {
+    pick: body.pick || 'wu',
+    currency: body.currency || 'silver',
+    amount: Number(body.amount ?? 100),
+  });
 });
 
 app.post('/api/gm/grant', async (req) => {

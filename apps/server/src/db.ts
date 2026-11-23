@@ -192,6 +192,8 @@ const newCols: Array<[string, string]> = [
   ['res_seal', 'INTEGER NOT NULL DEFAULT 0'],
   ['res_trap', 'INTEGER NOT NULL DEFAULT 0'],
   ['res_magic', 'INTEGER NOT NULL DEFAULT 0'],
+  ['tower_floor', 'INTEGER NOT NULL DEFAULT 0'],
+  ['tower_sweep_date', 'TEXT DEFAULT NULL'],
 ];
 
 for (const [col, def] of newCols) {

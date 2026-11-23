@@ -8,12 +8,16 @@ import {
   getGeneralIntimacyInfo,
   getSkillMaxTargets,
   getSkillTier,
+  getTowerFloorMeta,
   ITEMS,
   MAIN_QUESTS,
   MAPS,
   REALMS,
   ROLE_CLASS_META,
   SKILLS,
+  TOWER_MAX_FLOOR,
+  type CasinoChibiResult,
+  type CasinoDiceResult,
   type CharacterQuestState,
   type CharacterView,
   type EquipmentBonusSummary,
@@ -64,6 +68,8 @@ interface CharacterRow {
   res_seal: number;
   res_trap: number;
   res_magic: number;
+  tower_floor?: number;
+  tower_sweep_date?: string | null;
 }
 
 interface GeneralRow {
@@ -398,6 +404,29 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     generals,
     inventory,
     quests: hydrateQuestState(row.id, row.level),
+    tower: buildTowerState(row.tower_floor ?? 0, row.tower_sweep_date ?? null),
+  };
+}
+
+function getTodayDateStr(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function buildTowerState(highestFloor: number, sweepDate: string | null) {
+  const safeFloor = Math.max(0, Math.min(TOWER_MAX_FLOOR, highestFloor));
+  const nextFloor = Math.min(TOWER_MAX_FLOOR, safeFloor + 1);
+  const meta = getTowerFloorMeta(nextFloor);
+  return {
+    highestFloor: safeFloor,
+    maxFloor: TOWER_MAX_FLOOR,
+    dailySwept: sweepDate === getTodayDateStr(),
+    nextFloorName: safeFloor >= TOWER_MAX_FLOOR ? '已登顶天玄塔第 20 层' : meta.name,
+    nextFloorRecLevel: meta.recLevel,
+    nextFloorMilestone: safeFloor >= TOWER_MAX_FLOOR ? undefined : meta.milestone,
   };
 }
 
@@ -1939,4 +1968,226 @@ export function gmGrant(
     addItem(characterId, 'baotu', Math.min(20, opts.grantBaotu));
   }
   return getCharacterById(characterId)!;
+}
+
+export function recordTowerClear(characterId: number, floor: number): string | null {
+  const ch = getCharacterById(characterId);
+  if (!ch) return null;
+  if (floor <= ch.tower.highestFloor) {
+    return `再次通关天玄塔第 ${floor} 层！`;
+  }
+  const nextFloor = Math.min(TOWER_MAX_FLOOR, floor);
+  db.prepare('UPDATE characters SET tower_floor = ?, updated_at = ? WHERE id = ?').run(
+    nextFloor,
+    Date.now(),
+    characterId,
+  );
+
+  const bonusParts: string[] = [];
+  if (nextFloor === 5) {
+    db.prepare('UPDATE characters SET gold = gold + 30 WHERE id = ?').run(characterId);
+    addItem(characterId, 'jiangling', 1);
+    bonusParts.push('金砖+30', '招贤令×1');
+  } else if (nextFloor === 10) {
+    db.prepare('UPDATE characters SET gold = gold + 60 WHERE id = ?').run(characterId);
+    addItem(characterId, 'xisuidan', 2);
+    const books = Object.keys(GENERAL_SKILL_BOOKS);
+    const book = books[Math.floor(Math.random() * books.length)];
+    addItem(characterId, book, 1);
+    bonusParts.push('金砖+60', '洗髓丹×2', `${ITEMS[book].name}×1`);
+  } else if (nextFloor === 15) {
+    db.prepare('UPDATE characters SET gold = gold + 100 WHERE id = ?').run(characterId);
+    addItem(characterId, 'baotu', 3);
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['qixing_jian', 'zijin_guan', 'bagua_pao', 'jifeng_xue', 'dilu_ma'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`极品装备【${eq.name}】`);
+    }
+    bonusParts.push('金砖+100', '藏宝图×3');
+  } else if (nextFloor === 20) {
+    db.prepare('UPDATE characters SET gold = gold + 200 WHERE id = ?').run(characterId);
+    const latest = getCharacterById(characterId)!;
+    if (latest.equipment.length < 30) {
+      const pool = ['chitu_ma', 'longdan_qiang', 'huangjin_jia'];
+      const eq = grantEquipmentToCharacter(characterId, pool[Math.floor(Math.random() * pool.length)], true);
+      bonusParts.push(`绝世神兵【${eq.name}】`);
+    }
+    bonusParts.push('金砖+200');
+  }
+
+  return bonusParts.length > 0
+    ? `🏆 首通天玄塔第 ${nextFloor} 层！额外奖励：${bonusParts.join('、')}`
+    : `🗼 成功登临天玄塔第 ${nextFloor} 层！`;
+}
+
+export function sweepTowerDaily(characterId: number): {
+  character: CharacterView;
+  message: string;
+} {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (ch.tower.highestFloor <= 0) throw new Error('请先至少通关天玄塔第 1 层再扫荡');
+  if (ch.tower.dailySwept) throw new Error('今日已领取过天玄塔扫荡俸禄，明日再来吧');
+
+  const f = ch.tower.highestFloor;
+  const exp = f * 120;
+  const silver = f * 160;
+  const parts: string[] = [`经验+${exp}`, `银两+${silver}`];
+
+  db.prepare('UPDATE characters SET tower_sweep_date = ?, updated_at = ? WHERE id = ?').run(
+    getTodayDateStr(),
+    Date.now(),
+    characterId,
+  );
+  applyExpAndSilver(characterId, exp, silver);
+
+  if (f >= 5) {
+    addItem(characterId, 'jingyandan', 1);
+    parts.push('副将经验丹×1');
+  }
+  if (f >= 10) {
+    addItem(characterId, 'baotu', 1);
+    parts.push('藏宝图×1');
+  }
+
+  return {
+    character: getCharacterById(characterId)!,
+    message: `扫荡天玄塔（最高 ${f} 层）成功！获得 ${parts.join('、')}`,
+  };
+}
+
+export function playCasinoDice(
+  characterId: number,
+  opts: {
+    betType: 'big' | 'small' | 'odd' | 'even' | 'baozi';
+    currency: 'silver' | 'gold';
+    amount: number;
+  },
+): { result: CasinoDiceResult; character: CharacterView } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const currency = opts.currency === 'gold' ? 'gold' : 'silver';
+  const amount = Math.floor(opts.amount);
+  const minBet = currency === 'gold' ? 10 : 50;
+  const maxBet = currency === 'gold' ? 2000 : 50000;
+  if (!Number.isFinite(amount) || amount < minBet || amount > maxBet) {
+    throw new Error(`单局押注范围：${minBet} ~ ${maxBet} ${currency === 'gold' ? '金砖' : '银两'}`);
+  }
+  const balance = currency === 'gold' ? ch.gold : ch.silver;
+  if (balance < amount) {
+    throw new Error(`${currency === 'gold' ? '金砖' : '银两'}不足`);
+  }
+
+  const d1 = 1 + Math.floor(Math.random() * 6);
+  const d2 = 1 + Math.floor(Math.random() * 6);
+  const d3 = 1 + Math.floor(Math.random() * 6);
+  const sum = d1 + d2 + d3;
+  const isBaozi = d1 === d2 && d2 === d3;
+
+  let won = false;
+  let mult = 0;
+  if (opts.betType === 'baozi') {
+    won = isBaozi;
+    mult = 16;
+  } else if (!isBaozi) {
+    if (opts.betType === 'big') won = sum >= 11;
+    else if (opts.betType === 'small') won = sum <= 10;
+    else if (opts.betType === 'odd') won = sum % 2 === 1;
+    else if (opts.betType === 'even') won = sum % 2 === 0;
+    mult = 2;
+  }
+
+  const payout = won ? Math.round(amount * mult) : 0;
+  const netDelta = payout - amount;
+  const col = currency === 'gold' ? 'gold' : 'silver';
+  db.prepare(`UPDATE characters SET ${col} = MAX(0, ${col} + ?), updated_at = ? WHERE id = ?`).run(
+    netDelta,
+    Date.now(),
+    characterId,
+  );
+
+  const unit = currency === 'gold' ? '金砖' : '银两';
+  const outcomeTag = isBaozi ? `【豹子 ${d1}-${d2}-${d3}】` : `${sum}点（${sum >= 11 ? '大' : '小'}/${sum % 2 === 1 ? '单' : '双'}）`;
+  const message = won
+    ? `开盅：${d1}·${d2}·${d3} ${outcomeTag}！大获全胜，净赢 ${netDelta} ${unit}！`
+    : `开盅：${d1}·${d2}·${d3} ${outcomeTag}，遗憾落空，输掉 ${amount} ${unit}。`;
+
+  return {
+    result: {
+      dice: [d1, d2, d3],
+      sum,
+      isBaozi,
+      betType: opts.betType,
+      currency,
+      amount,
+      won,
+      payout,
+      netDelta,
+      message,
+    },
+    character: getCharacterById(characterId)!,
+  };
+}
+
+export function playCasinoChibi(
+  characterId: number,
+  opts: {
+    pick: 'wei' | 'wu' | 'shu';
+    currency: 'silver' | 'gold';
+    amount: number;
+  },
+): { result: CasinoChibiResult; character: CharacterView } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const currency = opts.currency === 'gold' ? 'gold' : 'silver';
+  const amount = Math.floor(opts.amount);
+  const minBet = currency === 'gold' ? 10 : 50;
+  const maxBet = currency === 'gold' ? 2000 : 50000;
+  if (!Number.isFinite(amount) || amount < minBet || amount > maxBet) {
+    throw new Error(`单局押注范围：${minBet} ~ ${maxBet} ${currency === 'gold' ? '金砖' : '银两'}`);
+  }
+  const balance = currency === 'gold' ? ch.gold : ch.silver;
+  if (balance < amount) {
+    throw new Error(`${currency === 'gold' ? '金砖' : '银两'}不足`);
+  }
+
+  const r = Math.random();
+  const winner: 'wei' | 'wu' | 'shu' = r < 0.42 ? 'wei' : r < 0.8 ? 'wu' : 'shu';
+  const multMap: Record<'wei' | 'wu' | 'shu', number> = { wei: 2.1, wu: 2.3, shu: 4.2 };
+  const reportMap: Record<'wei' | 'wu' | 'shu', string> = {
+    wei: '曹军铁索横江，张辽率虎豹骑强登江岸，魏军大捷！',
+    wu: '黄盖苦肉诈降，周瑜借东风火烧连营，东吴水师完胜！',
+    shu: '诸葛亮奇谋设伏，赵云关羽华容道奇兵突袭，蜀军爆冷大胜！',
+  };
+
+  const won = winner === opts.pick;
+  const payout = won ? Math.round(amount * multMap[winner]) : 0;
+  const netDelta = payout - amount;
+  const col = currency === 'gold' ? 'gold' : 'silver';
+  db.prepare(`UPDATE characters SET ${col} = MAX(0, ${col} + ?), updated_at = ? WHERE id = ?`).run(
+    netDelta,
+    Date.now(),
+    characterId,
+  );
+
+  const unit = currency === 'gold' ? '金砖' : '银两';
+  const message = won
+    ? `赤壁押注命中！赢得 ${payout} ${unit}（净赚 +${netDelta} ${unit}）！`
+    : `赤壁押注未中，损失 ${amount} ${unit}。`;
+
+  return {
+    result: {
+      winner,
+      pick: opts.pick,
+      currency,
+      amount,
+      won,
+      payout,
+      netDelta,
+      report: reportMap[winner],
+      message,
+    },
+    character: getCharacterById(characterId)!,
+  };
 }

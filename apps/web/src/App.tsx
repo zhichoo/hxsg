@@ -301,6 +301,10 @@ export default function App() {
               realmId={realmId}
               character={character}
               onUpdateCharacter={setCharacter}
+              onEnterBattle={(b) => {
+                setBattle(b);
+                setSubPanel(null);
+              }}
               onClose={() => setSubPanel(null)}
               onNotify={notify}
             />

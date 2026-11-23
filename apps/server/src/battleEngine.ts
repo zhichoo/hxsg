@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import {
+  buildTowerEnemyGroup,
   calcControlChance,
   calcDamage,
   ENEMY_GROUPS,
@@ -16,6 +17,7 @@ import {
   type BattleUnit,
   type CharacterView,
   type ControlKind,
+  type EnemyGroupDef,
 } from '@hxsg/shared';
 import {
   addActiveGeneralsIntimacy,
@@ -26,7 +28,19 @@ import {
   grantEquipmentToCharacter,
   grantGeneralToCharacter,
   recordQuestBattleVictory,
+  recordTowerClear,
 } from './gameService.js';
+
+function resolveEnemyGroup(enemyGroupId: string): EnemyGroupDef | undefined {
+  if (enemyGroupId.startsWith('tower_')) {
+    const floor = Number(enemyGroupId.slice(6));
+    if (Number.isInteger(floor) && floor >= 1 && floor <= 20) {
+      return buildTowerEnemyGroup(floor);
+    }
+    return undefined;
+  }
+  return ENEMY_GROUPS[enemyGroupId];
+}
 
 interface ActiveBattle extends BattleState {
   characterId: number;
@@ -66,10 +80,11 @@ export function getActiveBattle(characterId: number): BattleState | null {
 export function startBattle(characterId: number, enemyGroupId: string): BattleState {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  const group = ENEMY_GROUPS[enemyGroupId];
+  const group = resolveEnemyGroup(enemyGroupId);
   if (!group) throw new Error('怪物群不存在');
   if (ch.hp <= 0) throw new Error('气血不足，请先回客栈休息或吃药');
 
+  const isTower = enemyGroupId.startsWith('tower_');
   const map = MAPS[ch.mapId] ?? MAPS.xuchang_jiao;
   const meta = ROLE_CLASS_META[ch.roleClass];
   const playerSprite = ch.gender === 'female' ? meta.femaleSprite : meta.maleSprite;
@@ -172,8 +187,8 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
     characterId,
     enemyGroupId,
     mapId: map.id,
-    mapName: map.name,
-    battleBg: map.battleBg,
+    mapName: isTower ? '天玄塔' : map.name,
+    battleBg: isTower ? 'f_bg7' : map.battleBg,
     enemyGroupName: group.name,
     round: 1,
     status: 'ongoing',
@@ -209,7 +224,7 @@ export function performBattleAction(
   for (const u of battle.units) u.defending = false;
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
-  const group = ENEMY_GROUPS[battle.enemyGroupId];
+  const group = resolveEnemyGroup(battle.enemyGroupId)!;
 
   const aliveActors = battle.units.filter((u) => u.alive).sort((a, b) => b.spd - a.spd);
 
@@ -761,6 +776,11 @@ export function performBattleAction(
 
     addActiveGeneralsIntimacy(characterId, 2);
     const questUpdates = recordQuestBattleVictory(characterId, battle.enemyGroupId);
+    if (battle.enemyGroupId.startsWith('tower_')) {
+      const floor = Number(battle.enemyGroupId.slice(6));
+      const towerMsg = recordTowerClear(characterId, floor);
+      if (towerMsg) questUpdates.push(towerMsg);
+    }
     const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
     updatedChar = res.character;
     battle.rewards = {

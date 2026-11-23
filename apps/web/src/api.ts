@@ -1,5 +1,7 @@
 import type {
   BattleState,
+  CasinoChibiResult,
+  CasinoDiceResult,
   CharacterView,
   EquipmentSlot,
   Gender,
@@ -343,6 +345,44 @@ export const api = {
       {
         method: 'POST',
         body: { realmId },
+      },
+    ),
+  challengeTower: (realmId: string, floor?: number) =>
+    callEndpoint<{ battle: BattleState }>('towerChallenge', '/api/tower/challenge', {
+      method: 'POST',
+      body: { realmId, floor },
+    }),
+  sweepTower: (realmId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>('towerSweep', '/api/tower/sweep', {
+      method: 'POST',
+      body: { realmId },
+    }),
+  playCasinoDice: (payload: {
+    realmId: string;
+    betType: 'big' | 'small' | 'odd' | 'even' | 'baozi';
+    currency: 'silver' | 'gold';
+    amount: number;
+  }) =>
+    callEndpoint<{ result: CasinoDiceResult; character: CharacterView }>(
+      'casinoDice',
+      '/api/casino/dice',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
+  playCasinoChibi: (payload: {
+    realmId: string;
+    pick: 'wei' | 'wu' | 'shu';
+    currency: 'silver' | 'gold';
+    amount: number;
+  }) =>
+    callEndpoint<{ result: CasinoChibiResult; character: CharacterView }>(
+      'casinoChibi',
+      '/api/casino/chibi',
+      {
+        method: 'POST',
+        body: payload,
       },
     ),
   gmGrant: (payload: {

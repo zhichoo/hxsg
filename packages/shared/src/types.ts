@@ -140,6 +140,40 @@ export interface CharacterQuestState {
   paohuan: PaohuanStateView;
 }
 
+export interface TowerStateView {
+  highestFloor: number;
+  maxFloor: number;
+  dailySwept: boolean;
+  nextFloorName: string;
+  nextFloorRecLevel: number;
+  nextFloorMilestone?: string;
+}
+
+export interface CasinoDiceResult {
+  dice: [number, number, number];
+  sum: number;
+  isBaozi: boolean;
+  betType: 'big' | 'small' | 'odd' | 'even' | 'baozi';
+  currency: 'silver' | 'gold';
+  amount: number;
+  won: boolean;
+  payout: number;
+  netDelta: number;
+  message: string;
+}
+
+export interface CasinoChibiResult {
+  winner: 'wei' | 'wu' | 'shu';
+  pick: 'wei' | 'wu' | 'shu';
+  currency: 'silver' | 'gold';
+  amount: number;
+  won: boolean;
+  payout: number;
+  netDelta: number;
+  report: string;
+  message: string;
+}
+
 export interface CharacterView {
   id: number;
   accountId: number;
@@ -170,6 +204,7 @@ export interface CharacterView {
   generals: GeneralView[];
   inventory: InventoryItemView[];
   quests: CharacterQuestState;
+  tower: TowerStateView;
 }
 
 export interface GeneralView {
@@ -232,7 +267,7 @@ export interface MapFacility {
   name: string;
   desc: string;
   icon: string;
-  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'bank' | 'market' | 'arena' | 'gm';
+  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'tower' | 'casino' | 'bank' | 'market' | 'arena' | 'gm';
 }
 
 export interface MapNode {

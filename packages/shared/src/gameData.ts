@@ -1061,6 +1061,93 @@ export interface MainQuestDef {
   };
 }
 
+export const TOWER_MAX_FLOOR = 20;
+
+export function getTowerFloorMeta(floor: number): {
+  floor: number;
+  name: string;
+  recLevel: number;
+  isBoss: boolean;
+  milestone?: string;
+} {
+  const f = Math.max(1, Math.min(TOWER_MAX_FLOOR, Math.floor(floor)));
+  const recLevel = Math.max(2, f + 1);
+  if (f === 5) {
+    return { floor: f, name: '第5层 · 黄巾妖阵', recLevel, isBoss: true, milestone: '首通赠 金砖+30、招贤令×1' };
+  }
+  if (f === 10) {
+    return { floor: f, name: '第10层 · 西凉虎将', recLevel, isBoss: true, milestone: '首通赠 金砖+60、洗髓丹×2、随机技能书×1' };
+  }
+  if (f === 15) {
+    return { floor: f, name: '第15层 · 五虎幻阵', recLevel, isBoss: true, milestone: '首通赠 金砖+100、藏宝图×3、极品装备×1' };
+  }
+  if (f === 20) {
+    return { floor: f, name: '第20层 · 无双战神吕布', recLevel, isBoss: true, milestone: '登顶赠 金砖+200、绝世神兵/赤兔宝马×1' };
+  }
+  return { floor: f, name: `天玄塔第 ${f} 层守卫`, recLevel, isBoss: false };
+}
+
+export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
+  const f = Math.max(1, Math.min(TOWER_MAX_FLOOR, Math.floor(floor)));
+  const meta = getTowerFloorMeta(f);
+  const lv = Math.max(2, f + 1);
+  const hpBase = Math.round(55 + f * 36 + f * f * 1.4);
+  const atkBase = Math.round(12 + f * 5.2);
+  const spdBase = Math.round(13 + f * 1.9);
+
+  let enemies: EnemyGroupDef['enemies'];
+  if (f === 5) {
+    enemies = [
+      { name: '天玄道童', level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.9), mp: 100, atk: atkBase, spd: spdBase + 2 },
+      { name: '镇塔·张角幻影', level: lv + 1, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 1.35), mp: 160, atk: Math.round(atkBase * 1.18), spd: spdBase + 3 },
+      { name: '黄巾护法', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 1.05), mp: 50, atk: atkBase, spd: spdBase },
+    ];
+  } else if (f === 10) {
+    enemies = [
+      { name: '西凉铁卫', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: hpBase, mp: 60, atk: atkBase, spd: spdBase },
+      { name: '镇塔·华雄幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.45), mp: 100, atk: Math.round(atkBase * 1.22), spd: spdBase + 4 },
+      { name: '西凉军师', level: lv, roleClass: 'wenren', spriteKey: 'n2', hp: Math.round(hpBase * 0.85), mp: 140, atk: atkBase, spd: spdBase + 5 },
+    ];
+  } else if (f === 15) {
+    enemies = [
+      { name: '五虎·关羽幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.3), mp: 110, atk: Math.round(atkBase * 1.18), spd: spdBase + 3 },
+      { name: '五虎·赵云幻影', level: lv + 1, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.25), mp: 110, atk: Math.round(atkBase * 1.15), spd: spdBase + 6 },
+      { name: '卧龙谋士幻影', level: lv, roleClass: 'wenren', spriteKey: 'r2', hp: Math.round(hpBase * 0.95), mp: 180, atk: Math.round(atkBase * 1.1), spd: spdBase + 7 },
+    ];
+  } else if (f === 20) {
+    enemies = [
+      { name: '陷阵营·高顺', level: lv, roleClass: 'wushi', spriteKey: 'n1', hp: Math.round(hpBase * 1.15), mp: 80, atk: Math.round(atkBase * 1.1), spd: spdBase + 2 },
+      { name: '无双战神·吕布', level: lv + 2, roleClass: 'wushi', spriteKey: 'r1', hp: Math.round(hpBase * 1.7), mp: 150, atk: Math.round(atkBase * 1.35), spd: spdBase + 8 },
+      { name: '闭月·貂蝉幻影', level: lv + 1, roleClass: 'wenren', spriteKey: 'r2n', hp: Math.round(hpBase * 0.95), mp: 200, atk: atkBase, spd: spdBase + 10 },
+      { name: '陈宫军师', level: lv, roleClass: 'yiren', spriteKey: 'n3', hp: Math.round(hpBase * 1.0), mp: 200, atk: Math.round(atkBase * 1.15), spd: spdBase + 5 },
+    ];
+  } else {
+    const count = f >= 12 ? 4 : 3;
+    const classes: RoleClass[] = ['wushi', 'wenren', 'yiren', 'wushi'];
+    const sprites = ['n1', 'n2', 'n3', 'n1'];
+    enemies = Array.from({ length: count }, (_, idx) => ({
+      name: idx === 0 ? `${f}层护塔校尉` : idx === 1 ? `${f}层玄塔谋士` : idx === 2 ? `${f}层雷法道士` : `${f}层精锐甲士`,
+      level: lv,
+      roleClass: classes[idx],
+      spriteKey: sprites[idx],
+      hp: Math.round(hpBase * (idx === 0 ? 1.1 : 0.92)),
+      mp: classes[idx] === 'wushi' ? 50 : 120,
+      atk: Math.round(atkBase * (idx === 0 ? 1.05 : 0.96)),
+      spd: spdBase + idx,
+    }));
+  }
+
+  return {
+    id: `tower_${f}`,
+    name: meta.name,
+    mapId: 'xuchang',
+    minLevel: meta.recLevel,
+    silverReward: Math.round(90 + f * 65),
+    expReward: Math.round(80 + f * 72),
+    enemies,
+  };
+}
+
 export const MAIN_QUESTS: MainQuestDef[] = [
   {
     questId: 'main_01',
@@ -1250,7 +1337,9 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'inn', name: '许昌客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '回春药铺', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '铁匠铺与马市', desc: '购置兵器、铠甲、战靴与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
-      { id: 'tavern', name: '招贤馆', desc: '招募关平、黄月英、于吉、赵云', icon: 'ss_m_3.png', kind: 'tavern' },
+      { id: 'tavern', name: '招贤馆', desc: '招募名将与购买副将技能书', icon: 'ss_m_3.png', kind: 'tavern' },
+      { id: 'tower', name: '天玄塔', desc: '20层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
+      { id: 'casino', name: '许昌赌坊', desc: '经典猜大小/豹子 与 赤壁押注', icon: 'ss_m_9.png', kind: 'casino' },
       { id: 'gm', name: '福利驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
     ],
   },
