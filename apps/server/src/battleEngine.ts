@@ -984,11 +984,12 @@ export function performBattleAction(
         droppedItem = { itemId: dropId, name: ITEMS[dropId].name, quantity: 1 };
       }
 
-      // Classic equipment / mount drop roll
+      // Classic equipment / mount drop roll (higher drop rate on bosses)
       let droppedEquipment:
         | { name: string; quality: 'common' | 'fine' | 'rare' | 'legend'; slot: 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount' }
         | undefined;
-      if (Math.random() < 0.28 && ch.equipment.length < 30) {
+      const equipDropChance = battle.enemyGroupId.startsWith('boss_') ? 0.38 : 0.16;
+      if (Math.random() < equipDropChance && ch.equipment.length < 30) {
         let pool: string[];
         if (
           battle.enemyGroupId === 'yiling_wujun' ||

@@ -1973,7 +1973,7 @@ export function SubPanels({
                   <div className="p-2 bg-black/35 border border-[#7c5a2d] space-y-1 text-[11px] text-[#f2dfbe]">
                     <div>强度随你的主角等级自动匹配（单人携副将即可挑战，小服不抢怪不内卷）。</div>
                     <div className="text-[#ffcf54] font-bold">
-                      ★ 每日首杀厚赏：大量经验与银两、金砖+60、洗髓丹×1、必得技能书×1 或 招贤令×2，更有 50% 几率爆同阶神兵极品！
+                      ★ 每日首杀厚赏：大量经验与银两、金砖+45、洗髓丹×1、必得技能书×1 或 招贤令×2，更有 50% 几率爆同阶神兵极品！
                     </div>
                   </div>
                   <button

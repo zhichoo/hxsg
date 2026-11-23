@@ -31,7 +31,8 @@ export function getSkillMaxTargets(aoe: boolean, proficiency: number): number {
 
 export function getSkillPowerMultiplier(basePower: number, proficiency: number, intPts = 0): number {
   const profBonus = 1 + Math.min(0.65, proficiency / 4500);
-  const intBonus = 1 + intPts * 0.012;
+  // Gentle capped INT scaling (since INT already contributes to base ATK)
+  const intBonus = 1 + Math.min(0.45, intPts * 0.004);
   return basePower * profBonus * intBonus;
 }
 

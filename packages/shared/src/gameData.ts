@@ -138,7 +138,7 @@ export const SKILLS: SkillDef[] = [
     kind: 'damage',
     damageType: 'phys',
     mpCost: 28,
-    power: 1.12,
+    power: 1.18,
     aoe: true,
     effect: 'fg',
     desc: '横扫敌阵，随熟练度提升最多打击 5 个目标。',
@@ -208,7 +208,7 @@ export const SKILLS: SkillDef[] = [
     kind: 'damage',
     damageType: 'magic',
     mpCost: 24,
-    power: 1.88,
+    power: 1.76,
     aoe: false,
     effect: 'lei',
     desc: '引九天玄雷直劈单体，造成极高雷电爆发伤害。',
@@ -220,7 +220,7 @@ export const SKILLS: SkillDef[] = [
     kind: 'damage',
     damageType: 'magic',
     mpCost: 30,
-    power: 1.36,
+    power: 1.24,
     aoe: true,
     effect: 'lei',
     desc: '漫天雷劫降临，随熟练度提升最多劈击 5 个敌方目标。',
@@ -1684,10 +1684,12 @@ export function buildTowerEnemyGroup(floor: number): EnemyGroupDef {
     atkBase = Math.round(14 + f * 8.2 + f * f * 0.25 + lateAtkBoost);
     spdBase = Math.round(14 + f * 2.8);
   } else {
-    // Smooth continuation from Floor 20 up to Floor 50 (tuned for Lv.22->60 & 1转 squads)
+    // Smooth continuation from Floor 20 up to Floor 50 (F45-50 tuned as 1转 endgame challenge)
     const over = f - 20;
-    hpBase = Math.round(4800 + over * 165 + over * over * 2.2);
-    atkBase = Math.round(355 + over * 7.8);
+    const apexHp = f > 40 ? (f - 40) * 220 : 0;
+    const apexAtk = f > 40 ? (f - 40) * 6.5 : 0;
+    hpBase = Math.round(4800 + over * 165 + over * over * 2.2 + apexHp);
+    atkBase = Math.round(355 + over * 7.8 + apexAtk);
     spdBase = Math.round(68 + over * 3.6);
   }
 

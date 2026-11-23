@@ -477,9 +477,9 @@ function buildTowerState(highestFloor: number, sweepDate: string | null) {
 function calcPaohuanReward(level: number, ring: number) {
   const safeRing = Math.max(1, Math.min(10, ring));
   const lateExpBonus = level > 15 ? Math.round(Math.pow(level - 15, 1.55) * 28) : 0;
-  const lateSilverBonus = level > 15 ? Math.round((level - 15) * 32) : 0;
+  const lateSilverBonus = level > 15 ? Math.round((level - 15) * 14) : 0;
   const exp = Math.round((75 + level * 48 + lateExpBonus) * (1 + (safeRing - 1) * 0.22));
-  const silver = Math.round((55 + level * 24 + lateSilverBonus) * (1 + (safeRing - 1) * 0.2));
+  const silver = Math.round((50 + level * 15 + lateSilverBonus) * (1 + (safeRing - 1) * 0.18));
   let bonusHint: string | undefined;
   if (safeRing === 10) {
     bonusHint = '第 10 环大满贯：必得金砖 +25、稀有道具与同等级段精良/极品装备！';
@@ -1347,7 +1347,7 @@ export function grantEquipmentToCharacter(
   const atkBonus = roll(tpl.atkBonus);
   const defBonus = roll(tpl.defBonus);
   const spdBonus = roll(tpl.spdBonus);
-  const sellSilver = Math.max(30, Math.round(tpl.priceSilver * 0.4));
+  const sellSilver = Math.max(25, Math.round(tpl.priceSilver * 0.22));
 
   const info = db
     .prepare(
@@ -3140,8 +3140,8 @@ function getDailyKejuQuestions(dateStr: string, characterId: number) {
 function calcEscortReward(level: number) {
   const lv = Math.max(1, level);
   const exp = Math.round(700 + lv * 520 + (lv > 15 ? Math.pow(lv - 15, 1.65) * 180 : 0));
-  const silver = Math.round(1600 + lv * 280);
-  const gold = 40;
+  const silver = Math.round(950 + lv * 135);
+  const gold = 30;
   return { exp, silver, gold };
 }
 
@@ -3399,8 +3399,8 @@ export function recordWorldBossVictory(
 
   const lv = ch.level;
   const bonusExp = Math.round(900 + lv * 640 + (lv > 15 ? Math.pow(lv - 15, 1.7) * 220 : 0));
-  const bonusSilver = Math.round(1800 + lv * 320);
-  const bonusGold = 60;
+  const bonusSilver = Math.round(1050 + lv * 155);
+  const bonusGold = 45;
 
   db.prepare(
     `UPDATE characters
