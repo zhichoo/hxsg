@@ -14,6 +14,8 @@ import {
   type EquipmentQuality,
   type EquipmentSlot,
   type EquipmentView,
+  type MarketListingKind,
+  type MarketListingView,
   type RankEntry,
   type TreasureDigResult,
 } from '@hxsg/shared';
@@ -29,6 +31,8 @@ export type SubPanelType =
   | 'paohuan'
   | 'tower'
   | 'casino'
+  | 'bank'
+  | 'market'
   | 'rank'
   | 'shop'
   | 'blacksmith'
@@ -96,6 +100,8 @@ const TITLES: Record<SubPanelType, string> = {
   paohuan: '许昌跑环',
   tower: '天玄塔试炼',
   casino: '许昌赌坊',
+  bank: '许昌钱庄',
+  market: '许昌集市',
   rank: '排行榜',
   shop: '回春药铺',
   blacksmith: '铁匠铺与马市',
@@ -126,6 +132,13 @@ export function SubPanels({
   const [betAmount, setBetAmount] = useState<number>(200);
   const [diceResult, setDiceResult] = useState<CasinoDiceResult | null>(null);
   const [chibiResult, setChibiResult] = useState<CasinoChibiResult | null>(null);
+  const [bankAmount, setBankAmount] = useState<string>('500');
+  const [marketTab, setMarketTab] = useState<'browse' | 'sell' | 'mine'>('browse');
+  const [marketFilter, setMarketFilter] = useState<'all' | MarketListingKind>('all');
+  const [listings, setListings] = useState<MarketListingView[]>([]);
+  const [sellKind, setSellKind] = useState<MarketListingKind>('equipment');
+  const [sellCurrency, setSellCurrency] = useState<'silver' | 'gold'>('silver');
+  const [sellPrice, setSellPrice] = useState<string>('500');
   const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
@@ -145,7 +158,13 @@ export function SubPanels({
         .then((r) => setRankings(r.rankings))
         .catch((e: Error) => onNotify(e.message));
     }
-  }, [panel, realmId, rankSort, onNotify]);
+    if (panel === 'market') {
+      api
+        .getMarketListings(realmId, marketTab === 'mine' ? 'all' : marketFilter)
+        .then((r) => setListings(r.listings))
+        .catch((e: Error) => onNotify(e.message));
+    }
+  }, [panel, realmId, rankSort, marketFilter, marketTab, onNotify]);
 
   const run = async (fn: () => Promise<{ character: CharacterView }>, okMsg: string) => {
     setBusy(true);
@@ -1952,6 +1971,518 @@ export function SubPanels({
               )}
             </div>
           )}
+
+          {/* BANK (许昌钱庄：存取与金银兑换) */}
+          {panel === 'bank' && (() => {
+            const amt = Math.max(1, Math.floor(Number(bankAmount) || 0));
+            const doBank = async (
+              action:
+                | 'deposit_silver'
+                | 'withdraw_silver'
+                | 'deposit_gold'
+                | 'withdraw_gold'
+                | 'gold_to_silver'
+                | 'silver_to_gold',
+              amount: number,
+            ) => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                const res = await api.bankTransfer({ realmId, action, amount });
+                onUpdateCharacter(res.character);
+                onNotify(res.message);
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '钱庄操作失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+            return (
+              <div className="space-y-2.5 text-xs">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="p-2 bg-[#26072d]/90 border border-[#9d6fa8] space-y-0.5">
+                    <div className="text-[#d9c1e0] text-[11px]">随身携带</div>
+                    <div className="text-white font-bold">银两：{character.silver}</div>
+                    <div className="text-[#ffe04b] font-bold">金砖：{character.gold}</div>
+                  </div>
+                  <div className="p-2 bg-[#2a1408]/90 border border-[#e0b84e] space-y-0.5">
+                    <div className="text-[#f7d89c] text-[11px]">钱庄金库（集市收款直达）</div>
+                    <div className="text-white font-bold">存银：{character.bank.silver}</div>
+                    <div className="text-[#ffe04b] font-bold">存金：{character.bank.gold}</div>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-[#2a082f] border border-[#b88b3d] space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#ffe485] font-bold shrink-0">存取数额：</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={bankAmount}
+                      onChange={(e) => setBankAmount(e.target.value)}
+                      className="flex-1 px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('deposit_silver', amt)}
+                      className="hx-btn-gold py-1.5"
+                    >
+                      存入银两
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('withdraw_silver', amt)}
+                      className="hx-btn-gold py-1.5"
+                    >
+                      取出银两
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('deposit_gold', amt)}
+                      className="px-2 py-1.5 bg-[#5c3d0c] border border-[#f0c756] text-[#fff2b3] font-bold"
+                    >
+                      存入金砖
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('withdraw_gold', amt)}
+                      className="px-2 py-1.5 bg-[#5c3d0c] border border-[#f0c756] text-[#fff2b3] font-bold"
+                    >
+                      取出金砖
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5 pt-1">
+                    <button
+                      type="button"
+                      disabled={busy || character.bank.silver <= 0}
+                      onClick={() => void doBank('withdraw_silver', character.bank.silver)}
+                      className="flex-1 py-1 bg-[#1e4a2b] border border-[#72e089] text-[#d6ffde] text-[11px] font-bold"
+                    >
+                      一键提取全部存银
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || character.bank.gold <= 0}
+                      onClick={() => void doBank('withdraw_gold', character.bank.gold)}
+                      className="flex-1 py-1 bg-[#1e4a2b] border border-[#72e089] text-[#d6ffde] text-[11px] font-bold"
+                    >
+                      一键提取全部存金
+                    </button>
+                  </div>
+                </div>
+
+                {/* Classic Gold <-> Silver Exchange */}
+                <div className="p-2.5 bg-[#2a082f] border border-[#b88b3d] space-y-2">
+                  <div className="font-bold text-[#ffe678]">金银兑汇（实时汇率）</div>
+                  <div className="text-[11px] text-[#e7cfbb]">
+                    · 1 金砖 → 100 银两（免手续费） · 105 银两 → 1 金砖
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('gold_to_silver', 10)}
+                      className="hx-btn-gold py-1.5 text-[11px]"
+                    >
+                      10 金砖 → 1000 银
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('silver_to_gold', 10)}
+                      className="hx-btn-gold py-1.5 text-[11px]"
+                    >
+                      1050 银 → 10 金砖
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('gold_to_silver', 50)}
+                      className="hx-btn-gold py-1.5 text-[11px]"
+                    >
+                      50 金砖 → 5000 银
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void doBank('silver_to_gold', 50)}
+                      className="hx-btn-gold py-1.5 text-[11px]"
+                    >
+                      5250 银 → 50 金砖
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* MARKET (许昌集市：离线摆摊寄售装备/副将/道具) */}
+          {panel === 'market' && (() => {
+            const refreshMarket = async () => {
+              const r = await api.getMarketListings(
+                realmId,
+                marketTab === 'mine' ? 'all' : marketFilter,
+              );
+              setListings(r.listings);
+            };
+            const visibleListings =
+              marketTab === 'mine'
+                ? listings.filter((l) => l.sellerId === character.id)
+                : listings;
+            const unequippedGear = character.equipment.filter((e) => !e.equipped);
+            const benchedGenerals = character.generals.filter((g) => g.slot === null);
+            const parsedPrice = Math.max(1, Math.floor(Number(sellPrice) || 0));
+
+            const handleSell = async (kind: MarketListingKind, refId: string | number) => {
+              if (busy) return;
+              setBusy(true);
+              try {
+                const res = await api.createMarketListing({
+                  realmId,
+                  kind,
+                  refId,
+                  quantity: 1,
+                  currency: sellCurrency,
+                  price: parsedPrice,
+                });
+                onUpdateCharacter(res.character);
+                onNotify(res.message);
+                await refreshMarket();
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '上架失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+
+            return (
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
+                  <span className="text-[#ffe27a] font-bold">
+                    银:{character.silver} · 金:{character.gold}
+                  </span>
+                  <span className="text-[11px] text-[#bfeec2]">成交税5% · 货款直入钱庄</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      ['browse', '逛集市'],
+                      ['sell', '我要摆摊'],
+                      ['mine', '我的摊位'],
+                    ] as const
+                  ).map(([t, label]) => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => setMarketTab(t)}
+                      className={`py-1.5 font-bold border ${
+                        marketTab === t
+                          ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                          : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {marketTab === 'browse' && (
+                  <div className="space-y-2">
+                    <div className="flex gap-1">
+                      {(
+                        [
+                          ['all', '全部'],
+                          ['equipment', '装备'],
+                          ['general', '副将'],
+                          ['item', '道具/秘籍'],
+                        ] as const
+                      ).map(([k, label]) => (
+                        <button
+                          key={k}
+                          type="button"
+                          onClick={() => setMarketFilter(k)}
+                          className={`px-2 py-0.5 text-[11px] border font-bold ${
+                            marketFilter === k
+                              ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                              : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {visibleListings.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-2 bg-[#26072d]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#ffe678] truncate">
+                            [{item.kind === 'equipment' ? '装备' : item.kind === 'general' ? '副将' : '道具'}]{' '}
+                            {item.title}
+                          </div>
+                          <div className="text-[11px] text-[#9de6ff] truncate">{item.summary}</div>
+                          <div className="text-[10.5px] text-[#d9c1e0]">
+                            摊主：{item.sellerName} · 标价{' '}
+                            <span className="text-[#ffd24d] font-bold">
+                              {item.price} {item.currency === 'gold' ? '金砖' : '银两'}
+                            </span>
+                          </div>
+                        </div>
+                        {item.sellerId === character.id ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                const res = await api.cancelMarketListing(realmId, item.id);
+                                onUpdateCharacter(res.character);
+                                onNotify(res.message);
+                                await refreshMarket();
+                              } catch (err) {
+                                onNotify(err instanceof Error ? err.message : '下架失败');
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                            className="px-2.5 py-1 bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8] text-[11px] shrink-0"
+                          >
+                            下架
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                const res = await api.buyMarketListing(realmId, item.id);
+                                onUpdateCharacter(res.character);
+                                onNotify(res.message);
+                                await refreshMarket();
+                              } catch (err) {
+                                onNotify(err instanceof Error ? err.message : '购买失败');
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                            className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                          >
+                            购买
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {visibleListings.length === 0 && (
+                      <div className="text-center text-[#d8bedf] py-8">
+                        集市暂无人摆摊，快去「我要摆摊」上架多余装备或极品副将吧！
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {marketTab === 'sell' && (
+                  <div className="space-y-2">
+                    <div className="p-2 bg-[#2a082f] border border-[#b88b3d] space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[#e7cfbb]">上架类型：</span>
+                        {(
+                          [
+                            ['equipment', `闲置装备(${unequippedGear.length})`],
+                            ['general', `闲置副将(${benchedGenerals.length})`],
+                            ['item', `道具(${character.inventory.length})`],
+                          ] as const
+                        ).map(([k, label]) => (
+                          <button
+                            key={k}
+                            type="button"
+                            onClick={() => setSellKind(k)}
+                            className={`px-2 py-0.5 text-[11px] border font-bold ${
+                              sellKind === k
+                                ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                                : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[#e7cfbb]">定价：</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={sellPrice}
+                          onChange={(e) => setSellPrice(e.target.value)}
+                          className="w-24 px-2 py-0.5 bg-[#120416] border border-[#9e7430] text-white"
+                        />
+                        {(['silver', 'gold'] as const).map((cur) => (
+                          <button
+                            key={cur}
+                            type="button"
+                            onClick={() => setSellCurrency(cur)}
+                            className={`px-2 py-0.5 border font-bold ${
+                              sellCurrency === cur
+                                ? 'bg-[#b82018] border-[#ffd86b] text-[#fff6cc]'
+                                : 'bg-[#381440] border-[#8c6496] text-[#f0d9f5]'
+                            }`}
+                          >
+                            {cur === 'silver' ? '银两' : '金砖'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {sellKind === 'equipment' && (
+                      <div className="space-y-1.5">
+                        {unequippedGear.map((eq) => (
+                          <div
+                            key={eq.id}
+                            className="p-2 bg-[#26072d]/90 border border-[#8e6299] flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className={`font-bold truncate ${QUALITY_COLOR[eq.quality]}`}>
+                                {eq.name} (Lv.{eq.levelReq})
+                              </div>
+                              <div className="text-[11px] text-[#9de6ff] truncate">
+                                {formatEquipStats(eq)}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleSell('equipment', eq.id)}
+                              className="hx-btn-gold px-2.5 py-1 text-[11px] shrink-0"
+                            >
+                              上架
+                            </button>
+                          </div>
+                        ))}
+                        {unequippedGear.length === 0 && (
+                          <div className="text-center text-[#d8bedf] py-6">
+                            暂无未穿戴的闲置装备
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {sellKind === 'general' && (
+                      <div className="space-y-1.5">
+                        {benchedGenerals.map((g) => (
+                          <div
+                            key={g.id}
+                            className="p-2 bg-[#26072d]/90 border border-[#8e6299] flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className={`font-bold truncate ${QUALITY_COLOR[g.rarity]}`}>
+                                {g.name} Lv.{g.level}
+                                {g.rebirth > 0 ? ` [${g.rebirth}转]` : ''}
+                              </div>
+                              <div className="text-[11px] text-[#9de6ff] truncate">
+                                成长 {g.growth.toFixed(2)} · 技:{g.skillName}
+                                {g.skill2Name ? `/${g.skill2Name}` : ''}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleSell('general', g.id)}
+                              className="hx-btn-gold px-2.5 py-1 text-[11px] shrink-0"
+                            >
+                              上架
+                            </button>
+                          </div>
+                        ))}
+                        {benchedGenerals.length === 0 && (
+                          <div className="text-center text-[#d8bedf] py-6">
+                            暂无休息中的闲置副将（请先卸下出战副将）
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {sellKind === 'item' && (
+                      <div className="space-y-1.5">
+                        {character.inventory.map((it) => (
+                          <div
+                            key={it.itemId}
+                            className="p-2 bg-[#26072d]/90 border border-[#8e6299] flex items-center justify-between gap-2"
+                          >
+                            <div className="min-w-0">
+                              <div className="font-bold text-[#ffe678] truncate">
+                                {it.name} ×{it.quantity}
+                              </div>
+                              <div className="text-[11px] text-[#d9c1e0] truncate">{it.desc}</div>
+                            </div>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => void handleSell('item', it.itemId)}
+                              className="hx-btn-gold px-2.5 py-1 text-[11px] shrink-0"
+                            >
+                              上架×1
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {marketTab === 'mine' && (
+                  <div className="space-y-2">
+                    {visibleListings.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-2 bg-[#26072d]/90 border border-[#e0b84e] flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#ffe678] truncate">{item.title}</div>
+                          <div className="text-[11px] text-[#9de6ff] truncate">{item.summary}</div>
+                          <div className="text-[10.5px] text-[#ffd24d]">
+                            标价：{item.price} {item.currency === 'gold' ? '金砖' : '银两'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const res = await api.cancelMarketListing(realmId, item.id);
+                              onUpdateCharacter(res.character);
+                              onNotify(res.message);
+                              await refreshMarket();
+                            } catch (err) {
+                              onNotify(err instanceof Error ? err.message : '下架失败');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8] text-[11px] shrink-0"
+                        >
+                          下架取回
+                        </button>
+                      </div>
+                    ))}
+                    {visibleListings.length === 0 && (
+                      <div className="text-center text-[#d8bedf] py-8">
+                        你当前没有在售摊位，成交货款会自动存入「许昌钱庄」
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* NOTICE */}
           {panel === 'notice' && (

@@ -1340,6 +1340,8 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'tavern', name: '招贤馆', desc: '招募名将与购买副将技能书', icon: 'ss_m_3.png', kind: 'tavern' },
       { id: 'tower', name: '天玄塔', desc: '20层单人爬塔试炼与每日扫荡', icon: 'ss_m_8.png', kind: 'tower' },
       { id: 'casino', name: '许昌赌坊', desc: '经典猜大小/豹子 与 赤壁押注', icon: 'ss_m_9.png', kind: 'casino' },
+      { id: 'bank', name: '许昌钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
+      { id: 'market', name: '许昌集市', desc: '玩家离线摆摊寄售装备/副将/秘籍', icon: 'ss_m_11.png', kind: 'market' },
       { id: 'gm', name: '福利驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
     ],
   },
@@ -1418,6 +1420,8 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'pharmacy', name: '太医署药房', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '洛阳兵马司', desc: '购置精良兵器防具与名驹', icon: 'ss_m_7.png', kind: 'blacksmith' },
       { id: 'tavern', name: '洛阳招贤馆', desc: '招募强力三国副将', icon: 'ss_m_3.png', kind: 'tavern' },
+      { id: 'bank', name: '洛阳钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
+      { id: 'market', name: '洛阳集市', desc: '全区互通离线摆摊寄售', icon: 'ss_m_11.png', kind: 'market' },
     ],
   },
   luoyang_wai: {

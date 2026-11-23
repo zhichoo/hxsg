@@ -4,7 +4,14 @@ import { fileURLToPath } from 'node:url';
 import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyRequest } from 'fastify';
-import { REALMS, TOWER_MAX_FLOOR, type EquipmentSlot, type Gender, type RoleClass } from '@hxsg/shared';
+import {
+  REALMS,
+  TOWER_MAX_FLOOR,
+  type EquipmentSlot,
+  type Gender,
+  type MarketListingKind,
+  type RoleClass,
+} from '@hxsg/shared';
 import { loginAccount, registerAccount, verifyToken, type AuthPayload } from './auth.js';
 import {
   getActiveBattle,
@@ -19,17 +26,22 @@ import {
   acceptPaohuan,
   allocateCharacterResist,
   allocateCharacterStats,
+  bankTransfer,
   buyEquipment,
+  buyMarketListing,
   buyShopItem,
+  cancelMarketListing,
   claimMainQuest,
   claimPaohuan,
   createCharacter,
+  createMarketListing,
   digTreasureMap,
   dismissGeneral,
   drawGeneralWithToken,
   equipItem,
   feedGeneralExpPill,
   getCharacterByAccountAndRealm,
+  getMarketListings,
   getRankings,
   gmGrant,
   learnGeneralSkillBook,
@@ -511,6 +523,72 @@ app.post('/api/casino/chibi', async (req) => {
     currency: body.currency || 'silver',
     amount: Number(body.amount ?? 100),
   });
+});
+
+app.post('/api/bank/transfer', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    action?:
+      | 'deposit_silver'
+      | 'withdraw_silver'
+      | 'deposit_gold'
+      | 'withdraw_gold'
+      | 'gold_to_silver'
+      | 'silver_to_gold';
+    amount?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return bankTransfer(current.id, body.action || 'deposit_silver', Number(body.amount ?? 0));
+});
+
+app.get('/api/market/listings', async (req) => {
+  await verifyOptionalAuth(req);
+  const q = req.query as { realmId?: string; kind?: 'all' | MarketListingKind };
+  return {
+    listings: getMarketListings(q.realmId || 'dingjunshan', q.kind || 'all'),
+  };
+});
+
+app.post('/api/market/list', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    kind?: MarketListingKind;
+    refId?: string | number;
+    quantity?: number;
+    currency?: 'silver' | 'gold';
+    price?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return createMarketListing(current.id, {
+    kind: body.kind || 'item',
+    refId: body.refId ?? '',
+    quantity: body.quantity,
+    currency: body.currency || 'silver',
+    price: Number(body.price ?? 0),
+  });
+});
+
+app.post('/api/market/buy', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; listingId?: number };
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const res = buyMarketListing(current.id, Number(body.listingId));
+  broadcastSystemMessage(realmId, res.tradeAnnouncement, 'shang');
+  return { character: res.character, message: res.message };
+});
+
+app.post('/api/market/cancel', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; listingId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return cancelMarketListing(current.id, Number(body.listingId));
 });
 
 app.post('/api/gm/grant', async (req) => {

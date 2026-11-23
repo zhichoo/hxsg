@@ -193,6 +193,32 @@
       "method": "POST",
       "auth": "platform"
     },
+    "bankTransfer": {
+      "url": "__API_BASE__/api/bank/transfer",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "marketList": {
+      "url": "__API_BASE__/api/market/listings",
+      "method": "GET",
+      "query": ["realmId", "kind"],
+      "auth": "auto"
+    },
+    "marketCreate": {
+      "url": "__API_BASE__/api/market/list",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "marketBuy": {
+      "url": "__API_BASE__/api/market/buy",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "marketCancel": {
+      "url": "__API_BASE__/api/market/cancel",
+      "method": "POST",
+      "auth": "platform"
+    },
     "gmGrant": {
       "url": "__API_BASE__/api/gm/grant",
       "method": "POST",

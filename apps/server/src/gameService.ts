@@ -28,6 +28,8 @@ import {
   type GeneralView,
   type InventoryItemView,
   type MainQuestView,
+  type MarketListingKind,
+  type MarketListingView,
   type PaohuanStateView,
   type QuestObjectiveKind,
   type RankEntry,
@@ -70,6 +72,8 @@ interface CharacterRow {
   res_magic: number;
   tower_floor?: number;
   tower_sweep_date?: string | null;
+  bank_silver?: number;
+  bank_gold?: number;
 }
 
 interface GeneralRow {
@@ -387,6 +391,10 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     spd: effectiveSpd,
     silver: row.silver,
     gold: row.gold,
+    bank: {
+      silver: row.bank_silver ?? 0,
+      gold: row.bank_gold ?? 0,
+    },
     mapId: row.map_id,
     isGm: Boolean(acc?.is_gm),
     alloc,
@@ -2190,4 +2198,457 @@ export function playCasinoChibi(
     },
     character: getCharacterById(characterId)!,
   };
+}
+
+function withTx<T>(fn: () => T): T {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const res = fn();
+    db.exec('COMMIT');
+    return res;
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // ignore rollback error
+    }
+    throw err;
+  }
+}
+
+export function bankTransfer(
+  characterId: number,
+  action:
+    | 'deposit_silver'
+    | 'withdraw_silver'
+    | 'deposit_gold'
+    | 'withdraw_gold'
+    | 'gold_to_silver'
+    | 'silver_to_gold',
+  rawAmount: number,
+): { character: CharacterView; message: string } {
+  const amount = Math.floor(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('请输入大于 0 的数量');
+  }
+  return withTx(() => {
+    const ch = getCharacterById(characterId);
+    if (!ch) throw new Error('角色不存在');
+    const now = Date.now();
+
+    if (action === 'deposit_silver') {
+      if (ch.silver < amount) throw new Error('随身银两不足');
+      db.prepare(
+        'UPDATE characters SET silver = silver - ?, bank_silver = bank_silver + ?, updated_at = ? WHERE id = ?',
+      ).run(amount, amount, now, characterId);
+      return { character: getCharacterById(characterId)!, message: `已存入钱庄 ${amount} 银两` };
+    }
+    if (action === 'withdraw_silver') {
+      if (ch.bank.silver < amount) throw new Error('钱庄银两余额不足');
+      db.prepare(
+        'UPDATE characters SET silver = silver + ?, bank_silver = bank_silver - ?, updated_at = ? WHERE id = ?',
+      ).run(amount, amount, now, characterId);
+      return { character: getCharacterById(characterId)!, message: `已从钱庄取出 ${amount} 银两` };
+    }
+    if (action === 'deposit_gold') {
+      if (ch.gold < amount) throw new Error('随身金砖不足');
+      db.prepare(
+        'UPDATE characters SET gold = gold - ?, bank_gold = bank_gold + ?, updated_at = ? WHERE id = ?',
+      ).run(amount, amount, now, characterId);
+      return { character: getCharacterById(characterId)!, message: `已存入钱庄 ${amount} 金砖` };
+    }
+    if (action === 'withdraw_gold') {
+      if (ch.bank.gold < amount) throw new Error('钱庄金砖余额不足');
+      db.prepare(
+        'UPDATE characters SET gold = gold + ?, bank_gold = bank_gold - ?, updated_at = ? WHERE id = ?',
+      ).run(amount, amount, now, characterId);
+      return { character: getCharacterById(characterId)!, message: `已从钱庄取出 ${amount} 金砖` };
+    }
+    if (action === 'gold_to_silver') {
+      if (ch.gold < amount) throw new Error('随身金砖不足');
+      const silverGain = amount * 100;
+      db.prepare(
+        'UPDATE characters SET gold = gold - ?, silver = silver + ?, updated_at = ? WHERE id = ?',
+      ).run(amount, silverGain, now, characterId);
+      return {
+        character: getCharacterById(characterId)!,
+        message: `兑换成功！${amount} 金砖 → ${silverGain} 银两`,
+      };
+    }
+    const silverCost = amount * 105;
+    if (ch.silver < silverCost) throw new Error(`银两不足，兑换 ${amount} 金砖需 ${silverCost} 银两`);
+    db.prepare(
+      'UPDATE characters SET silver = silver - ?, gold = gold + ?, updated_at = ? WHERE id = ?',
+    ).run(silverCost, amount, now, characterId);
+    return {
+      character: getCharacterById(characterId)!,
+      message: `兑换成功！${silverCost} 银两 → ${amount} 金砖`,
+    };
+  });
+}
+
+interface MarketRow {
+  id: number;
+  realm_id: string;
+  seller_id: number;
+  seller_name: string;
+  kind: MarketListingKind;
+  title: string;
+  summary: string;
+  payload_json: string;
+  currency: 'silver' | 'gold';
+  price: number;
+  status: string;
+  created_at: number;
+}
+
+function toMarketView(r: MarketRow): MarketListingView {
+  return {
+    id: r.id,
+    realmId: r.realm_id,
+    sellerId: r.seller_id,
+    sellerName: r.seller_name,
+    kind: r.kind,
+    title: r.title,
+    summary: r.summary,
+    currency: r.currency,
+    price: r.price,
+    createdAt: r.created_at,
+  };
+}
+
+export function getMarketListings(
+  realmId: string,
+  kind: 'all' | MarketListingKind = 'all',
+): MarketListingView[] {
+  const rows =
+    kind === 'all'
+      ? (db
+          .prepare(
+            `SELECT * FROM market_listings WHERE realm_id = ? AND status = 'active' ORDER BY created_at DESC LIMIT 80`,
+          )
+          .all(realmId) as unknown as MarketRow[])
+      : (db
+          .prepare(
+            `SELECT * FROM market_listings WHERE realm_id = ? AND status = 'active' AND kind = ? ORDER BY created_at DESC LIMIT 80`,
+          )
+          .all(realmId, kind) as unknown as MarketRow[]);
+  return rows.map(toMarketView);
+}
+
+export function createMarketListing(
+  characterId: number,
+  opts: {
+    kind: MarketListingKind;
+    refId: string | number;
+    quantity?: number;
+    currency: 'silver' | 'gold';
+    price: number;
+  },
+): { listing: MarketListingView; character: CharacterView; message: string } {
+  const currency = opts.currency === 'gold' ? 'gold' : 'silver';
+  const price = Math.floor(opts.price);
+  if (!Number.isFinite(price) || price < 1 || price > 999_999) {
+    throw new Error('定价范围需在 1 ~ 999,999 之间');
+  }
+
+  return withTx(() => {
+    const ch = getCharacterById(characterId);
+    if (!ch) throw new Error('角色不存在');
+    const activeCount = (
+      db
+        .prepare(`SELECT COUNT(*) AS cnt FROM market_listings WHERE seller_id = ? AND status = 'active'`)
+        .get(characterId) as { cnt: number }
+    ).cnt;
+    if (activeCount >= 10) throw new Error('每人最多同时寄售 10 件商品');
+
+    let title = '';
+    let summary = '';
+    let payload: unknown;
+    const now = Date.now();
+
+    if (opts.kind === 'item') {
+      const itemId = String(opts.refId);
+      const qty = Math.max(1, Math.min(99, Math.floor(opts.quantity ?? 1)));
+      const tpl = ITEMS[itemId];
+      if (!tpl) throw new Error('道具不存在');
+      const owned = ch.inventory.find((i) => i.itemId === itemId);
+      if (!owned || owned.quantity < qty) throw new Error('行囊中该道具数量不足');
+      addItem(characterId, itemId, -qty);
+      title = `${tpl.name} ×${qty}`;
+      summary = tpl.desc;
+      payload = { itemId, quantity: qty };
+    } else if (opts.kind === 'equipment') {
+      const equipId = Number(opts.refId);
+      const row = db
+        .prepare('SELECT * FROM character_equipment WHERE id = ? AND character_id = ?')
+        .get(equipId, characterId) as EquipmentRow | undefined;
+      if (!row) throw new Error('装备不存在');
+      if (row.equipped) throw new Error('请先卸下装备再上架寄售');
+      db.prepare('DELETE FROM character_equipment WHERE id = ? AND character_id = ?').run(
+        equipId,
+        characterId,
+      );
+      const statParts: string[] = [];
+      if (row.atk_bonus) statParts.push(`攻+${row.atk_bonus}`);
+      if (row.hp_bonus) statParts.push(`血+${row.hp_bonus}`);
+      if (row.mp_bonus) statParts.push(`精+${row.mp_bonus}`);
+      if (row.def_bonus) statParts.push(`防+${row.def_bonus}`);
+      if (row.spd_bonus) statParts.push(`速+${row.spd_bonus}`);
+      if (row.res_phys) statParts.push(`抗物+${row.res_phys}%`);
+      if (row.res_chaos) statParts.push(`抗乱+${row.res_chaos}%`);
+      if (row.res_seal) statParts.push(`抗封+${row.res_seal}%`);
+      if (row.res_trap) statParts.push(`抗围+${row.res_trap}%`);
+      if (row.res_magic) statParts.push(`抗法+${row.res_magic}%`);
+      title = `[Lv.${row.level_req}] ${row.name}`;
+      summary = statParts.join(' · ') || '经典装备';
+      payload = {
+        template_id: row.template_id,
+        name: row.name,
+        slot: row.slot,
+        quality: row.quality,
+        icon: row.icon,
+        level_req: row.level_req,
+        hp_bonus: row.hp_bonus,
+        mp_bonus: row.mp_bonus,
+        atk_bonus: row.atk_bonus,
+        def_bonus: row.def_bonus,
+        spd_bonus: row.spd_bonus,
+        res_phys: row.res_phys,
+        res_chaos: row.res_chaos,
+        res_seal: row.res_seal,
+        res_trap: row.res_trap,
+        res_magic: row.res_magic,
+        sell_silver: row.sell_silver,
+      };
+    } else if (opts.kind === 'general') {
+      const genId = Number(opts.refId);
+      const row = db
+        .prepare('SELECT * FROM generals WHERE id = ? AND character_id = ?')
+        .get(genId, characterId) as GeneralRow | undefined;
+      if (!row) throw new Error('副将不存在');
+      if (row.slot !== null) throw new Error('请先卸下出战副将再上架寄售');
+      db.prepare('DELETE FROM generals WHERE id = ? AND character_id = ?').run(genId, characterId);
+      const sk1 = SKILLS.find((s) => s.id === row.skill_id)?.name ?? '力劈华山';
+      const sk2 = row.skill2_id ? SKILLS.find((s) => s.id === row.skill2_id)?.name : null;
+      title = `${row.name} Lv.${row.level}${row.rebirth > 0 ? ` [${row.rebirth}转]` : ''}`;
+      summary = `成长 ${row.growth.toFixed(2)} · 技:${sk1}${sk2 ? `/${sk2}` : ''} · 血${row.max_hp} 攻${row.atk} 速${row.spd}`;
+      payload = {
+        template_id: row.template_id,
+        name: row.name,
+        role_class: row.role_class,
+        sprite_key: row.sprite_key,
+        avatar_key: row.avatar_key,
+        level: row.level,
+        exp: row.exp,
+        hp: row.max_hp,
+        max_hp: row.max_hp,
+        mp: row.max_mp,
+        max_mp: row.max_mp,
+        atk: row.atk,
+        spd: row.spd,
+        base_hp: row.base_hp,
+        base_mp: row.base_mp,
+        base_atk: row.base_atk,
+        base_spd: row.base_spd,
+        growth: row.growth,
+        rebirth: row.rebirth,
+        rarity: row.rarity,
+        skill_id: row.skill_id,
+        skill2_id: row.skill2_id,
+        intimacy: 0,
+      };
+    } else {
+      throw new Error('无效的寄售类型');
+    }
+
+    const info = db
+      .prepare(
+        `INSERT INTO market_listings (
+          realm_id, seller_id, seller_name, kind, title, summary, payload_json,
+          currency, price, status, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)`,
+      )
+      .run(
+        ch.realmId,
+        ch.id,
+        ch.name,
+        opts.kind,
+        title,
+        summary,
+        JSON.stringify(payload),
+        currency,
+        price,
+        now,
+        now,
+      );
+
+    const inserted = db
+      .prepare('SELECT * FROM market_listings WHERE id = ?')
+      .get(Number(info.lastInsertRowid)) as unknown as MarketRow;
+    const unit = currency === 'gold' ? '金砖' : '银两';
+    return {
+      listing: toMarketView(inserted),
+      character: getCharacterById(characterId)!,
+      message: `已成功上架【${title}】，标价 ${price} ${unit}！`,
+    };
+  });
+}
+
+function deliverMarketPayload(recipientId: number, kind: MarketListingKind, payloadJson: string) {
+  const data = JSON.parse(payloadJson) as Record<string, unknown>;
+  const now = Date.now();
+  if (kind === 'item') {
+    addItem(recipientId, String(data.itemId), Number(data.quantity));
+    return;
+  }
+  if (kind === 'equipment') {
+    const cnt = (
+      db
+        .prepare('SELECT COUNT(*) AS cnt FROM character_equipment WHERE character_id = ?')
+        .get(recipientId) as { cnt: number }
+    ).cnt;
+    if (cnt >= 30) throw new Error('装备栏已满（最多 30 件），无法接收该装备');
+    db.prepare(
+      `INSERT INTO character_equipment (
+        character_id, template_id, name, slot, quality, icon, level_req,
+        hp_bonus, mp_bonus, atk_bonus, def_bonus, spd_bonus,
+        res_phys, res_chaos, res_seal, res_trap, res_magic,
+        sell_silver, equipped, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`,
+    ).run(
+      recipientId,
+      String(data.template_id),
+      String(data.name),
+      String(data.slot),
+      String(data.quality),
+      String(data.icon),
+      Number(data.level_req),
+      Number(data.hp_bonus),
+      Number(data.mp_bonus),
+      Number(data.atk_bonus),
+      Number(data.def_bonus),
+      Number(data.spd_bonus),
+      Number(data.res_phys),
+      Number(data.res_chaos),
+      Number(data.res_seal),
+      Number(data.res_trap),
+      Number(data.res_magic),
+      Number(data.sell_silver),
+      now,
+    );
+    return;
+  }
+  const gCnt = (
+    db.prepare('SELECT COUNT(*) AS cnt FROM generals WHERE character_id = ?').get(recipientId) as {
+      cnt: number;
+    }
+  ).cnt;
+  if (gCnt >= 12) throw new Error('副将栏已满（最多 12 名），无法接收该副将');
+  db.prepare(
+    `INSERT INTO generals (
+      character_id, template_id, name, role_class, sprite_key, avatar_key,
+      level, exp, hp, max_hp, mp, max_mp, atk, spd,
+      base_hp, base_mp, base_atk, base_spd, growth, rebirth, rarity, skill_id, skill2_id, intimacy,
+      slot, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+  ).run(
+    recipientId,
+    String(data.template_id),
+    String(data.name),
+    String(data.role_class),
+    String(data.sprite_key),
+    String(data.avatar_key),
+    Number(data.level),
+    Number(data.exp),
+    Number(data.hp),
+    Number(data.max_hp),
+    Number(data.mp),
+    Number(data.max_mp),
+    Number(data.atk),
+    Number(data.spd),
+    Number(data.base_hp),
+    Number(data.base_mp),
+    Number(data.base_atk),
+    Number(data.base_spd),
+    Number(data.growth),
+    Number(data.rebirth),
+    String(data.rarity),
+    String(data.skill_id),
+    data.skill2_id ? String(data.skill2_id) : null,
+    Number(data.intimacy ?? 0),
+    now,
+  );
+}
+
+export function buyMarketListing(
+  buyerId: number,
+  listingId: number,
+): { character: CharacterView; message: string; tradeAnnouncement: string } {
+  return withTx(() => {
+    const buyer = getCharacterById(buyerId);
+    if (!buyer) throw new Error('角色不存在');
+    const row = db
+      .prepare('SELECT * FROM market_listings WHERE id = ? AND realm_id = ?')
+      .get(listingId, buyer.realmId) as unknown as MarketRow | undefined;
+    if (!row || row.status !== 'active') throw new Error('该商品已被购走或已下架');
+    if (row.seller_id === buyerId) throw new Error('不能购买自己寄售的商品，如需取回请点「下架」');
+
+    const col = row.currency === 'gold' ? 'gold' : 'silver';
+    const bankCol = row.currency === 'gold' ? 'bank_gold' : 'bank_silver';
+    const balance = row.currency === 'gold' ? buyer.gold : buyer.silver;
+    if (balance < row.price) {
+      throw new Error(`${row.currency === 'gold' ? '金砖' : '银两'}不足`);
+    }
+
+    deliverMarketPayload(buyerId, row.kind, row.payload_json);
+
+    const now = Date.now();
+    const sellerProceeds = Math.max(1, Math.floor(row.price * 0.95));
+    db.prepare(`UPDATE characters SET ${col} = ${col} - ?, updated_at = ? WHERE id = ?`).run(
+      row.price,
+      now,
+      buyerId,
+    );
+    db.prepare(`UPDATE characters SET ${bankCol} = ${bankCol} + ?, updated_at = ? WHERE id = ?`).run(
+      sellerProceeds,
+      now,
+      row.seller_id,
+    );
+    db.prepare(
+      `UPDATE market_listings SET status = 'sold', buyer_id = ?, buyer_name = ?, updated_at = ? WHERE id = ?`,
+    ).run(buyerId, buyer.name, now, listingId);
+
+    const unit = row.currency === 'gold' ? '金砖' : '银两';
+    return {
+      character: getCharacterById(buyerId)!,
+      message: `购买成功！【${row.title}】已存入行囊/营帐（花费 ${row.price} ${unit}）`,
+      tradeAnnouncement: `【集市成交】${buyer.name} 以 ${row.price}${unit} 拍下了 ${row.seller_name} 寄售的【${row.title}】（货款已入卖家钱庄）！`,
+    };
+  });
+}
+
+export function cancelMarketListing(
+  sellerId: number,
+  listingId: number,
+): { character: CharacterView; message: string } {
+  return withTx(() => {
+    const seller = getCharacterById(sellerId);
+    if (!seller) throw new Error('角色不存在');
+    const row = db
+      .prepare('SELECT * FROM market_listings WHERE id = ? AND seller_id = ?')
+      .get(listingId, sellerId) as unknown as MarketRow | undefined;
+    if (!row || row.status !== 'active') throw new Error('该商品已售出或已下架');
+
+    deliverMarketPayload(sellerId, row.kind, row.payload_json);
+    db.prepare(`UPDATE market_listings SET status = 'cancelled', updated_at = ? WHERE id = ?`).run(
+      Date.now(),
+      listingId,
+    );
+
+    return {
+      character: getCharacterById(sellerId)!,
+      message: `已下架并取回【${row.title}】`,
+    };
+  });
 }

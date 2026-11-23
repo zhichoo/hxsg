@@ -174,6 +174,26 @@ export interface CasinoChibiResult {
   message: string;
 }
 
+export interface BankStateView {
+  silver: number;
+  gold: number;
+}
+
+export type MarketListingKind = 'item' | 'equipment' | 'general';
+
+export interface MarketListingView {
+  id: number;
+  realmId: string;
+  sellerId: number;
+  sellerName: string;
+  kind: MarketListingKind;
+  title: string;
+  summary: string;
+  currency: 'silver' | 'gold';
+  price: number;
+  createdAt: number;
+}
+
 export interface CharacterView {
   id: number;
   accountId: number;
@@ -194,6 +214,7 @@ export interface CharacterView {
   spd: number;
   silver: number;
   gold: number;
+  bank: BankStateView;
   mapId: string;
   isGm: boolean;
   alloc: CharacterAllocations;

@@ -133,9 +133,9 @@ export function MainCity({
     { label: '排行', onClick: () => onOpenPanel('rank') },
     { label: '招贤', onClick: () => onOpenPanel('tavern') },
     { label: '铁匠', onClick: () => onOpenPanel('blacksmith') },
-    { label: '药铺', onClick: () => onOpenPanel('shop') },
+    { label: '钱庄', onClick: () => onOpenPanel('bank') },
+    { label: '集市', onClick: () => onOpenPanel('market') },
     { label: '客栈', onClick: () => onRestInn() },
-    { label: '公告', onClick: () => onOpenPanel('notice') },
     { label: 'GM', onClick: () => onOpenPanel('gm') },
     { label: '登出', onClick: onLogout },
   ];
@@ -336,6 +336,8 @@ export function MainCity({
                       else if (fac.kind === 'tavern') onOpenPanel('tavern');
                       else if (fac.kind === 'tower') onOpenPanel('tower');
                       else if (fac.kind === 'casino') onOpenPanel('casino');
+                      else if (fac.kind === 'bank') onOpenPanel('bank');
+                      else if (fac.kind === 'market') onOpenPanel('market');
                       else if (fac.kind === 'gm') onOpenPanel('gm');
                     }}
                     className="w-full flex items-center gap-2 px-1.5 py-1.5 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5b1d12] text-left"

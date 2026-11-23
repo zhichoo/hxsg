@@ -6,6 +6,8 @@ import type {
   EquipmentSlot,
   Gender,
   GeneralView,
+  MarketListingKind,
+  MarketListingView,
   OnlinePlayerSummary,
   RankEntry,
   RoleClass,
@@ -383,6 +385,59 @@ export const api = {
       {
         method: 'POST',
         body: payload,
+      },
+    ),
+  bankTransfer: (payload: {
+    realmId: string;
+    action:
+      | 'deposit_silver'
+      | 'withdraw_silver'
+      | 'deposit_gold'
+      | 'withdraw_gold'
+      | 'gold_to_silver'
+      | 'silver_to_gold';
+    amount: number;
+  }) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'bankTransfer',
+      '/api/bank/transfer',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
+  getMarketListings: (realmId: string, kind: 'all' | MarketListingKind = 'all') =>
+    callEndpoint<{ listings: MarketListingView[] }>('marketList', '/api/market/listings', {
+      query: { realmId, kind },
+    }),
+  createMarketListing: (payload: {
+    realmId: string;
+    kind: MarketListingKind;
+    refId: string | number;
+    quantity?: number;
+    currency: 'silver' | 'gold';
+    price: number;
+  }) =>
+    callEndpoint<{ listing: MarketListingView; character: CharacterView; message: string }>(
+      'marketCreate',
+      '/api/market/list',
+      {
+        method: 'POST',
+        body: payload,
+      },
+    ),
+  buyMarketListing: (realmId: string, listingId: number) =>
+    callEndpoint<{ character: CharacterView; message: string }>('marketBuy', '/api/market/buy', {
+      method: 'POST',
+      body: { realmId, listingId },
+    }),
+  cancelMarketListing: (realmId: string, listingId: number) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'marketCancel',
+      '/api/market/cancel',
+      {
+        method: 'POST',
+        body: { realmId, listingId },
       },
     ),
   gmGrant: (payload: {

@@ -171,6 +171,27 @@ db.exec(`
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS market_listings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    realm_id TEXT NOT NULL,
+    seller_id INTEGER NOT NULL,
+    seller_name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    price INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id INTEGER,
+    buyer_name TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (seller_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_market_realm_status ON market_listings(realm_id, status, created_at DESC);
 `);
 
 // Safe online schema migration for existing DBs created in Phase 1
@@ -194,6 +215,8 @@ const newCols: Array<[string, string]> = [
   ['res_magic', 'INTEGER NOT NULL DEFAULT 0'],
   ['tower_floor', 'INTEGER NOT NULL DEFAULT 0'],
   ['tower_sweep_date', 'TEXT DEFAULT NULL'],
+  ['bank_silver', 'INTEGER NOT NULL DEFAULT 0'],
+  ['bank_gold', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 for (const [col, def] of newCols) {
