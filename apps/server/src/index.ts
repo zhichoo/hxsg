@@ -29,7 +29,6 @@ import {
   addFriend,
   allocateCharacterResist,
   allocateCharacterStats,
-  allocateGeneralStats,
   answerKejuQuestion,
   bankTransfer,
   buyEquipment,
@@ -48,7 +47,6 @@ import {
   dismissGeneral,
   drawGeneralWithToken,
   equipItem,
-  equipItemOnGeneral,
   feedGeneralExpPill,
   feedGeneralLoyalty,
   getCasinoState,
@@ -70,7 +68,6 @@ import {
   reforgeEquipment,
   removeFriend,
   resetCharacterStats,
-  resetGeneralStats,
   restAtInn,
   sellEquipment,
   sendPlayerMail,
@@ -79,7 +76,6 @@ import {
   sweepTowerDaily,
   tickAllCasinoRounds,
   trainSkillWithSilver,
-  unequipGeneralSlot,
   unequipSlot,
   useInventoryItem,
   washGeneral,
@@ -313,51 +309,12 @@ app.post('/api/equipment/reforge', async (req) => {
   return reforgeEquipment(current.id, Number(body.equipId));
 });
 
-app.post('/api/generals/allocate-stats', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as {
-    realmId?: string;
-    generalId?: number;
-    vit?: number;
-    str?: number;
-    int?: number;
-    agi?: number;
-  };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
-  if (!current) throw new Error('尚未创建角色');
-  return { character: allocateGeneralStats(current.id, Number(body.generalId), body) };
-});
-
-app.post('/api/generals/reset-stats', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as { realmId?: string; generalId?: number };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
-  if (!current) throw new Error('尚未创建角色');
-  return { character: resetGeneralStats(current.id, Number(body.generalId)) };
-});
-
 app.post('/api/generals/feed-loyalty', async (req) => {
   const auth = await requireAuth(req);
   const body = req.body as { realmId?: string; generalId?: number; itemId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return feedGeneralLoyalty(current.id, Number(body.generalId), body.itemId || '');
-});
-
-app.post('/api/generals/equip', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as { realmId?: string; generalId?: number; equipId?: number };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
-  if (!current) throw new Error('尚未创建角色');
-  return { character: equipItemOnGeneral(current.id, Number(body.generalId), Number(body.equipId)) };
-});
-
-app.post('/api/generals/unequip', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as { realmId?: string; generalId?: number; slot?: EquipmentSlot };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
-  if (!current) throw new Error('尚未创建角色');
-  return { character: unequipGeneralSlot(current.id, Number(body.generalId), body.slot || 'weapon') };
 });
 
 app.get('/api/players/inspect', async (req) => {

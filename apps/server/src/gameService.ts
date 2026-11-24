@@ -136,11 +136,6 @@ interface GeneralRow {
   skill2_id: string | null;
   intimacy: number;
   loyalty?: number;
-  free_points?: number;
-  pt_vit?: number;
-  pt_str?: number;
-  pt_int?: number;
-  pt_agi?: number;
   slot: number | null;
 }
 
@@ -148,29 +143,16 @@ function calcGeneralStatsAtLevel(
   base: { hp: number; mp: number; atk: number; spd: number },
   growth: number,
   level: number,
-  alloc?: { vit: number; str: number; int: number; agi: number },
-  roleClass?: RoleClass,
 ) {
   const lv = Math.max(1, level);
   const lateLv = Math.max(0, lv - 20);
   // Differentiate low-tier starters (dipi ~1.02) from mid/top 1转-2转 generals (1.28-1.60+)
   const tierScale = Math.max(0.2, (growth - 0.92) * 2.5);
-  const vit = alloc?.vit ?? 0;
-  const str = alloc?.str ?? 0;
-  const intel = alloc?.int ?? 0;
-  const agi = alloc?.agi ?? 0;
-  const intAtkFactor = roleClass === 'wushi' ? 0.6 : 2.6;
   return {
-    maxHp: Math.round(base.hp + (lv - 1) * 22 * growth + lateLv * 44 * tierScale + vit * 16 * growth),
-    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth + lateLv * 9 * tierScale + intel * 12 * growth),
-    atk: Math.round(
-      base.atk +
-        (lv - 1) * 5.8 * growth +
-        lateLv * 7.2 * tierScale +
-        str * 3.2 * growth +
-        intel * intAtkFactor * growth,
-    ),
-    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth + lateLv * 2.0 * tierScale + agi * 2.4 * growth),
+    maxHp: Math.round(base.hp + (lv - 1) * 22 * growth + lateLv * 44 * tierScale),
+    maxMp: Math.round(base.mp + (lv - 1) * 12 * growth + lateLv * 9 * tierScale),
+    atk: Math.round(base.atk + (lv - 1) * 5.8 * growth + lateLv * 7.2 * tierScale),
+    spd: Math.round(base.spd + (lv - 1) * 3.2 * growth + lateLv * 2.0 * tierScale),
   };
 }
 
@@ -247,7 +229,6 @@ interface EquipmentRow {
   res_magic: number;
   sell_silver: number;
   equipped: number;
-  equipped_general_id?: number | null;
   set_id?: string | null;
   roll_pct?: number;
 }
@@ -258,9 +239,7 @@ function getEquipmentList(characterId: number): {
   setBonuses: string[];
 } {
   const rows = db
-    .prepare(
-      'SELECT * FROM character_equipment WHERE character_id = ? ORDER BY equipped DESC, equipped_general_id IS NOT NULL DESC, id DESC',
-    )
+    .prepare('SELECT * FROM character_equipment WHERE character_id = ? ORDER BY equipped DESC, id DESC')
     .all(characterId) as unknown as EquipmentRow[];
 
   const bonus: EquipmentBonusSummary = {
@@ -278,7 +257,7 @@ function getEquipmentList(characterId: number): {
 
   const heroEquippedItems: EquipmentView[] = [];
   const equipment: EquipmentView[] = rows.map((r) => {
-    const equipped = Boolean(r.equipped) && !r.equipped_general_id;
+    const equipped = Boolean(r.equipped);
     const setId = r.set_id || TEMPLATE_SET_MAP[r.template_id] || null;
     const setName = setId ? EQUIPMENT_SETS[setId]?.name ?? null : null;
     const view: EquipmentView = {
@@ -301,7 +280,6 @@ function getEquipmentList(characterId: number): {
       resMagic: r.res_magic,
       sellSilver: r.sell_silver,
       equipped,
-      equippedGeneralId: r.equipped_general_id ?? null,
       setId,
       setName,
       rollPct: r.roll_pct ?? 100,
@@ -373,13 +351,6 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     const loyalty = Math.max(0, Math.min(100, g.loyalty ?? 100));
     const intInfo = getGeneralIntimacyInfo(intimacy);
     const statMult = 1 + intInfo.statPct / 100;
-    const gAlloc = {
-      freePoints: g.free_points ?? 0,
-      vit: g.pt_vit ?? 0,
-      str: g.pt_str ?? 0,
-      int: g.pt_int ?? 0,
-      agi: g.pt_agi ?? 0,
-    };
     const baseHp = g.base_hp || tpl?.baseHp || g.max_hp;
     const baseMp = g.base_mp || tpl?.baseMp || g.max_mp;
     const baseAtk = g.base_atk || tpl?.baseAtk || g.atk;
@@ -388,20 +359,9 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       { hp: baseHp, mp: baseMp, atk: baseAtk, spd: baseSpd },
       g.growth,
       g.level,
-      gAlloc,
-      g.role_class,
     );
-    const worn = equipment.filter((eq) => eq.equippedGeneralId === g.id);
-    const gSet = calcEquipmentSetBonuses(worn);
-    const eqHp = worn.reduce((s, e) => s + e.hpBonus, 0) + gSet.hp;
-    const eqMp = worn.reduce((s, e) => s + e.mpBonus, 0) + gSet.mp;
-    const eqAtk = worn.reduce((s, e) => s + e.atkBonus, 0) + gSet.atk;
-    const eqSpd = worn.reduce((s, e) => s + e.spdBonus, 0) + gSet.spd;
-
-    const effMaxHp = Math.round(computed.maxHp * statMult) + eqHp;
-    const effMaxMp = computed.maxMp + eqMp;
-    const effAtk = Math.round(computed.atk * statMult) + eqAtk;
-    const effSpd = computed.spd + eqSpd;
+    const effMaxHp = Math.round(computed.maxHp * statMult);
+    const effAtk = Math.round(computed.atk * statMult);
     return {
       id: g.id,
       templateId: g.template_id,
@@ -412,12 +372,12 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       level: g.level,
       exp: g.exp,
       expToNext: expRequiredForLevel(g.level),
-      hp: Math.min(effMaxHp, Math.max(1, Math.round(g.hp * statMult) + eqHp)),
+      hp: Math.min(effMaxHp, Math.max(1, Math.round(g.hp * statMult))),
       maxHp: effMaxHp,
-      mp: Math.min(effMaxMp, g.mp + eqMp),
-      maxMp: effMaxMp,
+      mp: Math.min(computed.maxMp, g.mp),
+      maxMp: computed.maxMp,
       atk: effAtk,
-      spd: effSpd,
+      spd: computed.spd,
       baseHp,
       baseMp,
       baseAtk,
@@ -434,9 +394,6 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       intimacyStatPct: intInfo.statPct,
       intimacyResistBonus: intInfo.resistBonus,
       loyalty,
-      alloc: gAlloc,
-      equippedItems: worn,
-      setBonuses: gSet.descriptions,
       slot: g.slot,
     };
   });
@@ -1476,8 +1433,8 @@ export function grantEquipmentToCharacter(
         character_id, template_id, name, slot, quality, icon, level_req,
         hp_bonus, mp_bonus, atk_bonus, def_bonus, spd_bonus,
         res_phys, res_chaos, res_seal, res_trap, res_magic,
-        sell_silver, equipped, equipped_general_id, set_id, roll_pct, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+        sell_silver, equipped, set_id, roll_pct, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)`,
     )
     .run(
       characterId,
@@ -1523,7 +1480,6 @@ export function grantEquipmentToCharacter(
     resMagic,
     sellSilver,
     equipped: false,
-    equippedGeneralId: null,
     setId,
     setName: setId ? EQUIPMENT_SETS[setId]?.name ?? null : null,
     rollPct,
@@ -1677,12 +1633,14 @@ export function equipItem(characterId: number, equipId: number): CharacterView {
     throw new Error(`需要 ${target.levelReq} 级才能穿戴【${target.name}】`);
   }
 
-  db.prepare(
-    'UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ? AND equipped_general_id IS NULL',
-  ).run(characterId, target.slot);
-  db.prepare(
-    'UPDATE character_equipment SET equipped = 1, equipped_general_id = NULL WHERE id = ? AND character_id = ?',
-  ).run(equipId, characterId);
+  db.prepare('UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ?').run(
+    characterId,
+    target.slot,
+  );
+  db.prepare('UPDATE character_equipment SET equipped = 1 WHERE id = ? AND character_id = ?').run(
+    equipId,
+    characterId,
+  );
 
   const updated = getCharacterById(characterId)!;
   const nextHp = Math.min(updated.maxHp, ch.hp + Math.max(0, target.hpBonus));
@@ -1701,49 +1659,14 @@ export function equipItem(characterId: number, equipId: number): CharacterView {
 export function unequipSlot(characterId: number, slot: EquipmentSlot): CharacterView {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  db.prepare(
-    'UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ? AND equipped_general_id IS NULL',
-  ).run(characterId, slot);
+  db.prepare('UPDATE character_equipment SET equipped = 0 WHERE character_id = ? AND slot = ?').run(
+    characterId,
+    slot,
+  );
   const updated = getCharacterById(characterId)!;
   db.prepare(
     'UPDATE characters SET hp = MIN(hp, ?), mp = MIN(mp, ?), max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?',
   ).run(updated.maxHp, updated.maxMp, updated.maxHp, updated.maxMp, Date.now(), characterId);
-  return getCharacterById(characterId)!;
-}
-
-export function equipItemOnGeneral(
-  characterId: number,
-  generalId: number,
-  equipId: number,
-): CharacterView {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-  const g = ch.generals.find((x) => x.id === generalId);
-  if (!g) throw new Error('副将不存在');
-  const target = ch.equipment.find((e) => e.id === equipId);
-  if (!target) throw new Error('装备不存在');
-  if (target.equipped) throw new Error('该装备正穿在主角身上，请先卸下');
-  if (g.rebirth === 0 && g.level < target.levelReq) {
-    throw new Error(`副将需达到 ${target.levelReq} 级才能穿戴【${target.name}】`);
-  }
-
-  db.prepare(
-    'UPDATE character_equipment SET equipped_general_id = NULL WHERE character_id = ? AND equipped_general_id = ? AND slot = ?',
-  ).run(characterId, generalId, target.slot);
-  db.prepare(
-    'UPDATE character_equipment SET equipped = 0, equipped_general_id = ? WHERE id = ? AND character_id = ?',
-  ).run(generalId, equipId, characterId);
-  return getCharacterById(characterId)!;
-}
-
-export function unequipGeneralSlot(
-  characterId: number,
-  generalId: number,
-  slot: EquipmentSlot,
-): CharacterView {
-  db.prepare(
-    'UPDATE character_equipment SET equipped_general_id = NULL WHERE character_id = ? AND equipped_general_id = ? AND slot = ?',
-  ).run(characterId, generalId, slot);
   return getCharacterById(characterId)!;
 }
 
@@ -1752,7 +1675,7 @@ export function sellEquipment(characterId: number, equipId: number): CharacterVi
   if (!ch) throw new Error('角色不存在');
   const target = ch.equipment.find((e) => e.id === equipId);
   if (!target) throw new Error('装备不存在');
-  if (target.equipped || target.equippedGeneralId) throw new Error('请先卸下该装备再出售');
+  if (target.equipped) throw new Error('请先卸下该装备再出售');
 
   db.prepare('DELETE FROM character_equipment WHERE id = ? AND character_id = ?').run(
     equipId,
@@ -1931,9 +1854,8 @@ export function grantGeneralToCharacter(
         character_id, template_id, name, role_class, sprite_key, avatar_key,
         level, exp, hp, max_hp, mp, max_mp, atk, spd,
         base_hp, base_mp, base_atk, base_spd, growth, rebirth, rarity, skill_id,
-        loyalty, free_points, pt_vit, pt_str, pt_int, pt_agi,
-        slot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 100, ?, 0, 0, 0, 0, ?, ?)`,
+        loyalty, slot, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 100, ?, ?)`,
     )
     .run(
       characterId,
@@ -1956,7 +1878,6 @@ export function grantGeneralToCharacter(
       growth,
       rarity,
       tpl.skillId,
-      Math.max(0, (lv - 1) * 4),
       freeSlot,
       Date.now(),
     );
@@ -1993,9 +1914,6 @@ export function grantGeneralToCharacter(
     intimacyStatPct: 0,
     intimacyResistBonus: 0,
     loyalty: 100,
-    alloc: { freePoints: Math.max(0, (lv - 1) * 4), vit: 0, str: 0, int: 0, agi: 0 },
-    equippedItems: [],
-    setBonuses: [],
     slot: freeSlot,
   };
 }
@@ -2063,7 +1981,6 @@ export function feedGeneralExpPill(characterId: number, generalId: number): Char
 
   addItem(characterId, 'jingyandan', -1);
   let lv = g.level;
-  const startLv = g.level;
   const pillExp = Math.round(360 + ch.level * 140 + (ch.level > 20 ? (ch.level - 20) * (ch.level - 20) * 12 : 0));
   let exp = g.exp + pillExp;
   const maxLv = Math.max(20, ch.level + 5);
@@ -2071,121 +1988,14 @@ export function feedGeneralExpPill(characterId: number, generalId: number): Char
     exp -= expRequiredForLevel(lv);
     lv++;
   }
-  const gainedLevels = lv - startLv;
   const stats = calcGeneralStatsAtLevel(
     { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
     g.growth,
     lv,
-    g.alloc,
-    g.roleClass,
   );
   db.prepare(
-    'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?, free_points = free_points + ?, intimacy = MIN(100, intimacy + 5) WHERE id = ?',
-  ).run(
-    lv,
-    exp,
-    stats.maxHp,
-    stats.maxHp,
-    stats.maxMp,
-    stats.maxMp,
-    stats.atk,
-    stats.spd,
-    gainedLevels * 4,
-    g.id,
-  );
-  return getCharacterById(characterId)!;
-}
-
-export function allocateGeneralStats(
-  characterId: number,
-  generalId: number,
-  delta: { vit?: number; str?: number; int?: number; agi?: number },
-): CharacterView {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-  const g = ch.generals.find((x) => x.id === generalId);
-  if (!g) throw new Error('副将不存在');
-
-  const vit = Math.max(0, Math.floor(delta.vit ?? 0));
-  const str = Math.max(0, Math.floor(delta.str ?? 0));
-  const intel = Math.max(0, Math.floor(delta.int ?? 0));
-  const agi = Math.max(0, Math.floor(delta.agi ?? 0));
-  const total = vit + str + intel + agi;
-  if (total <= 0) throw new Error('请选择要分配的属性点');
-  if (total > g.alloc.freePoints) throw new Error('副将自由属性点不足');
-
-  const nextAlloc = {
-    vit: g.alloc.vit + vit,
-    str: g.alloc.str + str,
-    int: g.alloc.int + intel,
-    agi: g.alloc.agi + agi,
-  };
-  const stats = calcGeneralStatsAtLevel(
-    { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
-    g.growth,
-    g.level,
-    nextAlloc,
-    g.roleClass,
-  );
-  db.prepare(
-    `UPDATE generals
-     SET free_points = free_points - ?, pt_vit = ?, pt_str = ?, pt_int = ?, pt_agi = ?,
-         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?
-     WHERE id = ? AND character_id = ?`,
-  ).run(
-    total,
-    nextAlloc.vit,
-    nextAlloc.str,
-    nextAlloc.int,
-    nextAlloc.agi,
-    stats.maxHp,
-    stats.maxHp,
-    stats.maxMp,
-    stats.maxMp,
-    stats.atk,
-    stats.spd,
-    generalId,
-    characterId,
-  );
-  return getCharacterById(characterId)!;
-}
-
-export function resetGeneralStats(characterId: number, generalId: number): CharacterView {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-  const g = ch.generals.find((x) => x.id === generalId);
-  if (!g) throw new Error('副将不存在');
-  const spent = g.alloc.vit + g.alloc.str + g.alloc.int + g.alloc.agi;
-  if (spent <= 0) throw new Error('该副将暂无已分配属性点');
-  if (ch.silver < 200) throw new Error('洗点需要 200 银两');
-
-  const stats = calcGeneralStatsAtLevel(
-    { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
-    g.growth,
-    g.level,
-    { vit: 0, str: 0, int: 0, agi: 0 },
-    g.roleClass,
-  );
-  db.prepare('UPDATE characters SET silver = silver - 200, updated_at = ? WHERE id = ?').run(
-    Date.now(),
-    characterId,
-  );
-  db.prepare(
-    `UPDATE generals
-     SET free_points = free_points + ?, pt_vit = 0, pt_str = 0, pt_int = 0, pt_agi = 0,
-         hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?
-     WHERE id = ? AND character_id = ?`,
-  ).run(
-    spent,
-    stats.maxHp,
-    stats.maxHp,
-    stats.maxMp,
-    stats.maxMp,
-    stats.atk,
-    stats.spd,
-    generalId,
-    characterId,
-  );
+    'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?, intimacy = MIN(100, intimacy + 5) WHERE id = ?',
+  ).run(lv, exp, stats.maxHp, stats.maxHp, stats.maxMp, stats.maxMp, stats.atk, stats.spd, g.id);
   return getCharacterById(characterId)!;
 }
 
@@ -2318,8 +2128,6 @@ export function washGeneral(characterId: number, generalId: number): {
     { hp: rolled.baseHp, mp: rolled.baseMp, atk: rolled.baseAtk, spd: rolled.baseSpd },
     rolled.growth,
     g.level,
-    g.alloc,
-    g.roleClass,
   );
   db.prepare(
     `UPDATE generals
@@ -2369,7 +2177,6 @@ export function rebirthGeneral(characterId: number, generalId: number): Characte
     `UPDATE generals
      SET level = 1, exp = 0, rebirth = ?, growth = ?, rarity = ?,
          base_hp = ?, base_mp = ?, base_atk = ?, base_spd = ?,
-         free_points = ?, pt_vit = 0, pt_str = 0, pt_int = 0, pt_agi = 0,
          hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?
      WHERE id = ?`,
   ).run(
@@ -2380,7 +2187,6 @@ export function rebirthGeneral(characterId: number, generalId: number): Characte
     nextBaseMp,
     nextBaseAtk,
     nextBaseSpd,
-    nextRebirth * 10,
     nextBaseHp,
     nextBaseHp,
     nextBaseMp,
@@ -2404,9 +2210,6 @@ export function dismissGeneral(characterId: number, generalId: number): {
 
   const tpl = GENERAL_TEMPLATES[g.templateId];
   const refundSilver = Math.max(80, Math.round((tpl?.recruitCostSilver ?? 300) * 0.25));
-  db.prepare(
-    'UPDATE character_equipment SET equipped_general_id = NULL WHERE character_id = ? AND equipped_general_id = ?',
-  ).run(characterId, generalId);
   db.prepare('DELETE FROM generals WHERE id = ? AND character_id = ?').run(generalId, characterId);
   db.prepare('UPDATE characters SET silver = silver + ?, updated_at = ? WHERE id = ?').run(
     refundSilver,
@@ -2492,34 +2295,19 @@ export function applyExpAndSilver(
   const activeGenerals = ch.generals.filter((g) => g.slot !== null);
   for (const g of activeGenerals) {
     let gLv = g.level;
-    const gStartLv = g.level;
     let gExp = g.exp + Math.round(expGain * 0.85);
     while (gExp >= expRequiredForLevel(gLv) && gLv < level + 3) {
       gExp -= expRequiredForLevel(gLv);
       gLv++;
     }
-    const gLvGain = gLv - gStartLv;
     const gStats = calcGeneralStatsAtLevel(
       { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
       g.growth,
       gLv,
-      g.alloc,
-      g.roleClass,
     );
     db.prepare(
-      `UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?, free_points = free_points + ? WHERE id = ?`,
-    ).run(
-      gLv,
-      gExp,
-      gStats.maxHp,
-      gStats.maxHp,
-      gStats.maxMp,
-      gStats.maxMp,
-      gStats.atk,
-      gStats.spd,
-      gLvGain * 4,
-      g.id,
-    );
+      `UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ? WHERE id = ?`,
+    ).run(gLv, gExp, gStats.maxHp, gStats.maxHp, gStats.maxMp, gStats.maxMp, gStats.atk, gStats.spd, g.id);
   }
 
   return {
@@ -3649,7 +3437,7 @@ export function createMarketListing(
         .prepare('SELECT * FROM character_equipment WHERE id = ? AND character_id = ?')
         .get(equipId, characterId) as EquipmentRow | undefined;
       if (!row) throw new Error('装备不存在');
-      if (row.equipped || row.equipped_general_id) throw new Error('请先卸下装备再上架寄售');
+      if (row.equipped) throw new Error('请先卸下装备再上架寄售');
       db.prepare('DELETE FROM character_equipment WHERE id = ? AND character_id = ?').run(
         equipId,
         characterId,

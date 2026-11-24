@@ -151,11 +151,6 @@ function applyIncomingDamage(
 }
 
 function buildPlayerGeneralUnit(g: GeneralView, position: number): BattleUnit {
-  const eqResPhys = g.equippedItems.reduce((s, e) => s + e.resPhys, 0);
-  const eqResChaos = g.equippedItems.reduce((s, e) => s + e.resChaos, 0);
-  const eqResSeal = g.equippedItems.reduce((s, e) => s + e.resSeal, 0);
-  const eqResTrap = g.equippedItems.reduce((s, e) => s + e.resTrap, 0);
-  const eqResMagic = g.equippedItems.reduce((s, e) => s + e.resMagic, 0);
   return {
     uid: `p_gen_${g.id}`,
     side: 'player',
@@ -181,11 +176,11 @@ function buildPlayerGeneralUnit(g: GeneralView, position: number): BattleUnit {
     position,
     statuses: [],
     resist: {
-      phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus + eqResPhys),
-      chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResChaos),
-      seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResSeal),
-      trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResTrap),
-      magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus + eqResMagic),
+      phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
+      chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+      seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+      trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
+      magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
     },
   };
 }

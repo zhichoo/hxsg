@@ -141,8 +141,6 @@ export function SubPanels({
   const [smithTab, setSmithTab] = useState<'gear' | 'mount' | 'craft'>('gear');
   const [tavernTab, setTavernTab] = useState<'recruit' | 'books'>('recruit');
   const [learningGenId, setLearningGenId] = useState<number | null>(null);
-  const [allocGenId, setAllocGenId] = useState<number | null>(null);
-  const [equipGenId, setEquipGenId] = useState<number | null>(null);
   const [friends, setFriends] = useState<FriendView[]>([]);
   const [friendNameInput, setFriendNameInput] = useState('');
   const [inspectedPlayer, setInspectedPlayer] = useState<PlayerInspectView | null>(null);
@@ -1151,22 +1149,12 @@ export function SubPanels({
                             <span className="text-[#ff9ed2] font-bold">
                               默契 {g.intimacy}/100 ({g.intimacyTitle})
                             </span>
-                            {g.alloc.freePoints > 0 && (
-                              <span className="px-1 bg-[#1e6e2e] border border-[#7dff92] text-[#e6ffea] font-bold">
-                                未分配点:{g.alloc.freePoints}
-                              </span>
-                            )}
-                            {g.equippedItems.length > 0 && (
-                              <span className="text-[#9be8ff]">
-                                穿戴 {g.equippedItems.length} 件
+                            {g.intimacyStatPct > 0 && (
+                              <span className="text-[#8cff9c]">
+                                攻血+{g.intimacyStatPct}% 全抗+{g.intimacyResistBonus}%
                               </span>
                             )}
                           </div>
-                          {g.setBonuses.length > 0 && (
-                            <div className="text-[10px] text-[#7dff92] mt-0.5">
-                              ✨ {g.setBonuses.join('；')}
-                            </div>
-                          )}
                         </div>
                       </div>
 
@@ -1253,26 +1241,6 @@ export function SubPanels({
                       >
                         {showBooks ? '收起打书' : `打书(${ownedBooks.length})`}
                       </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setAllocGenId(allocGenId === g.id ? null : g.id)}
-                        className={`px-2 py-0.5 text-[11px] border font-bold ${
-                          g.alloc.freePoints > 0
-                            ? 'bg-[#8f5210] border-[#ffe36d] text-[#fff6c2]'
-                            : 'bg-[#42204a] border-[#966ca1] text-[#ebd5f0]'
-                        }`}
-                      >
-                        {allocGenId === g.id ? '收起加点' : `加点(${g.alloc.freePoints})`}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setEquipGenId(equipGenId === g.id ? null : g.id)}
-                        className="px-2 py-0.5 text-[11px] bg-[#2a3966] border border-[#8ab8ff] text-[#e0eeff] font-bold"
-                      >
-                        {equipGenId === g.id ? '收起装备' : `穿装备(${g.equippedItems.length})`}
-                      </button>
                       {g.loyalty < 100 && (
                         <button
                           type="button"
@@ -1344,143 +1312,6 @@ export function SubPanels({
                         </button>
                       )}
                     </div>
-
-                    {allocGenId === g.id && (
-                      <div className="p-2 bg-black/40 border border-[#d6a742] space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="text-[#ffe478] font-bold">
-                            副将自由加点（剩 {g.alloc.freePoints} 点 · 支持全敏/全血/全力流派）
-                          </span>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              run(
-                                () => api.resetGeneralStats(realmId, g.id),
-                                `${g.name} 已消耗 200 银两洗点重置！`,
-                              )
-                            }
-                            className="px-1.5 py-0.5 text-[10px] bg-[#5c1e28] border border-[#d47a86] text-[#ffdce0]"
-                          >
-                            洗点(200银)
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {(
-                            [
-                              ['vit', '体质(血)', g.alloc.vit],
-                              ['str', '力量(物攻)', g.alloc.str],
-                              ['int', '智力(法/精)', g.alloc.int],
-                              ['agi', '敏捷(速度)', g.alloc.agi],
-                            ] as const
-                          ).map(([k, label, val]) => (
-                            <div
-                              key={k}
-                              className="flex items-center justify-between bg-[#2a0c31] border border-[#7b5285] px-2 py-1"
-                            >
-                              <span className="text-[#f0dbf5]">
-                                {label}: <b className="text-[#ffe478]">{val}</b>
-                              </span>
-                              <div className="flex gap-1">
-                                <button
-                                  type="button"
-                                  disabled={busy || g.alloc.freePoints < 1}
-                                  onClick={() =>
-                                    run(
-                                      () => api.allocateGeneralStats(realmId, g.id, { [k]: 1 }),
-                                      `${g.name} ${label} +1`,
-                                    )
-                                  }
-                                  className="hx-btn-gold px-1.5 py-0.2 text-[10px] disabled:opacity-40"
-                                >
-                                  +1
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={busy || g.alloc.freePoints < 5}
-                                  onClick={() =>
-                                    run(
-                                      () => api.allocateGeneralStats(realmId, g.id, { [k]: 5 }),
-                                      `${g.name} ${label} +5`,
-                                    )
-                                  }
-                                  className="hx-btn-gold px-1.5 py-0.2 text-[10px] disabled:opacity-40"
-                                >
-                                  +5
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {equipGenId === g.id && (() => {
-                      const idleGear = character.equipment.filter(
-                        (e) => !e.equipped && !e.equippedGeneralId,
-                      );
-                      return (
-                        <div className="p-2 bg-black/40 border border-[#7cb5ff] space-y-1.5">
-                          <div className="text-[11px] font-bold text-[#9de6ff]">
-                            副将已穿戴装备（支持套装效果）：
-                          </div>
-                          {g.equippedItems.length === 0 ? (
-                            <div className="text-[11px] text-[#cbb0d4]">暂未穿戴装备</div>
-                          ) : (
-                            <div className="space-y-1">
-                              {g.equippedItems.map((eq) => (
-                                <div
-                                  key={eq.id}
-                                  className="flex items-center justify-between bg-[#260b2e] border border-[#6e4a78] px-2 py-1"
-                                >
-                                  <span className={`truncate ${QUALITY_COLOR[eq.quality]}`}>
-                                    [{EQUIPMENT_SLOT_LABELS[eq.slot]}] {eq.name} ({formatEquipStats(eq)})
-                                  </span>
-                                  <button
-                                    type="button"
-                                    disabled={busy}
-                                    onClick={() =>
-                                      run(
-                                        () => api.unequipGeneralSlot(realmId, g.id, eq.slot),
-                                        `已卸下 ${g.name} 的【${eq.name}】`,
-                                      )
-                                    }
-                                    className="px-1.5 py-0.5 text-[10px] bg-[#52245c] border border-[#c095cc] text-white shrink-0 ml-1"
-                                  >
-                                    卸下
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <div className="text-[11px] font-bold text-[#ffe478] pt-1 border-t border-white/10">
-                            背包闲置装备（点击给 {g.name} 穿戴）：
-                          </div>
-                          {idleGear.length === 0 ? (
-                            <div className="text-[11px] text-[#cbb0d4]">背包中暂无闲置装备</div>
-                          ) : (
-                            <div className="flex flex-wrap gap-1">
-                              {idleGear.slice(0, 12).map((eq) => (
-                                <button
-                                  key={eq.id}
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() =>
-                                    run(
-                                      () => api.equipItemOnGeneral(realmId, g.id, eq.id),
-                                      `${g.name} 已穿戴【${eq.name}】！`,
-                                    )
-                                  }
-                                  className={`px-2 py-0.5 bg-[#33103d] border border-[#c99d42] text-[10.5px] hover:bg-[#4e195e] ${QUALITY_COLOR[eq.quality]}`}
-                                >
-                                  {eq.name}(Lv.{eq.levelReq})
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })()}
 
                     {showBooks && (
                       <div className="p-2 bg-black/35 border border-[#6e9c78] space-y-1.5">

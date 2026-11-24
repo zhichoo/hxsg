@@ -26,7 +26,6 @@ export interface EquipmentView {
   resMagic: number;
   sellSilver: number;
   equipped: boolean;
-  equippedGeneralId: number | null;
   setId?: string | null;
   setName?: string | null;
   rollPct?: number;
@@ -428,9 +427,6 @@ export interface GeneralView {
   intimacyStatPct: number;
   intimacyResistBonus: number;
   loyalty: number;
-  alloc: CharacterAllocations;
-  equippedItems: EquipmentView[];
-  setBonuses: string[];
   slot: number | null; // 0, 1, 2 for active battle slots; null for bench
 }
 

@@ -362,11 +362,6 @@ const newGeneralCols: Array<[string, string]> = [
   ['skill2_id', 'TEXT DEFAULT NULL'],
   ['intimacy', 'INTEGER NOT NULL DEFAULT 0'],
   ['loyalty', 'INTEGER NOT NULL DEFAULT 100'],
-  ['free_points', 'INTEGER NOT NULL DEFAULT 0'],
-  ['pt_vit', 'INTEGER NOT NULL DEFAULT 0'],
-  ['pt_str', 'INTEGER NOT NULL DEFAULT 0'],
-  ['pt_int', 'INTEGER NOT NULL DEFAULT 0'],
-  ['pt_agi', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 for (const [col, def] of newGeneralCols) {
@@ -375,21 +370,13 @@ for (const [col, def] of newGeneralCols) {
   }
 }
 
-// Backfill free_points for legacy generals that leveled up before general allocation existed
-db.exec(`
-  UPDATE generals
-  SET free_points = (level - 1) * 4
-  WHERE level > 1 AND free_points = 0 AND pt_vit = 0 AND pt_str = 0 AND pt_int = 0 AND pt_agi = 0;
-`);
-
-// Online migration for equipment: general wear slot + set_id + random roll_pct
+// Online migration for equipment: set_id + random roll_pct
 const existingEquipCols = new Set(
   (db.prepare('PRAGMA table_info(character_equipment)').all() as unknown as Array<{ name: string }>).map(
     (c) => c.name,
   ),
 );
 const newEquipCols: Array<[string, string]> = [
-  ['equipped_general_id', 'INTEGER DEFAULT NULL'],
   ['set_id', 'TEXT DEFAULT NULL'],
   ['roll_pct', 'INTEGER NOT NULL DEFAULT 100'],
 ];
@@ -397,6 +384,10 @@ for (const [col, def] of newEquipCols) {
   if (!existingEquipCols.has(col)) {
     db.exec(`ALTER TABLE character_equipment ADD COLUMN ${col} ${def}`);
   }
+}
+// If an existing DB ever had equipment attached to a general, release it cleanly back to bag
+if (existingEquipCols.has('equipped_general_id')) {
+  db.exec('UPDATE character_equipment SET equipped_general_id = NULL WHERE equipped_general_id IS NOT NULL');
 }
 
 // Online migration for private chat messages

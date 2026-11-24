@@ -342,38 +342,12 @@ export const api = {
       '/api/equipment/reforge',
       { method: 'POST', body: { realmId, equipId } },
     ),
-  allocateGeneralStats: (
-    realmId: string,
-    generalId: number,
-    delta: { vit?: number; str?: number; int?: number; agi?: number },
-  ) =>
-    callEndpoint<{ character: CharacterView }>(
-      'generalsAllocateStats',
-      '/api/generals/allocate-stats',
-      { method: 'POST', body: { realmId, generalId, ...delta } },
-    ),
-  resetGeneralStats: (realmId: string, generalId: number) =>
-    callEndpoint<{ character: CharacterView }>(
-      'generalsResetStats',
-      '/api/generals/reset-stats',
-      { method: 'POST', body: { realmId, generalId } },
-    ),
   feedGeneralLoyalty: (realmId: string, generalId: number, itemId: string) =>
     callEndpoint<{ character: CharacterView; message: string }>(
       'generalsFeedLoyalty',
       '/api/generals/feed-loyalty',
       { method: 'POST', body: { realmId, generalId, itemId } },
     ),
-  equipItemOnGeneral: (realmId: string, generalId: number, equipId: number) =>
-    callEndpoint<{ character: CharacterView }>('generalsEquip', '/api/generals/equip', {
-      method: 'POST',
-      body: { realmId, generalId, equipId },
-    }),
-  unequipGeneralSlot: (realmId: string, generalId: number, slot: EquipmentSlot) =>
-    callEndpoint<{ character: CharacterView }>('generalsUnequip', '/api/generals/unequip', {
-      method: 'POST',
-      body: { realmId, generalId, slot },
-    }),
   inspectPlayer: (realmId: string, targetCharacterId: number) =>
     callEndpoint<{ player: PlayerInspectView }>('playersInspect', '/api/players/inspect', {
       query: { realmId, targetCharacterId: String(targetCharacterId) },
