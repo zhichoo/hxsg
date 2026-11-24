@@ -4029,14 +4029,14 @@ export function SubPanels({
               <div className="p-2 bg-[#2a082f] border border-[#d9aa42] text-[#ffea88]">
                 {character.isGm
                   ? '当前账号为【服主GM】，可直接免口令操作。'
-                  : '普通账号需输入 GM 口令（默认 hxsg888）方可使用。'}
+                  : '需输入服务器 GM 管理口令方可使用。'}
               </div>
               {!character.isGm && (
                 <input
                   type="password"
                   value={gmCode}
                   onChange={(e) => setGmCode(e.target.value)}
-                  placeholder="输入 GM 口令（默认 hxsg888）"
+                  placeholder="输入 GM 管理口令"
                   className="w-full px-2.5 py-1.5 bg-[#120416] border border-[#9e7430] text-white"
                 />
               )}

@@ -239,7 +239,7 @@ export function ServerSelect({
               />
               <div className="flex items-center justify-between gap-2 pt-0.5">
                 <span className="text-[11px] text-[#b4c8ff]">
-                  {mode === 'register' ? '首个注册账号自动获得 GM 权限' : '没有账号可点上方「快速注册」'}
+                  {mode === 'register' ? '注册后选区创建角色即可开玩' : '没有账号可点上方「快速注册」'}
                 </span>
                 <button
                   type="submit"
