@@ -21,6 +21,7 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
 
   const meta = ROLE_CLASS_META[roleClass];
   const spriteKey = gender === 'female' ? meta.femaleSprite : meta.maleSprite;
+  const portraitKey = gender === 'female' ? meta.femalePortrait : meta.portrait;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,7 +114,7 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
               <div className="flex-1 text-xs space-y-1.5">
                 <div className="flex items-center gap-2">
                   <AssetImg
-                    path={`portraits/${meta.portrait}`}
+                    path={`portraits/${portraitKey}`}
                     alt={meta.label}
                     className="w-11 h-11 border border-[#e0b84f] pixelated"
                   />

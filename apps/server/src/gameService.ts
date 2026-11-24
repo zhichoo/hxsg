@@ -321,7 +321,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       name: g.name,
       roleClass: g.role_class,
       spriteKey: g.sprite_key,
-      avatarKey: g.avatar_key,
+      avatarKey: tpl?.avatarKey || g.avatar_key,
       level: g.level,
       exp: g.exp,
       expToNext: expRequiredForLevel(g.level),
@@ -401,7 +401,10 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     name: row.name,
     roleClass: row.role_class,
     gender: row.gender,
-    portrait: row.portrait,
+    portrait:
+      row.gender === 'female' && row.portrait === ROLE_CLASS_META[row.role_class].portrait
+        ? ROLE_CLASS_META[row.role_class].femalePortrait
+        : row.portrait,
     level: row.level,
     rebirth,
     exp: row.exp,
@@ -652,7 +655,8 @@ export function createCharacter(params: {
   if (nameTaken) throw new Error('该角色名已被占用');
 
   const stats = calcRoleStats(params.roleClass, 1);
-  const portrait = ROLE_CLASS_META[params.roleClass].portrait;
+  const classMeta = ROLE_CLASS_META[params.roleClass];
+  const portrait = params.gender === 'female' ? classMeta.femalePortrait : classMeta.portrait;
   const now = Date.now();
 
   const res = db
@@ -2662,7 +2666,7 @@ export function createMarketListing(
         name: row.name,
         role_class: row.role_class,
         sprite_key: row.sprite_key,
-        avatar_key: row.avatar_key,
+        avatar_key: GENERAL_TEMPLATES[row.template_id]?.avatarKey || row.avatar_key,
         level: row.level,
         exp: row.exp,
         hp: row.max_hp,
@@ -2782,7 +2786,7 @@ function deliverMarketPayload(recipientId: number, kind: MarketListingKind, payl
     String(data.name),
     String(data.role_class),
     String(data.sprite_key),
-    String(data.avatar_key),
+    GENERAL_TEMPLATES[String(data.template_id)]?.avatarKey || String(data.avatar_key),
     Number(data.level),
     Number(data.exp),
     Number(data.hp),
