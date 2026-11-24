@@ -294,36 +294,36 @@ export function MainCity({
 
           {/* Black Gold-Bordered Character Stats Box (matches classic_3.jpg) */}
           <div className="flex-1 bg-[#140d09] border-2 border-[#b9964e] p-1.5 text-[12px] leading-[1.45] flex flex-col justify-between">
-            <div>
-              <div className="text-white font-bold">
-                职业:{character.level}级{classMeta.label}
-              </div>
-              <div className="text-[#e8e8e8]">银:{character.silver}</div>
+            <div className="space-y-0.5">
               <div className="flex items-center justify-between gap-1">
-                <span className="text-[#ffe04b] font-bold">金:{character.gold}</span>
-                <button
-                  type="button"
-                  onClick={() => onOpenPanel('gm')}
-                  className="px-1.5 py-0.5 bg-[#c71a1a] text-white text-[11px] font-bold border border-[#ffb870] hover:brightness-110"
-                >
-                  福利GM
-                </button>
-              </div>
-            </div>
-            <div className="pt-1 border-t border-white/15">
-              <div className="flex items-center justify-between text-[11px] text-[#f0e6cc]">
-                <span>升级还需经验:</span>
+                <span className="text-white font-bold truncate">
+                  职业:{character.level}级{classMeta.label}
+                </span>
                 {(character.alloc.freePoints > 0 || character.resist.freePoints > 0) && (
                   <button
                     type="button"
                     onClick={() => onOpenPanel('status')}
-                    className="px-1.5 py-0.5 bg-[#1b6e29] border border-[#7cff90] text-[#e6ffe9] text-[10px] font-bold animate-pulse"
+                    className="px-1.5 py-0.5 bg-[#1b6e29] border border-[#7cff90] text-[#e6ffe9] text-[10px] font-bold animate-pulse shrink-0"
                   >
                     可加点!
                   </button>
                 )}
               </div>
-              <div className="text-center text-[#ffe678] font-bold text-[13px]">{expRemain}</div>
+              <div className="text-[#e8e8e8] truncate">银:{character.silver}</div>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[#ffe04b] font-bold truncate">金:{character.gold}</span>
+                <button
+                  type="button"
+                  onClick={() => onOpenPanel('gm')}
+                  className="px-1.5 py-0.5 bg-[#c71a1a] text-white text-[11px] font-bold border border-[#ffb870] hover:brightness-110 shrink-0"
+                >
+                  福利GM
+                </button>
+              </div>
+            </div>
+            <div className="pt-1 border-t border-white/15 flex items-center justify-between gap-1 text-[11px] whitespace-nowrap">
+              <span className="text-[#f0e6cc] shrink-0">所需经验:</span>
+              <span className="text-[#ffe678] font-bold text-[12px] truncate">{expRemain}</span>
             </div>
           </div>
         </div>
