@@ -192,117 +192,258 @@ static void pix_save(Pix *p, NSString *relPath) {
 }
 
 // =========================================================================
-// 1. 3-PART CHARACTER SPRITES: AI-PORTRAIT DERIVED HEADS + PIXEL BODIES/LEGS
+// 1. 3-PART CHARACTER SPRITES: CODEX AI CHIBI SPRITE SHEET -> _h / _b / _f
 // =========================================================================
 typedef struct {
     const char *key;
     int cls;
-    int portraitCell; // 0..15 index in portraits-sheet.png!
-    uint32_t primary, secondary, trim, weapon;
+    int cellIdx; // 0..10 in battle-chars-sheet.png (4x3 transparent PNG)
+    uint32_t slashCol;
 } SpriteSpec;
+
+static CGImageRef tight_alpha_crop(CGImageRef sheet, int cols, int rows, int cellIdx, int *outHeadRelCX) {
+    double cellW = CGImageGetWidth(sheet) / (double)cols;
+    double cellH = CGImageGetHeight(sheet) / (double)rows;
+    int col = cellIdx % cols, row = cellIdx / cols;
+    CGRect cellRect = CGRectMake(round(col * cellW), round(row * cellH), round(cellW), round(cellH));
+    CGImageRef cell = CGImageCreateWithImageInRect(sheet, cellRect);
+    if (!cell) return NULL;
+    int cw = (int)CGImageGetWidth(cell), ch = (int)CGImageGetHeight(cell);
+    uint8_t *buf = (uint8_t *)calloc((size_t)cw * (size_t)ch * 4, 1);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(buf, cw, ch, 8, cw * 4, cs, kCGImageAlphaPremultipliedLast);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, cw, ch), cell);
+    CGContextRelease(ctx); CGColorSpaceRelease(cs);
+
+    int minX = cw, minY = ch, maxX = -1, maxY = -1;
+    for (int y = 2; y < ch - 2; y++) {
+        for (int x = 2; x < cw - 2; x++) {
+            uint8_t a = buf[(y * cw + x) * 4 + 3];
+            if (a > 24) {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    if (maxX <= minX || maxY <= minY) { free(buf); return cell; }
+
+    // Find horizontal center of mass of the head/body core (top 45%, excluding far-right weapon tips)
+    int bh = maxY - minY + 1;
+    double sumX = 0, sumW = 0;
+    for (int y = minY; y < minY + (int)(bh * 0.48); y++) {
+        for (int x = minX; x <= maxX; x++) {
+            uint8_t a = buf[(y * cw + x) * 4 + 3];
+            if (a > 60) { sumX += (x - minX); sumW += 1.0; }
+        }
+    }
+    if (outHeadRelCX) {
+        *outHeadRelCX = sumW > 0 ? (int)round(sumX / sumW) : (maxX - minX) / 2;
+    }
+    free(buf);
+
+    int pad = 2;
+    minX = minX > pad ? minX - pad : 0;
+    minY = minY > pad ? minY - pad : 0;
+    maxX = (maxX + pad < cw) ? maxX + pad : cw - 1;
+    maxY = (maxY + pad < ch) ? maxY + pad : ch - 1;
+    if (outHeadRelCX) *outHeadRelCX += pad;
+
+    CGImageRef tight = CGImageCreateWithImageInRect(cell, CGRectMake(minX, minY, maxX - minX + 1, maxY - minY + 1));
+    CGImageRelease(cell);
+    return tight;
+}
 
 static void gen_sprites(void) {
     SpriteSpec specs[] = {
-        {"r1",  1,  0, 0x2a5cb8, 0x1b376e, 0xf2c64b, 0xdce6f2}, // young male warrior
-        {"r1n", 1, 13, 0xc92c2c, 0x7a1616, 0xf8d465, 0xe6effa}, // young female warrior
-        {"r2",  2,  4, 0x2c789e, 0x1a4861, 0xf0d67a, 0xf5f2e6}, // male strategist
-        {"r2n", 2,  5, 0x2b8c63, 0x185239, 0xffe07d, 0xfff6d6}, // female strategist
-        {"r3",  3, 10, 0x7034a8, 0x421c66, 0xffe169, 0x7cf0ff}, // male mystic
-        {"r3n", 3, 12, 0xa3328f, 0x5c1950, 0xffe278, 0x8ef5ff}, // female mystic
-        {"n1",  1, 14, 0x7c4a26, 0x4a2a14, 0xd99b38, 0xbac4cf}, // bandit / enemy warrior
-        {"n2",  2,  8, 0x585e30, 0x34381b, 0xd9b343, 0xd9cfa9}, // enemy strategist
-        {"n2n", 2,  7, 0x8a3a4a, 0x4f1e28, 0xe8bd54, 0xf2e4c4}, // enemy female strategist
-        {"n3",  3, 11, 0xb8861e, 0x6e4d0c, 0xffe875, 0x9bff75}, // yellow turban sage
-        {"n3n", 3,  3, 0x7d2948, 0x471527, 0xf2c95c, 0xc27dff}, // enemy warlord/priestess
+        {"r1",  1,  0, 0x8ad8ff}, // young male warrior (cobalt/silver spear)
+        {"r1n", 1,  1, 0xff8c52}, // young female warrior (crimson/gold halberd)
+        {"r2",  2,  2, 0xc8f4ff}, // male strategist (teal/feather fan)
+        {"r2n", 2,  3, 0x7effc4}, // female strategist (emerald/jade fan)
+        {"r3",  3,  4, 0x72ffb8}, // male mystic (taoist jade staff)
+        {"r3n", 3,  5, 0xff8cf2}, // female mystic (magenta magic staff)
+        {"n1",  1,  6, 0xffc864}, // enemy bandit warrior (iron saber)
+        {"n2",  2,  7, 0xd8f08a}, // enemy male strategist (scroll)
+        {"n2n", 2,  8, 0xff8ca8}, // enemy female strategist (fan)
+        {"n3",  3,  9, 0xffe464}, // yellow turban sorcerer (talisman staff)
+        {"n3n", 3, 10, 0xc47cff}, // enemy violet priestess (flame wand)
     };
-    CGImageRef sheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"portraits-sheet.png"]);
-    double cw = sheet ? CGImageGetWidth(sheet) / 4.0 : 256.0;
-    double ch = sheet ? CGImageGetHeight(sheet) / 4.0 : 256.0;
-
-    RGBA O = rgb(0x140d0a), W = rgb(0xffffff), bootD = rgb(0x261c16), bootM = rgb(0x4a3728), hdl = rgb(0x70421c);
+    CGImageRef charSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"battle-chars-sheet.png"]);
+    if (!charSheet) { fprintf(stderr, "Missing battle-chars-sheet.png!\n"); return; }
 
     int count = (int)(sizeof(specs) / sizeof(specs[0]));
     for (int i = 0; i < count; i++) {
         SpriteSpec s = specs[i];
-        // HEAD (21x21): crisp circular-framed head extracted directly from our 10/10 AI portraits!
-        if (sheet) {
-            int col = s.portraitCell % 4, row = s.portraitCell / 4;
-            // Tight face/head crop (centered upper 70% of portrait cell)
-            CGRect faceRect = CGRectMake(
-                round(col * cw + cw * 0.16),
-                round(row * ch + ch * 0.04),
-                round(cw * 0.68),
-                round(ch * 0.68)
-            );
-            CGImageRef face = CGImageCreateWithImageInRect(sheet, faceRect);
-            CGContextRef hc = create_ctx(21, 21);
-            CGContextSaveGState(hc);
-            CGContextAddEllipseInRect(hc, CGRectMake(1, 1, 19, 19));
-            CGContextClip(hc);
-            CGContextSetInterpolationQuality(hc, kCGInterpolationHigh);
-            CGContextDrawImage(hc, CGRectMake(0, 0, 21, 21), face);
-            CGContextRestoreGState(hc);
-            // Crisp dark-gold pixel rim
-            CGColorRef rim = cg_color(rgb(0x1c120c));
-            CGContextSetStrokeColorWithColor(hc, rim);
-            CGContextSetLineWidth(hc, 1.4);
-            CGContextStrokeEllipseInRect(hc, CGRectMake(1, 1, 19, 19));
-            CGColorRelease(rim);
-            CGImageRef hout = CGBitmapContextCreateImage(hc);
-            save_cgimage(hout, [gOutRoot stringByAppendingPathComponent:[NSString stringWithFormat:@"%s_h.png", s.key]]);
-            CGImageRelease(hout); CGContextRelease(hc); CGImageRelease(face);
-        }
+        int headRelCX = 0;
+        CGImageRef tight = tight_alpha_crop(charSheet, 4, 3, s.cellIdx, &headRelCX);
+        if (!tight) continue;
 
-        RGBA P = rgb(s.primary), D = rgb(s.secondary), T = rgb(s.trim), Wp = rgb(s.weapon);
+        // Exact CLASS_SPRITE_RIG anchors in BattleStage.tsx (feet at y = totalH, top of head at y = 0)
+        int totalH, headH = 21, bodyTopY, bodyH, bodyW, bodyIdleW, bodyIdleDx, bodyAtkX, bodyAtkW, bodyAtkDx;
+        int legW, legH, legIdleW, legAtkX, legAtkW;
         if (s.cls == 1) {
-            Pix b = pix_new(60, 15);
-            pix_rect(&b, 3, 0, 2, 14, hdl); pix_rect(&b, 2, 0, 4, 3, Wp);
-            pix_rect(&b, 6, 2, 12, 11, O); pix_rect(&b, 7, 3, 10, 9, P);
-            pix_rect(&b, 8, 3, 8, 2, T); pix_rect(&b, 7, 9, 10, 2, D); pix_rect(&b, 10, 5, 4, 4, T);
-            pix_rect(&b, 22, 6, 20, 2, hdl); pix_rect(&b, 22, 4, 7, 5, Wp); pix_rect(&b, 23, 5, 4, 3, W);
-            pix_rect(&b, 38, 2, 15, 11, O); pix_rect(&b, 39, 3, 13, 9, P);
-            pix_rect(&b, 40, 3, 11, 2, T); pix_rect(&b, 39, 9, 13, 2, D); pix_rect(&b, 43, 5, 5, 4, T);
-            pix_save(&b, [NSString stringWithFormat:@"%s_b.png", s.key]); pix_free(&b);
-
-            Pix f = pix_new(37, 10);
-            pix_rect(&f, 4, 1, 10, 3, D);
-            pix_rect(&f, 4, 4, 4, 5, bootD); pix_rect(&f, 5, 4, 2, 4, bootM);
-            pix_rect(&f, 10, 4, 4, 5, bootD); pix_rect(&f, 11, 4, 2, 4, bootM);
-            pix_rect(&f, 21, 1, 13, 3, D);
-            pix_rect(&f, 19, 4, 5, 5, bootD); pix_rect(&f, 20, 4, 3, 4, bootM);
-            pix_rect(&f, 30, 4, 5, 5, bootD); pix_rect(&f, 31, 4, 3, 4, bootM);
-            pix_save(&f, [NSString stringWithFormat:@"%s_f.png", s.key]); pix_free(&f);
+            totalH = 36; bodyTopY = 17; bodyH = 15; bodyW = 60;
+            bodyIdleW = 22; bodyIdleDx = -13; bodyAtkX = 22; bodyAtkW = 38; bodyAtkDx = -9;
+            legW = 37; legH = 10; legIdleW = 18; legAtkX = 18; legAtkW = 19;
         } else if (s.cls == 2) {
-            Pix b = pix_new(61, 16);
-            pix_rect(&b, 5, 2, 13, 12, O); pix_rect(&b, 6, 3, 11, 10, P);
-            pix_rect(&b, 10, 3, 3, 10, D); pix_rect(&b, 6, 10, 11, 2, T);
-            pix_rect(&b, 2, 4, 5, 6, Wp); pix_stroke(&b, 2, 4, 5, 6, O);
-            pix_rect(&b, 25, 3, 9, 9, Wp); pix_stroke(&b, 25, 3, 9, 9, T);
-            pix_rect(&b, 36, 2, 16, 12, O); pix_rect(&b, 37, 3, 14, 10, P);
-            pix_rect(&b, 42, 3, 4, 10, D); pix_rect(&b, 37, 10, 14, 2, T);
-            pix_save(&b, [NSString stringWithFormat:@"%s_b.png", s.key]); pix_free(&b);
-
-            Pix f = pix_new(28, 9);
-            pix_rect(&f, 2, 0, 10, 4, D); pix_rect(&f, 3, 4, 3, 4, bootD); pix_rect(&f, 8, 4, 3, 4, bootD);
-            pix_rect(&f, 15, 0, 12, 4, D); pix_rect(&f, 15, 4, 4, 4, bootD); pix_rect(&f, 22, 4, 4, 4, bootD);
-            pix_save(&f, [NSString stringWithFormat:@"%s_f.png", s.key]); pix_free(&f);
+            totalH = 34; bodyTopY = 17; bodyH = 16; bodyW = 61;
+            bodyIdleW = 23; bodyIdleDx = -10; bodyAtkX = 23; bodyAtkW = 38; bodyAtkDx = -10;
+            legW = 28; legH = 9; legIdleW = 14; legAtkX = 14; legAtkW = 14;
         } else {
-            Pix b = pix_new(67, 15);
-            pix_rect(&b, 4, 1, 3, 11, Wp); pix_rect(&b, 5, 2, 1, 9, W);
-            pix_rect(&b, 10, 2, 13, 11, O); pix_rect(&b, 11, 3, 11, 9, P);
-            pix_rect(&b, 14, 3, 5, 9, D); pix_rect(&b, 11, 8, 11, 2, T);
-            pix_rect(&b, 32, 5, 11, 3, Wp); pix_rect(&b, 33, 6, 8, 1, W);
-            pix_rect(&b, 44, 2, 16, 11, O); pix_rect(&b, 45, 3, 14, 9, P);
-            pix_rect(&b, 49, 3, 6, 9, D); pix_rect(&b, 45, 8, 14, 2, T);
-            pix_save(&b, [NSString stringWithFormat:@"%s_b.png", s.key]); pix_free(&b);
-
-            Pix f = pix_new(28, 8);
-            pix_rect(&f, 2, 0, 10, 3, D); pix_rect(&f, 3, 3, 3, 4, bootD); pix_rect(&f, 8, 3, 3, 4, bootD);
-            pix_rect(&f, 15, 0, 12, 3, D); pix_rect(&f, 15, 3, 4, 4, bootD); pix_rect(&f, 22, 3, 4, 4, bootD);
-            pix_save(&f, [NSString stringWithFormat:@"%s_f.png", s.key]); pix_free(&f);
+            totalH = 34; bodyTopY = 16; bodyH = 15; bodyW = 67;
+            bodyIdleW = 31; bodyIdleDx = -11; bodyAtkX = 31; bodyAtkW = 36; bodyAtkDx = -11;
+            legW = 28; legH = 8; legIdleW = 14; legAtkX = 14; legAtkW = 14;
         }
+
+        // Render full-body chibi onto a unified 64x(totalH) virtual canvas where logical x=0 is at vx=32, feet at bottom
+        int vw = 64, vh = totalH, vOriginX = 32;
+        double tw = CGImageGetWidth(tight), th = CGImageGetHeight(tight);
+        double scale = (double)totalH / th;
+        double dw = tw * scale;
+        double dh = totalH;
+        // Place so head center-of-mass sits at vOriginX (slightly left by 1px for warriors so spear stays inside bodyIdle)
+        double drawX = vOriginX - headRelCX * scale - (s.cls == 1 ? 1.0 : 0.0);
+
+        uint8_t *vbuf = (uint8_t *)calloc((size_t)vw * (size_t)vh * 4, 1);
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef vctx = CGBitmapContextCreate(vbuf, vw, vh, 8, vw * 4, cs, kCGImageAlphaPremultipliedLast);
+        CGContextSetInterpolationQuality(vctx, kCGInterpolationHigh);
+        CGContextDrawImage(vctx, CGRectMake(drawX, 0, dw, dh), tight);
+        CGContextRelease(vctx);
+
+        // Helper block-like lambda via Pix slicing from top-down vbuf:
+        // Note: CGBitmapContext memory row 0 is top of image (y=0), row vh-1 is feet bottom (y=vh-1).
+        // Cut lines (zero double-drawing, seamless assembly):
+        //   Head: y in [0, bodyTopY + 1] (top ~18px of 21px head canvas)
+        //   Body: y in [bodyTopY, vh - legH + 2]
+        //   Legs: y in [vh - legH, vh - 1]
+        int headCutBottom = bodyTopY + 1;
+        int bodyCutBottom = vh - legH + 3;
+
+        // 1) HEAD (_h.png, 21x21): logical x in [-10..+10] -> vx in [22..42], y in [0..20]
+        Pix hp = pix_new(21, headH);
+        for (int y = 0; y < headH && y <= headCutBottom && y < vh; y++) {
+            for (int x = 0; x < 21; x++) {
+                int vx = vOriginX - 10 + x;
+                if (vx < 0 || vx >= vw) continue;
+                int idx = (y * vw + vx) * 4;
+                uint8_t a = vbuf[idx+3];
+                if (a < 20) continue;
+                // Un-premultiply for Pix
+                RGBA c = {
+                    (uint8_t)fmin(255, vbuf[idx]   * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+1] * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+2] * 255 / a),
+                    a
+                };
+                pix_set(&hp, x, y, c);
+            }
+        }
+        pix_save(&hp, [NSString stringWithFormat:@"%s_h.png", s.key]);
+        pix_free(&hp);
+
+        // 2) BODY (_b.png): left = bodyIdle (logical x in [bodyIdleDx .. bodyIdleDx + bodyIdleW - 1]),
+        //                   right = bodyAtk (logical x in [bodyAtkDx .. bodyAtkDx + bodyAtkW - 1]) shifted forward + weapon slash!
+        Pix bp = pix_new(bodyW, bodyH);
+        // Idle torso+weapon
+        for (int y = 0; y < bodyH; y++) {
+            int vy = bodyTopY + y;
+            if (vy < 0 || vy >= vh || vy > bodyCutBottom) continue;
+            for (int x = 0; x < bodyIdleW; x++) {
+                int vx = vOriginX + bodyIdleDx + x;
+                if (vx < 0 || vx >= vw) continue;
+                int idx = (vy * vw + vx) * 4;
+                uint8_t a = vbuf[idx+3];
+                if (a < 20) continue;
+                RGBA c = {
+                    (uint8_t)fmin(255, vbuf[idx]   * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+1] * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+2] * 255 / a),
+                    a
+                };
+                pix_set(&bp, x, y, c);
+            }
+        }
+        // Attack torso+weapon (shifted +4px forward into attack lunge + bright crescent slash arc on leading edge)
+        for (int y = 0; y < bodyH; y++) {
+            int vy = bodyTopY + y;
+            if (vy < 0 || vy >= vh || vy > bodyCutBottom) continue;
+            for (int x = 0; x < bodyAtkW; x++) {
+                int vx = vOriginX + bodyAtkDx + x - 4; // shift right by 4px
+                if (vx < 0 || vx >= vw) continue;
+                int idx = (vy * vw + vx) * 4;
+                uint8_t a = vbuf[idx+3];
+                if (a < 20) continue;
+                RGBA c = {
+                    (uint8_t)fmin(255, vbuf[idx]   * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+1] * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+2] * 255 / a),
+                    a
+                };
+                pix_set(&bp, bodyAtkX + x, y, c);
+            }
+        }
+        // Crisp glowing weapon slash / magic cast arc cleanly inside right side of attack frame
+        int arcCX = bodyAtkX + bodyAtkW - 13;
+        RGBA sc1 = rgba_hex(s.slashCol, 215);
+        RGBA sc2 = rgba_hex(0xffffff, 240);
+        for (int a = -52; a <= 52; a += 6) {
+            double rad = a * M_PI / 180.0;
+            int px = arcCX + (int)round(cos(rad) * 6.0);
+            int py = bodyH / 2 + (int)round(sin(rad) * (bodyH * 0.42));
+            if (px >= bodyAtkX && px < bodyAtkX + bodyAtkW - 1 && py >= 0 && py < bodyH - 1) {
+                pix_rect(&bp, px - 1, py, 2, 2, sc1);
+                pix_set(&bp, px, py, sc2);
+            }
+        }
+        pix_save(&bp, [NSString stringWithFormat:@"%s_b.png", s.key]);
+        pix_free(&bp);
+
+        // 3) LEGS (_f.png): left = legIdle, right = legAtk (lunge stride widened by 1px)
+        Pix fp = pix_new(legW, legH);
+        for (int y = 0; y < legH; y++) {
+            int vy = vh - legH + y;
+            if (vy < 0 || vy >= vh) continue;
+            for (int x = 0; x < legIdleW; x++) {
+                int vx = vOriginX - legIdleW / 2 + x;
+                if (vx < 0 || vx >= vw) continue;
+                int idx = (vy * vw + vx) * 4;
+                uint8_t a = vbuf[idx+3];
+                if (a < 20) continue;
+                RGBA c = {
+                    (uint8_t)fmin(255, vbuf[idx]   * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+1] * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+2] * 255 / a),
+                    a
+                };
+                pix_set(&fp, x, y, c);
+            }
+            for (int x = 0; x < legAtkW; x++) {
+                // Slight forward stride stretch on attack
+                double rel = (double)(x - legAtkW / 2) * 0.90;
+                int vx = vOriginX + (int)round(rel) - 1;
+                if (vx < 0 || vx >= vw) continue;
+                int idx = (vy * vw + vx) * 4;
+                uint8_t a = vbuf[idx+3];
+                if (a < 20) continue;
+                RGBA c = {
+                    (uint8_t)fmin(255, vbuf[idx]   * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+1] * 255 / a),
+                    (uint8_t)fmin(255, vbuf[idx+2] * 255 / a),
+                    a
+                };
+                pix_set(&fp, legAtkX + x, y, c);
+            }
+        }
+        pix_save(&fp, [NSString stringWithFormat:@"%s_f.png", s.key]);
+        pix_free(&fp);
+
+        free(vbuf);
+        CGColorSpaceRelease(cs);
+        CGImageRelease(tight);
     }
-    if (sheet) CGImageRelease(sheet);
+    CGImageRelease(charSheet);
 }
 
 // =========================================================================
@@ -454,117 +595,186 @@ static void gen_biomes(void) {
 }
 
 // =========================================================================
-// 3. CC0 DCSS BATTLE VFX + PIXEL NUMBERS & STATUS GLYPHS
+// 3. CODEX AI GLOWING BATTLE VFX + PIXEL NUMBERS & STATUS GLYPHS
 // =========================================================================
-static void gen_vfx(void) {
-    // f_sd.png (96x71): 3 frames [0,36], [36,33], [69,27] using CC0 DCSS bolt tiles + lightning arcs
-    CGContextRef sdc = create_ctx(96, 71);
-    NSArray *bolts = @[@"vfx_bolt1.png", @"vfx_bolt2.png", @"vfx_bolt3.png"];
-    int sx[3] = {0, 36, 69}, sw[3] = {36, 33, 27};
-    for (int i = 0; i < 3; i++) {
-        CGImageRef bi = load_cgimage([gCc0Dir stringByAppendingPathComponent:bolts[i]]);
-        if (bi) {
-            CGContextSetInterpolationQuality(sdc, kCGInterpolationNone);
-            CGContextDrawImage(sdc, CGRectMake(sx[i], 0, sw[i], 38), bi);
-            CGContextDrawImage(sdc, CGRectMake(sx[i], 33, sw[i], 38), bi);
-            CGImageRelease(bi);
+// Extract a luminous VFX cell from pure-black background using smooth max-channel alpha + tight bbox crop
+static CGImageRef extract_black_bg_vfx(CGImageRef sheet, int cols, int rows, int cellIdx) {
+    double cellW = CGImageGetWidth(sheet) / (double)cols;
+    double cellH = CGImageGetHeight(sheet) / (double)rows;
+    int col = cellIdx % cols, row = cellIdx / cols;
+    CGRect cellRect = CGRectMake(round(col * cellW), round(row * cellH), round(cellW), round(cellH));
+    CGImageRef cell = CGImageCreateWithImageInRect(sheet, cellRect);
+    if (!cell) return NULL;
+    int cw = (int)CGImageGetWidth(cell), ch = (int)CGImageGetHeight(cell);
+    uint8_t *buf = (uint8_t *)calloc((size_t)cw * (size_t)ch * 4, 1);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(buf, cw, ch, 8, cw * 4, cs, kCGImageAlphaPremultipliedLast);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, cw, ch), cell);
+    CGContextRelease(ctx); CGImageRelease(cell);
+
+    int minX = cw, minY = ch, maxX = -1, maxY = -1;
+    uint8_t *outBuf = (uint8_t *)calloc((size_t)cw * (size_t)ch * 4, 1);
+    for (int y = 2; y < ch - 2; y++) {
+        for (int x = 2; x < cw - 2; x++) {
+            int idx = (y * cw + x) * 4;
+            int r = buf[idx], g = buf[idx+1], b = buf[idx+2];
+            int m = r > g ? (r > b ? r : b) : (g > b ? g : b);
+            if (m <= 16) continue;
+            double a = (m - 16) / 239.0;
+            double aBoost = pow(a, 0.72);
+            if (aBoost > 1.0) aBoost = 1.0;
+            uint8_t ua = (uint8_t)round(aBoost * 255.0);
+            // Boost vividness while keeping premultiplied-safe unpremultiplied values
+            double inv = 1.0 / fmax(0.25, a);
+            outBuf[idx]   = (uint8_t)fmin(255.0, r * inv);
+            outBuf[idx+1] = (uint8_t)fmin(255.0, g * inv);
+            outBuf[idx+2] = (uint8_t)fmin(255.0, b * inv);
+            outBuf[idx+3] = ua;
+            if (ua > 24) {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
         }
     }
+    free(buf);
+    if (maxX <= minX || maxY <= minY) { free(outBuf); CGColorSpaceRelease(cs); return NULL; }
+
+    int tw = maxX - minX + 1, th = maxY - minY + 1;
+    Pix p = pix_new(tw, th);
+    for (int y = 0; y < th; y++) {
+        memcpy(p.buf + (size_t)y * tw * 4, outBuf + (size_t)(minY + y) * cw * 4 + (size_t)minX * 4, (size_t)tw * 4);
+    }
+    free(outBuf); CGColorSpaceRelease(cs);
+    CGImageRef res = pix_to_cgimage(&p);
+    pix_free(&p);
+    return res;
+}
+
+static void draw_vfx_in_rect(CGContextRef ctx, CGImageRef img, CGRect box, double scaleMult, bool flipX, double rotDeg, CGFloat alpha) {
+    if (!img) return;
+    double iw = CGImageGetWidth(img), ih = CGImageGetHeight(img);
+    double s = fmin(box.size.width / iw, box.size.height / ih) * scaleMult;
+    double dw = iw * s, dh = ih * s;
+    CGContextSaveGState(ctx);
+    CGContextClipToRect(ctx, box);
+    CGContextSetAlpha(ctx, alpha);
+    CGContextTranslateCTM(ctx, CGRectGetMidX(box), CGRectGetMidY(box));
+    if (rotDeg != 0.0) CGContextRotateCTM(ctx, rotDeg * M_PI / 180.0);
+    if (flipX) CGContextScaleCTM(ctx, -1.0, 1.0);
+    CGContextSetInterpolationQuality(ctx, kCGInterpolationHigh);
+    CGContextDrawImage(ctx, CGRectMake(-dw / 2.0, -dh / 2.0, dw, dh), img);
+    CGContextRestoreGState(ctx);
+}
+
+static void gen_vfx(void) {
+    CGImageRef vfxSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"battle-vfx-sheet.png"]);
+    CGImageRef vfx[12] = {0};
+    if (vfxSheet) {
+        for (int i = 0; i < 12; i++) vfx[i] = extract_black_bg_vfx(vfxSheet, 4, 3, i);
+        CGImageRelease(vfxSheet);
+    }
+
+    // 1) f_sd.png (96x71): 3 thunder frames [0,36], [36,33], [69,27]
+    CGContextRef sdc = create_ctx(96, 71);
+    draw_vfx_in_rect(sdc, vfx[0], CGRectMake(0, 0, 36, 71), 1.05, false, 0, 1.0);
+    draw_vfx_in_rect(sdc, vfx[1], CGRectMake(36, 0, 33, 71), 1.05, false, 0, 1.0);
+    draw_vfx_in_rect(sdc, vfx[0], CGRectMake(69, 0, 27, 71), 1.08, true, 0, 0.95);
     CGImageRef sdImg = CGBitmapContextCreateImage(sdc);
     save_cgimage(sdImg, [gOutRoot stringByAppendingPathComponent:@"f_sd.png"]);
     CGImageRelease(sdImg); CGContextRelease(sdc);
 
-    // fire.png (66x44): 3 CC0 DCSS flame frames [0,25], [25,20], [45,21]
+    // 2) fire.png (66x44): 3 flame frames [0,25], [25,20], [45,21]
     CGContextRef fc = create_ctx(66, 44);
-    NSArray *flames = @[@"vfx_flame0.png", @"vfx_flame1.png", @"vfx_flame2.png"];
-    int fx[3] = {0, 25, 45}, fw[3] = {25, 20, 21};
-    for (int i = 0; i < 3; i++) {
-        CGImageRef fi = load_cgimage([gCc0Dir stringByAppendingPathComponent:flames[i]]);
-        if (fi) {
-            CGContextSetInterpolationQuality(fc, kCGInterpolationNone);
-            CGContextDrawImage(fc, CGRectMake(fx[i], 2, fw[i], 40), fi);
-            CGImageRelease(fi);
-        }
-    }
+    draw_vfx_in_rect(fc, vfx[2],  CGRectMake(0, 0, 25, 44), 1.02, false, 0, 1.0);
+    draw_vfx_in_rect(fc, vfx[11], CGRectMake(25, 0, 20, 44), 1.05, false, 0, 1.0);
+    draw_vfx_in_rect(fc, vfx[2],  CGRectMake(45, 0, 21, 44), 1.05, true, 0, 0.95);
     CGImageRef fiImg = CGBitmapContextCreateImage(fc);
     save_cgimage(fiImg, [gOutRoot stringByAppendingPathComponent:@"fire.png"]);
     CGImageRelease(fiImg); CGContextRelease(fc);
 
-    // dead_fl.png (111x43): 4 CC0 DCSS ghostfire frames [0,31], [31,30], [61,32], [93,18]
+    // 3) dead_fl.png (111x43): 4 emerald spirit flame frames [0,31], [31,30], [61,32], [93,18]
     CGContextRef dfc = create_ctx(111, 43);
     int dx[4] = {0, 31, 61, 93}, dw[4] = {31, 30, 32, 18};
+    double dsc[4] = {0.95, 1.05, 1.0, 0.92};
     for (int i = 0; i < 4; i++) {
-        CGImageRef gi = load_cgimage([gCc0Dir stringByAppendingPathComponent:(i % 2 == 0 ? @"vfx_ghost0.png" : @"vfx_ghost1.png")]);
-        if (gi) {
-            CGContextSetInterpolationQuality(dfc, kCGInterpolationNone);
-            CGContextDrawImage(dfc, CGRectMake(dx[i], 2, dw[i], 39), gi);
-            CGImageRelease(gi);
-        }
+        draw_vfx_in_rect(dfc, vfx[7], CGRectMake(dx[i], 0, dw[i], 43), dsc[i], (i % 2 == 1), 0, 1.0);
     }
     CGImageRef dfImg = CGBitmapContextCreateImage(dfc);
     save_cgimage(dfImg, [gOutRoot stringByAppendingPathComponent:@"dead_fl.png"]);
     CGImageRelease(dfImg); CGContextRelease(dfc);
 
-    // fg.png (92x68), fg2.png (104x28), fg3.png (166x33), pi_fl.png (86x35)
-    Pix fg = pix_new(92, 68);
-    for (int a=0;a<360;a+=30) {
-        double rad = a * M_PI / 180.0;
-        double len = (a % 60 == 0) ? 26.0 : 17.0;
-        pix_line(&fg, 59, 34, 59+(int)(cos(rad)*len), 34+(int)(sin(rad)*len), rgba_hex(0x52d1ff,220), 3);
-        pix_line(&fg, 59, 34, 59+(int)(cos(rad)*len*0.7), 34+(int)(sin(rad)*len*0.7), rgb(0xffffff), 1);
-    }
-    pix_circle(&fg, 59, 34, 7, rgb(0xffffff));
-    pix_save(&fg, @"fg.png"); pix_free(&fg);
+    // 4) fg.png (92x68): critical starburst in [27, 0, 65, 68]
+    CGContextRef fgc = create_ctx(92, 68);
+    draw_vfx_in_rect(fgc, vfx[3], CGRectMake(27, 0, 65, 68), 0.98, false, 0, 1.0);
+    CGImageRef fgImg = CGBitmapContextCreateImage(fgc);
+    save_cgimage(fgImg, [gOutRoot stringByAppendingPathComponent:@"fg.png"]);
+    CGImageRelease(fgImg); CGContextRelease(fgc);
 
-    Pix fg2 = pix_new(104, 28);
+    // 5) fg2.png (104x28): 4 golden healing light pillar frames [0,24], [26,28], [54,22], [78,25]
+    CGContextRef fg2c = create_ctx(104, 28);
     int g2[4][2] = {{0,24},{26,28},{54,22},{78,25}};
-    for (int i=0;i<4;i++) {
-        int cx = g2[i][0] + g2[i][1]/2, r = 5 + (i % 3) * 2;
-        pix_rect(&fg2, cx-r, 2, r*2, 24, rgba_hex(0xffc837,170));
-        pix_rect(&fg2, cx-r/2, 0, r, 28, rgba_hex(0xfff6b8,230));
-        pix_circle(&fg2, cx, 14, r, rgba_hex(0xffffff,200));
+    double g2s[4] = {0.88, 1.04, 0.96, 0.85};
+    for (int i = 0; i < 4; i++) {
+        draw_vfx_in_rect(fg2c, vfx[4], CGRectMake(g2[i][0], 0, g2[i][1], 28), g2s[i], (i % 2 == 1), 0, 1.0);
     }
-    pix_save(&fg2, @"fg2.png"); pix_free(&fg2);
+    CGImageRef fg2Img = CGBitmapContextCreateImage(fg2c);
+    save_cgimage(fg2Img, [gOutRoot stringByAppendingPathComponent:@"fg2.png"]);
+    CGImageRelease(fg2Img); CGContextRelease(fg2c);
 
-    Pix fg3 = pix_new(166, 33);
+    // 6) fg3.png (166x33): 5 rotating purple magic vortex frames [0,39], [40,37], [78,34], [114,24], [139,27]
+    CGContextRef fg3c = create_ctx(166, 33);
     int g3[5][2] = {{0,39},{40,37},{78,34},{114,24},{139,27}};
-    for (int i=0;i<5;i++) {
-        int cx = g3[i][0] + g3[i][1]/2, r = g3[i][1]/2 - 2; if (r > 13) r = 13;
-        pix_circle(&fg3, cx, 16, r, rgba_hex(0x8b2fc9,175));
-        pix_circle(&fg3, cx, 16, r>4?r-4:3, rgba_hex(0xe38aff,220));
-        pix_circle(&fg3, cx+(i-2)*2, 16, 3, rgba_hex(0xffffff,220));
+    for (int i = 0; i < 5; i++) {
+        draw_vfx_in_rect(fg3c, vfx[5], CGRectMake(g3[i][0], 0, g3[i][1], 33), 0.95, false, i * 36.0, 1.0);
     }
-    pix_save(&fg3, @"fg3.png"); pix_free(&fg3);
+    CGImageRef fg3Img = CGBitmapContextCreateImage(fg3c);
+    save_cgimage(fg3Img, [gOutRoot stringByAppendingPathComponent:@"fg3.png"]);
+    CGImageRelease(fg3Img); CGContextRelease(fg3c);
 
-    Pix pf = pix_new(86, 35);
+    // 7) pi_fl.png (86x35): 3 surging cyan ice/water wave frames [0,30], [30,32], [62,24]
+    CGContextRef pic = create_ctx(86, 35);
     int p3[3][2] = {{0,30},{30,32},{62,24}};
-    for (int i=0;i<3;i++) {
-        int cx = p3[i][0] + p3[i][1]/2;
-        pix_circle(&pf, cx, 17, 10, rgba_hex(0x2ca9e8,190));
-        pix_circle(&pf, cx, 15, 6, rgba_hex(0xc2f6ff,240));
+    double p3s[3] = {0.92, 1.04, 0.96};
+    for (int i = 0; i < 3; i++) {
+        draw_vfx_in_rect(pic, vfx[6], CGRectMake(p3[i][0], 0, p3[i][1], 35), p3s[i], (i == 2), 0, 1.0);
     }
-    pix_save(&pf, @"pi_fl.png"); pix_free(&pf);
+    CGImageRef piImg = CGBitmapContextCreateImage(pic);
+    save_cgimage(piImg, [gOutRoot stringByAppendingPathComponent:@"pi_fl.png"]);
+    CGImageRelease(piImg); CGContextRelease(pic);
 
-    Pix bl = pix_new(38, 22);
-    pix_circle(&bl, 11, 11, 7, rgba_hex(0xc91414,230));
-    pix_circle(&bl, 6, 6, 3, rgb(0xff3b3b)); pix_circle(&bl, 16, 15, 3, rgb(0xe61919));
-    pix_circle(&bl, 30, 11, 5, rgba_hex(0xd91c1c,220)); pix_circle(&bl, 27, 6, 2, rgb(0xff5252));
-    pix_save(&bl, @"blood.png"); pix_free(&bl);
+    // 8) blood.png (38x22): 2 crimson sword-slash hit frames [0,22], [23,15]
+    CGContextRef blc = create_ctx(38, 22);
+    draw_vfx_in_rect(blc, vfx[8], CGRectMake(0, 0, 22, 22), 1.0, false, 0, 1.0);
+    draw_vfx_in_rect(blc, vfx[8], CGRectMake(23, 0, 15, 22), 1.05, true, 15.0, 0.95);
+    CGImageRef blImg = CGBitmapContextCreateImage(blc);
+    save_cgimage(blImg, [gOutRoot stringByAppendingPathComponent:@"blood.png"]);
+    CGImageRelease(blImg); CGContextRelease(blc);
 
-    Pix sm = pix_new(60, 12);
+    // 9) smoke.png (60x12): 3 dash dust puff frames [0,20], [22,17], [41,17]
+    CGContextRef smc = create_ctx(60, 12);
     int s3[3][2] = {{0,20},{22,17},{41,17}};
-    for (int i=0;i<3;i++) {
-        pix_circle(&sm, s3[i][0]+s3[i][1]/2-3, 6, 4, rgba_hex(0xd9cfb8,190));
-        pix_circle(&sm, s3[i][0]+s3[i][1]/2+2, 5, 3, rgba_hex(0xf0e9d8,210));
+    double s3a[3] = {1.0, 0.85, 0.65};
+    for (int i = 0; i < 3; i++) {
+        draw_vfx_in_rect(smc, vfx[9], CGRectMake(s3[i][0], 0, s3[i][1], 12), 1.0, (i == 1), 0, s3a[i]);
     }
-    pix_save(&sm, @"smoke.png"); pix_free(&sm);
+    CGImageRef smImg = CGBitmapContextCreateImage(smc);
+    save_cgimage(smImg, [gOutRoot stringByAppendingPathComponent:@"smoke.png"]);
+    CGImageRelease(smImg); CGContextRelease(smc);
 
-    Pix dead = pix_new(31, 16);
-    pix_rect(&dead, 6, 10, 19, 4, rgb(0x3b3632));
-    pix_rect(&dead, 10, 3, 11, 9, rgb(0x8c8780));
-    pix_stroke(&dead, 10, 3, 11, 9, rgb(0x262220));
-    pix_rect(&dead, 14, 5, 3, 5, rgb(0x423e3a));
-    pix_save(&dead, @"dead_1.png"); pix_free(&dead);
+    // 10) dead_1.png (31x16): moss-covered carved Han gravestone from cell 11 of battle-chars-sheet.png
+    CGImageRef charSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"battle-chars-sheet.png"]);
+    if (charSheet) {
+        CGImageRef tomb = tight_alpha_crop(charSheet, 4, 3, 11, NULL);
+        CGContextRef dc = create_ctx(31, 16);
+        draw_vfx_in_rect(dc, tomb, CGRectMake(0, 0, 31, 16), 1.0, false, 0, 1.0);
+        CGImageRef dImg = CGBitmapContextCreateImage(dc);
+        save_cgimage(dImg, [gOutRoot stringByAppendingPathComponent:@"dead_1.png"]);
+        CGImageRelease(dImg); CGContextRelease(dc);
+        if (tomb) CGImageRelease(tomb);
+        CGImageRelease(charSheet);
+    }
 
     Pix yz = pix_new(12, 9); pix_circle(&yz, 6, 4, 4, rgba_hex(0x000000,110));
     pix_save(&yz, @"yz.png"); pix_free(&yz);
@@ -575,10 +785,14 @@ static void gen_vfx(void) {
     save_cgimage(wzImg, [gOutRoot stringByAppendingPathComponent:@"wz.png"]);
     CGImageRelease(wzImg); CGContextRelease(wzCtx);
 
-    Pix jt = pix_new(50, 50);
-    for (int y=12;y<38;y++) { int half=(38-y)/2; pix_rect(&jt, 25-half, y, half>0?half*2:1, 1, rgb(0xffe047)); }
-    pix_rect(&jt, 21, 6, 8, 10, rgb(0xffb01c));
-    pix_save(&jt, @"f_jt.png"); pix_free(&jt);
+    // 11) f_jt.png (50x50): ornate glowing golden RPG downward target arrow
+    CGContextRef jtc = create_ctx(50, 50);
+    draw_vfx_in_rect(jtc, vfx[10], CGRectMake(0, 0, 50, 50), 0.96, false, 0, 1.0);
+    CGImageRef jtImg = CGBitmapContextCreateImage(jtc);
+    save_cgimage(jtImg, [gOutRoot stringByAppendingPathComponent:@"f_jt.png"]);
+    CGImageRelease(jtImg); CGContextRelease(jtc);
+
+    for (int i = 0; i < 12; i++) if (vfx[i]) CGImageRelease(vfx[i]);
 
     Pix bgc = pix_new(31, 27); pix_rect(&bgc, 0, 0, 31, 27, rgb(0x2b1a14)); pix_stroke(&bgc, 0, 0, 31, 27, rgb(0xc99c3b));
     pix_save(&bgc, @"f_bg_c.png"); pix_free(&bgc);
