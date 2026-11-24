@@ -231,8 +231,8 @@ export const SKILLS: SkillDef[] = [
     mpCost: 26,
     power: 1.36,
     aoe: true,
-    effect: 'fire',
-    desc: '借风火之势席卷敌军，随熟练度提升目标数与法伤。',
+    effect: 'wind_rain',
+    desc: '引狂风暴雨席卷敌军，随熟练度提升目标数与法伤。',
   },
 
   // 异人技能（经典爆发雷法 + 魔神/疾风团队增益 + 妙手回春）

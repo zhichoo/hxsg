@@ -495,7 +495,7 @@ export interface SkillDef {
   debuffKind?: 'def_down' | 'poison';
   debuffTurns?: number;
   damageType?: 'phys' | 'magic';
-  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap';
+  effect: 'lei' | 'fire' | 'wind_rain' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap';
   desc: string;
 }
 

@@ -65,6 +65,7 @@ interface ActiveFx {
   effect:
     | 'lei'
     | 'fire'
+    | 'wind_rain'
     | 'fg'
     | 'slash'
     | 'heal'
@@ -104,7 +105,48 @@ const FX_PRELOAD_LIST = [
   'num.png',
   'num2.png',
   'wz.png',
+  'yz.png',
 ];
+
+// Pixel-verified per-class rig anchors for official HXSG 3-part character sprites (_h/_b/_f)
+const CLASS_SPRITE_RIG = {
+  // 武士 (r1 / r1n / n1 / n1n): legs 37x10, body 60x15, head 21x21
+  '1': {
+    legIdle: [0, 18] as const,
+    legAtk: [18, 19] as const,
+    bodyIdle: [0, 22, -13] as const,
+    bodyAtk: [22, 38, -9] as const,
+    bodyY: -19,
+    headY: -36,
+    headYAtk: -35,
+  },
+  // 文人 (r2 / r2n / n2 / n2n): legs 28x9, body 61x16, head 21x21
+  '2': {
+    legIdle: [0, 14] as const,
+    legAtk: [14, 14] as const,
+    bodyIdle: [0, 23, -10] as const,
+    bodyAtk: [23, 38, -10] as const,
+    bodyY: -17,
+    headY: -34,
+    headYAtk: -33,
+  },
+  // 异人 (r3 / r3n / n3 / n3n): legs 28x8, body 67x15, head 21x21
+  '3': {
+    legIdle: [0, 14] as const,
+    legAtk: [14, 14] as const,
+    bodyIdle: [0, 31, -11] as const,
+    bodyAtk: [31, 36, -11] as const,
+    bodyY: -18,
+    headY: -34,
+    headYAtk: -31,
+  },
+};
+
+function getSpriteRig(spriteKey: string) {
+  if (spriteKey.includes('2')) return CLASS_SPRITE_RIG['2'];
+  if (spriteKey.includes('3')) return CLASS_SPRITE_RIG['3'];
+  return CLASS_SPRITE_RIG['1'];
+}
 
 type SpriteFrame = readonly [number, number, number, number];
 
@@ -248,10 +290,11 @@ export function BattleStage({
   const sizeRef = useRef({ w: 380, h: 300, dpr: 2 });
 
   const [selectedTargetUid, setSelectedTargetUid] = useState<string | undefined>(undefined);
-  const [subMenu, setSubMenu] = useState<'none' | 'skill' | 'item' | 'protect' | 'summon'>('none');
+  const [subMenu, setSubMenu] = useState<'none' | 'skill' | 'item'>('none');
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const [autoBattle, setAutoBattle] = useState(false);
   const [autoGenerals, setAutoGenerals] = useState(false);
+  const [battleSpeed, setBattleSpeed] = useState<1 | 2>(1);
   const [stepIdx, setStepIdx] = useState(0);
   const [queuedHeroCmd, setQueuedHeroCmd] = useState<HeroCommandInput | null>(null);
   const [queuedGeneralCmds, setQueuedGeneralCmds] = useState<GeneralCommandInput[]>([]);
@@ -262,6 +305,8 @@ export function BattleStage({
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const [isReplaying, setIsReplaying] = useState(false);
+  const battleSpeedRef = useRef<1 | 2>(1);
+  battleSpeedRef.current = battleSpeed;
 
   const fxRef = useRef<ActiveFx[]>([]);
   const floatsRef = useRef<FloatingNum[]>([]);
@@ -296,12 +341,6 @@ export function BattleStage({
     () => battle.units.filter((u) => u.side === 'player' && !u.isMainRole && !u.alive),
     [battle.units],
   );
-  const benchGenerals = useMemo(() => {
-    const inBattleIds = new Set(
-      battle.units.filter((u) => u.side === 'player' && u.generalId).map((u) => u.generalId!),
-    );
-    return character.generals.filter((g) => !inBattleIds.has(g.id));
-  }, [battle.units, character.generals]);
 
   const controllableUnits = useMemo(() => {
     if (autoGenerals || autoBattle) {
@@ -371,6 +410,8 @@ export function BattleStage({
   useEffect(() => {
     if (!battle.lastLogs.length) return;
     const now = performance.now();
+    const spd = battleSpeedRef.current === 2 ? 0.52 : 1;
+    const ms = (v: number) => Math.round(v * spd);
     let cursor = 0;
 
     const stMap: Record<BattleStatusKind, { text: string; color: string }> = {
@@ -388,7 +429,7 @@ export function BattleStage({
 
       if (log.skillName) {
         const callColor =
-          log.effect === 'lei'
+          log.effect === 'lei' || log.effect === 'wind_rain'
             ? '#8cefff'
             : log.effect === 'fire'
               ? '#ffae5c'
@@ -402,23 +443,7 @@ export function BattleStage({
           label: `【${log.skillName}】`,
           color: callColor,
           startedAt: startAt,
-          duration: 760,
-        });
-      } else if (log.action === 'summon') {
-        calloutsRef.current.push({
-          uid: log.actorUid,
-          label: '【招将上阵】',
-          color: '#ffe875',
-          startedAt: startAt,
-          duration: 760,
-        });
-      } else if (log.action === 'protect') {
-        calloutsRef.current.push({
-          uid: log.actorUid,
-          label: '【护卫】',
-          color: '#8ce6ff',
-          startedAt: startAt,
-          duration: 680,
+          duration: ms(1050),
         });
       }
 
@@ -432,9 +457,9 @@ export function BattleStage({
       if (isMelee) {
         const primary = log.targets[0];
         const hits = log.skillId === 'lianji' ? 2 : 1;
-        const dashMs = 150;
-        const strikeMs = hits > 1 ? 350 : 210;
-        const returnMs = 140;
+        const dashMs = ms(230);
+        const strikeMs = ms(hits > 1 ? 540 : 330);
+        const returnMs = ms(210);
 
         dashesRef.current.push({
           actorUid: log.actorUid,
@@ -447,18 +472,18 @@ export function BattleStage({
         });
 
         for (let hIdx = 0; hIdx < hits; hIdx++) {
-          const hitAt = startAt + dashMs + 25 + hIdx * 165;
+          const hitAt = startAt + dashMs + ms(40 + hIdx * 240);
           if (primary.damage > 0) {
             hurtRef.current.set(primary.uid, hitAt);
           }
           if (primary.killed && hIdx === hits - 1) {
-            dyingUntilRef.current.set(primary.uid, hitAt + 320);
+            dyingUntilRef.current.set(primary.uid, hitAt + ms(450));
           }
           fxRef.current.push({
             uid: primary.uid,
             effect: 'slash',
             startedAt: hitAt,
-            duration: 280,
+            duration: ms(420),
           });
           if (primary.damage > 0) {
             const perHitDmg =
@@ -478,18 +503,18 @@ export function BattleStage({
               crit: primary.crit,
               subText,
               color: primary.crit ? '#ffea4f' : '#ff4b4b',
-              createdAt: hitAt + 15,
+              createdAt: hitAt + ms(25),
             });
           } else if (primary.resisted) {
             floatsRef.current.push({
               uid: primary.uid,
               kind: 'miss',
               color: '#ffe46b',
-              createdAt: hitAt + 15,
+              createdAt: hitAt + ms(25),
             });
           }
         }
-        cursor += dashMs + strikeMs + returnMs + 30;
+        cursor += dashMs + strikeMs + returnMs + ms(110);
         return;
       }
 
@@ -505,21 +530,22 @@ export function BattleStage({
           uid: log.actorUid,
           effect: isPurpleCast ? 'cast_purple' : 'cast_gold',
           startedAt: startAt,
-          duration: 260,
+          duration: ms(380),
         });
       }
 
-      const impactBase = startAt + (log.action === 'skill' ? 165 : 70);
+      const impactBase = startAt + ms(log.action === 'skill' ? 260 : 110);
       log.targets.forEach((t, tIdx) => {
-        const impactAt = impactBase + tIdx * 55;
+        const impactAt = impactBase + ms(tIdx * 85);
         if (t.damage > 0) {
-          hurtRef.current.set(t.uid, impactAt + 20);
+          hurtRef.current.set(t.uid, impactAt + ms(30));
         }
         if (t.killed) {
-          dyingUntilRef.current.set(t.uid, impactAt + 360);
+          dyingUntilRef.current.set(t.uid, impactAt + ms(520));
         }
         let fxType: ActiveFx['effect'] | null = log.effect ?? null;
         if (t.revived) fxType = 'revive';
+        else if (log.skillId === 'hfhy') fxType = 'wind_rain';
         else if (t.appliedStatus === 'poison' || log.skillId === 'wudu') fxType = 'poison';
         else if (t.appliedStatus === 'atk_up') fxType = 'buff_atk';
         else if (t.appliedStatus === 'spd_up') fxType = 'buff_spd';
@@ -528,7 +554,7 @@ export function BattleStage({
             uid: t.uid,
             effect: fxType,
             startedAt: impactAt,
-            duration: fxType === 'slash' ? 320 : 540,
+            duration: ms(fxType === 'slash' ? 460 : 760),
           });
         }
 
@@ -540,7 +566,7 @@ export function BattleStage({
             subText: t.heal ? '复活' : undefined,
             text: t.heal ? undefined : '上阵!',
             color: '#76ff88',
-            createdAt: impactAt + 35,
+            createdAt: impactAt + ms(50),
           });
         } else if (t.heal && t.heal > 0) {
           floatsRef.current.push({
@@ -548,7 +574,7 @@ export function BattleStage({
             kind: 'heal',
             value: t.heal,
             color: '#76ff88',
-            createdAt: impactAt + 35,
+            createdAt: impactAt + ms(50),
           });
         } else if (t.appliedStatus) {
           const stInfo = stMap[t.appliedStatus];
@@ -560,7 +586,7 @@ export function BattleStage({
               crit: t.crit,
               subText: stInfo.text,
               color: '#ffea4f',
-              createdAt: impactAt + 35,
+              createdAt: impactAt + ms(50),
             });
           } else {
             floatsRef.current.push({
@@ -568,7 +594,7 @@ export function BattleStage({
               kind: 'text',
               text: stInfo.text,
               color: stInfo.color,
-              createdAt: impactAt + 35,
+              createdAt: impactAt + ms(50),
             });
           }
         } else if (t.resisted) {
@@ -576,7 +602,7 @@ export function BattleStage({
             uid: t.uid,
             kind: 'miss',
             color: '#ffe46b',
-            createdAt: impactAt + 35,
+            createdAt: impactAt + ms(50),
           });
         } else if (t.captured) {
           floatsRef.current.push({
@@ -584,7 +610,7 @@ export function BattleStage({
             kind: 'text',
             text: '招降成功!',
             color: '#ffe863',
-            createdAt: impactAt + 35,
+            createdAt: impactAt + ms(50),
           });
         } else if (t.damage > 0) {
           floatsRef.current.push({
@@ -593,18 +619,18 @@ export function BattleStage({
             value: t.damage,
             crit: t.crit,
             color: t.crit ? '#ffea4f' : '#ff4b4b',
-            createdAt: impactAt + 35,
+            createdAt: impactAt + ms(50),
           });
         }
       });
 
       cursor +=
         log.targets.length > 0
-          ? 420 + Math.min(3, log.targets.length - 1) * 55
-          : 240;
+          ? ms(660 + Math.min(3, log.targets.length - 1) * 85)
+          : ms(380);
     });
 
-    const totalMs = Math.min(3600, cursor + 220);
+    const totalMs = Math.min(6000, cursor + ms(280));
     setIsReplaying(true);
     const timer = window.setTimeout(() => setIsReplaying(false), totalMs);
     return () => window.clearTimeout(timer);
@@ -776,18 +802,18 @@ export function BattleStage({
     void submitRound(lastRoundCmd.hero, autoGenerals ? [] : lastRoundCmd.generals);
   }, [lastRoundCmd, busy, battle.status, autoGenerals, submitRound]);
 
-  // Auto-battle repeats last chosen hero command (or attacks)
+  // Auto-battle repeats last chosen hero command after current round animation finishes
   useEffect(() => {
-    if (!autoBattle || battle.status !== 'ongoing' || busy) return;
+    if (!autoBattle || battle.status !== 'ongoing' || busy || isReplaying) return;
     const t = setTimeout(() => {
       const heroCmd =
         lastRoundCmd?.hero && lastRoundCmd.hero.action !== 'item'
           ? { ...lastRoundCmd.hero, targetUid: selectedTargetUid }
           : ({ action: 'attack', targetUid: selectedTargetUid } as HeroCommandInput);
       void submitRound(heroCmd, []);
-    }, 1050);
+    }, battleSpeed === 2 ? 320 : 520);
     return () => clearTimeout(t);
-  }, [autoBattle, battle.status, battle.round, busy, submitRound, selectedTargetUid, lastRoundCmd]);
+  }, [autoBattle, battle.status, battle.round, busy, isReplaying, battleSpeed, submitRound, selectedTargetUid, lastRoundCmd]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -804,8 +830,6 @@ export function BattleStage({
       } else if (e.key === '4') {
         setPendingItemId(null);
         setSubMenu((m) => (m === 'item' ? 'none' : 'item'));
-      } else if (e.key === '5') {
-        setSubMenu((m) => (m === 'protect' ? 'none' : 'protect'));
       } else if (e.key === '6') {
         if (isCommandingHero) void dispatchCommand({ action: 'flee' });
         else stepBack();
@@ -965,11 +989,12 @@ export function BattleStage({
         }
 
         const hurtAt = hurtRef.current.get(u.uid) ?? 0;
+        const hurtDur = battleSpeedRef.current === 2 ? 200 : 340;
         const hurtElapsed = now - hurtAt;
-        const isHurt = hurtElapsed >= 0 && hurtElapsed < 260;
+        const isHurt = hurtElapsed >= 0 && hurtElapsed < hurtDur;
         const hurtRecoil = isHurt
-          ? Math.sin((hurtElapsed / 260) * Math.PI) * (u.side === 'enemy' ? -10 : 10) +
-            Math.sin(hurtElapsed * 0.22) * 3
+          ? Math.sin((hurtElapsed / hurtDur) * Math.PI) * (u.side === 'enemy' ? -10 : 10) +
+            Math.sin(hurtElapsed * 0.2) * 3
           : 0;
 
         const bob = dash ? 0 : Math.sin(now / 280 + pos.x) > 0 ? 1 : 0;
@@ -1045,6 +1070,7 @@ export function BattleStage({
         const head = getImg(`${u.spriteKey}_h.png`);
         const body = getImg(`${u.spriteKey}_b.png`);
         const legs = getImg(`${u.spriteKey}_f.png`);
+        const rig = getSpriteRig(u.spriteKey);
 
         ctx.save();
         ctx.globalAlpha = dyingAlpha;
@@ -1052,17 +1078,13 @@ export function BattleStage({
         if (u.side === 'player') ctx.scale(-1, 1);
 
         if (legs) {
-          const half = Math.floor(legs.width / 2);
-          const sx = isAttacking ? half : 0;
-          const sw = isAttacking ? legs.width - half : half;
+          const [sx, sw] = isAttacking ? rig.legAtk : rig.legIdle;
           const dw = sw * spriteScale;
           const dh = legs.height * spriteScale;
-          ctx.drawImage(legs, sx, 0, sw, legs.height, -dw / 2, -dh, dw, dh);
+          ctx.drawImage(legs, sx, 0, sw, legs.height, Math.round(-dw / 2), -dh, dw, dh);
         }
         if (body) {
-          const idleW = Math.round(body.width * 0.42);
-          const sx = isAttacking ? idleW : 0;
-          const sw = isAttacking ? body.width - idleW : idleW;
+          const [sx, sw, dxPx] = isAttacking ? rig.bodyAtk : rig.bodyIdle;
           const dw = sw * spriteScale;
           const dh = body.height * spriteScale;
           ctx.drawImage(
@@ -1071,8 +1093,8 @@ export function BattleStage({
             0,
             sw,
             body.height,
-            -dw / 2,
-            -(body.height + 6) * spriteScale + bob,
+            Math.round(dxPx * spriteScale),
+            Math.round(rig.bodyY * spriteScale) + bob,
             dw,
             dh,
           );
@@ -1080,14 +1102,15 @@ export function BattleStage({
         if (head) {
           const dw = head.width * spriteScale;
           const dh = head.height * spriteScale;
+          const headY = isAttacking ? rig.headYAtk : rig.headY;
           ctx.drawImage(
             head,
             0,
             0,
             head.width,
             head.height,
-            -dw / 2,
-            -(head.height + 16) * spriteScale + bob,
+            Math.round(-dw / 2),
+            Math.round(headY * spriteScale) + bob,
             dw,
             dh,
           );
@@ -1197,6 +1220,32 @@ export function BattleStage({
           if (fg && t > 0.25 && t < 0.72) {
             drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 2, 0.52 * fxZoom);
           }
+        } else if (fx.effect === 'wind_rain') {
+          // 呼风唤雨: official ice-blue wind-rain wave (pi_fl.png) + blowing pixel leaves (yz.png) + rain streaks
+          const pi = getImg('pi_fl.png');
+          const leaf = getImg('yz.png');
+          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, (t * 1.4) % 1, pos.x, pos.y + 4, 1.75 * fxZoom);
+          ctx.strokeStyle = 'rgba(165, 232, 255, 0.88)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 6; i++) {
+            const p = (t * 2.2 + i * 0.17) % 1;
+            const rx = pos.x + (i - 2.5) * 11 * fxZoom - p * 16 * fxZoom;
+            const ry = pos.y - 68 * fxZoom + p * 74 * fxZoom;
+            ctx.beginPath();
+            ctx.moveTo(rx, ry);
+            ctx.lineTo(rx - 5 * fxZoom, ry + 11 * fxZoom);
+            ctx.stroke();
+          }
+          if (leaf) {
+            const lw = Math.round(leaf.width * 1.3 * fxZoom);
+            const lh = Math.round(leaf.height * 1.3 * fxZoom);
+            for (let i = 0; i < 3; i++) {
+              const lp = (t * 1.5 + i * 0.31) % 1;
+              const lx = pos.x + (24 - lp * 52 + Math.sin(lp * Math.PI * 2 + i) * 10) * fxZoom;
+              const ly = pos.y - (52 - lp * 44 - i * 8) * fxZoom;
+              ctx.drawImage(leaf, Math.round(lx - lw / 2), Math.round(ly - lh / 2), lw, lh);
+            }
+          }
         } else if (fx.effect === 'fire') {
           // Official 3-frame roaring flame fire.png
           const fire = getImg('fire.png');
@@ -1302,14 +1351,15 @@ export function BattleStage({
         }
       };
 
-      floatsRef.current = floatsRef.current.filter((fl) => now - fl.createdAt < 1150);
+      const floatDur = battleSpeedRef.current === 2 ? 950 : 1450;
+      floatsRef.current = floatsRef.current.filter((fl) => now - fl.createdAt < floatDur);
       for (const fl of floatsRef.current) {
         const elapsed = now - fl.createdAt;
         if (elapsed < 0) continue;
         const unit = battle.units.find((u) => u.uid === fl.uid);
         if (!unit) continue;
         const pos = getUnitCoords(unit, w, h);
-        const p = Math.min(1, elapsed / 1150);
+        const p = Math.min(1, elapsed / floatDur);
         // Classic HXSG upward pop + gentle settle
         const bounce = p < 0.25 ? Math.sin((p / 0.25) * Math.PI * 0.5) * 20 : 20 + (p - 0.25) * 18;
         const baseY = pos.y - Math.round(36 * spriteScale) - bounce;
@@ -1549,31 +1599,35 @@ export function BattleStage({
             </div>
           )}
 
-          {/* Subtle Secondary Tactical Pills (保护 / 招将) tucked at bottom-center out of the way */}
+          {/* Playback Speed Toggle (1x / 2x) at bottom-center of stage */}
           {battle.status === 'ongoing' && subMenu === 'none' && (
-            <div className="pointer-events-none absolute left-0 right-0 bottom-1.5 flex justify-center gap-1.5 z-10">
-              {aliveAllies.length > 1 && (
+            <div className="pointer-events-none absolute left-0 right-0 bottom-1.5 flex justify-center z-10">
+              <div className="pointer-events-auto inline-flex border border-[#d6aa49] bg-[#1a0921]/85 shadow overflow-hidden">
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => setSubMenu('protect')}
-                  className="pointer-events-auto px-2 py-0.5 text-[10.5px] font-bold bg-[#1c2b3d]/85 hover:bg-[#27405c] border border-[#7ec8ff]/80 text-[#dff4ff] shadow"
-                  title="保护指定友军分担伤害 (快捷键 5)"
+                  onClick={() => setBattleSpeed(1)}
+                  className={`px-2.5 py-0.5 text-[11px] font-bold transition ${
+                    battleSpeed === 1
+                      ? 'bg-[#b8730b] text-[#fff8cc]'
+                      : 'text-[#d8c2de] hover:text-white'
+                  }`}
+                  title="标准倍速播放战斗动画"
                 >
-                  🛡 保护
+                  ×1
                 </button>
-              )}
-              {isCommandingHero && benchGenerals.length > 0 && (
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => setSubMenu('summon')}
-                  className="pointer-events-auto px-2 py-0.5 text-[10.5px] font-bold bg-[#381442]/85 hover:bg-[#521e61] border border-[#e0b84e]/85 text-[#ffe999] shadow"
-                  title="召唤营中备用副将替补上阵"
+                  onClick={() => setBattleSpeed(2)}
+                  className={`px-2.5 py-0.5 text-[11px] font-bold border-l border-[#7a5822] transition ${
+                    battleSpeed === 2
+                      ? 'bg-[#b8730b] text-[#fff8cc]'
+                      : 'text-[#d8c2de] hover:text-white'
+                  }`}
+                  title="二倍速快进战斗动画"
                 >
-                  🚩 招将
+                  ×2
                 </button>
-              )}
+              </div>
             </div>
           )}
 
@@ -1588,8 +1642,6 @@ export function BattleStage({
                     (pendingItem
                       ? `为哪位友军使用【${pendingItem.name}】？`
                       : `${isCommandingHero ? '主角' : `副将 ${activeUnit?.name ?? ''}`} · 选择丹药（可喂队友/复活）`)}
-                  {subMenu === 'protect' && `选择要保护的友军（本回合替其承伤）`}
-                  {subMenu === 'summon' && `选择营中备用副将披挂上阵`}
                 </span>
                 <button
                   type="button"
@@ -1714,69 +1766,6 @@ export function BattleStage({
                   >
                     ← 重选丹药
                   </button>
-                </div>
-              )}
-
-              {subMenu === 'protect' && (
-                <div className="grid grid-cols-2 gap-1.5">
-                  {aliveAllies
-                    .filter((u) => u.uid !== activeUnit?.uid)
-                    .map((u) => (
-                      <button
-                        key={u.uid}
-                        type="button"
-                        onClick={() =>
-                          void dispatchCommand({ action: 'protect', targetUid: u.uid })
-                        }
-                        className="p-2 bg-[#203857] hover:bg-[#2c4e7a] border border-[#7ec8ff] text-left text-xs"
-                      >
-                        <div className="font-bold text-[#dff4ff]">
-                          🛡 保护 {u.isMainRole ? `【主角】${u.name}` : u.name}
-                        </div>
-                        <div className="text-[10.5px] text-[#bfe2ff]">
-                          当前血量 {u.hp}/{u.maxHp}
-                        </div>
-                      </button>
-                    ))}
-                  {aliveAllies.filter((u) => u.uid !== activeUnit?.uid).length === 0 && (
-                    <div className="col-span-2 text-xs text-center text-[#ebd8f0] py-2">
-                      场上暂无其他存活友军可保护
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {subMenu === 'summon' && (
-                <div className="space-y-1.5">
-                  {aliveAllies.filter((u) => !u.isMainRole).length >= 3 ? (
-                    <div className="text-xs text-center text-[#ffd88a] py-2">
-                      当前阵上已有 3 名存活副将，需待有空位或副将阵亡后才可召唤替补。
-                    </div>
-                  ) : benchGenerals.length === 0 ? (
-                    <div className="text-xs text-center text-[#ebd8f0] py-2">
-                      营中暂无未上阵的备用副将
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {benchGenerals.map((g) => (
-                        <button
-                          key={g.id}
-                          type="button"
-                          onClick={() =>
-                            void dispatchCommand({ action: 'summon', summonGeneralId: g.id })
-                          }
-                          className="p-1.5 bg-[#3c1447] hover:bg-[#5b1d6b] border border-[#d6a742] text-left text-xs"
-                        >
-                          <div className="font-bold text-[#ffea84]">
-                            {g.name} Lv.{g.level}
-                          </div>
-                          <div className="text-[10.5px] text-[#e7d0ef]">
-                            血{g.maxHp} 攻{g.atk} 速{g.spd} · 忠{g.loyalty}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )}
             </div>
