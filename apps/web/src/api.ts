@@ -1,7 +1,7 @@
 import type {
   BattleState,
-  CasinoChibiResult,
-  CasinoDiceResult,
+  CasinoBetPlacementResult,
+  CasinoStateView,
   CharacterView,
   EquipmentSlot,
   Gender,
@@ -376,34 +376,34 @@ export const api = {
       method: 'POST',
       body: { realmId },
     }),
+  getCasinoState: (realmId: string) =>
+    callEndpoint<{ state: CasinoStateView; character: CharacterView }>(
+      'casinoState',
+      '/api/casino/state',
+      {
+        query: { realmId },
+      },
+    ),
   playCasinoDice: (payload: {
     realmId: string;
     betType: 'big' | 'small' | 'odd' | 'even' | 'baozi';
     currency: 'silver' | 'gold';
     amount: number;
   }) =>
-    callEndpoint<{ result: CasinoDiceResult; character: CharacterView }>(
-      'casinoDice',
-      '/api/casino/dice',
-      {
-        method: 'POST',
-        body: payload,
-      },
-    ),
+    callEndpoint<CasinoBetPlacementResult>('casinoDice', '/api/casino/dice', {
+      method: 'POST',
+      body: payload,
+    }),
   playCasinoChibi: (payload: {
     realmId: string;
     pick: 'wei' | 'wu' | 'shu';
     currency: 'silver' | 'gold';
     amount: number;
   }) =>
-    callEndpoint<{ result: CasinoChibiResult; character: CharacterView }>(
-      'casinoChibi',
-      '/api/casino/chibi',
-      {
-        method: 'POST',
-        body: payload,
-      },
-    ),
+    callEndpoint<CasinoBetPlacementResult>('casinoChibi', '/api/casino/chibi', {
+      method: 'POST',
+      body: payload,
+    }),
   bankTransfer: (payload: {
     realmId: string;
     action:

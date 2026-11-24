@@ -188,6 +188,12 @@
       "method": "POST",
       "auth": "platform"
     },
+    "casinoState": {
+      "url": "__API_BASE__/api/casino/state",
+      "method": "GET",
+      "query": ["realmId"],
+      "auth": "platform"
+    },
     "casinoDice": {
       "url": "__API_BASE__/api/casino/dice",
       "method": "POST",

@@ -149,6 +149,77 @@ export interface TowerStateView {
   nextFloorMilestone?: string;
 }
 
+export type CasinoGameType = 'dice' | 'chibi';
+export type CasinoDiceChoice = 'big' | 'small' | 'odd' | 'even' | 'baozi';
+export type CasinoChibiChoice = 'wei' | 'wu' | 'shu';
+export type CasinoCurrency = 'silver' | 'gold';
+
+export interface CasinoRoundView {
+  id: number;
+  realmId: string;
+  game: CasinoGameType;
+  roundNo: number;
+  status: 'open' | 'settled';
+  openedAt: number;
+  drawAt: number;
+  settledAt: number | null;
+  intervalSec: number;
+  lockBeforeSec: number;
+  dice?: [number, number, number];
+  sum?: number;
+  isBaozi?: boolean;
+  chibiWinner?: CasinoChibiChoice;
+  chibiReport?: string;
+  totalBets: number;
+  totalSilverBet: number;
+  totalGoldBet: number;
+  totalSilverPayout: number;
+  totalGoldPayout: number;
+  poolByChoice?: Record<string, { silver: number; gold: number; count: number }>;
+  myBetCount?: number;
+  mySilverBet?: number;
+  myGoldBet?: number;
+  mySilverPayout?: number;
+  myGoldPayout?: number;
+}
+
+export interface CasinoBetView {
+  id: number;
+  roundId: number;
+  game: CasinoGameType;
+  roundNo: number;
+  choice: string;
+  currency: CasinoCurrency;
+  amount: number;
+  status: 'pending' | 'won' | 'lost';
+  payout: number;
+  createdAt: number;
+  settledAt: number | null;
+}
+
+export interface CasinoGameStateView {
+  game: CasinoGameType;
+  intervalSec: number;
+  lockBeforeSec: number;
+  currentRound: CasinoRoundView;
+  history: CasinoRoundView[];
+  myCurrentBets: CasinoBetView[];
+  myRecentBets: CasinoBetView[];
+}
+
+export interface CasinoStateView {
+  serverNow: number;
+  dice: CasinoGameStateView;
+  chibi: CasinoGameStateView;
+}
+
+export interface CasinoBetPlacementResult {
+  bet: CasinoBetView;
+  state: CasinoStateView;
+  character: CharacterView;
+  message: string;
+}
+
 export interface CasinoDiceResult {
   dice: [number, number, number];
   sum: number;

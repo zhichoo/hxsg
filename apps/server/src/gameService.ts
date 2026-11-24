@@ -19,8 +19,15 @@ import {
   SKILLS,
   TOWER_MAX_FLOOR,
   WORLD_BOSS_ROSTER,
-  type CasinoChibiResult,
-  type CasinoDiceResult,
+  type CasinoBetPlacementResult,
+  type CasinoBetView,
+  type CasinoChibiChoice,
+  type CasinoCurrency,
+  type CasinoDiceChoice,
+  type CasinoGameStateView,
+  type CasinoGameType,
+  type CasinoRoundView,
+  type CasinoStateView,
   type CharacterQuestState,
   type CharacterView,
   type DailyStateView,
@@ -2281,151 +2288,642 @@ export function sweepTowerDaily(characterId: number): {
   };
 }
 
-export function playCasinoDice(
-  characterId: number,
-  opts: {
-    betType: 'big' | 'small' | 'odd' | 'even' | 'baozi';
-    currency: 'silver' | 'gold';
-    amount: number;
-  },
-): { result: CasinoDiceResult; character: CharacterView } {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-  if (!['big', 'small', 'odd', 'even', 'baozi'].includes(opts.betType)) {
-    throw new Error('无效的骰子押注类型');
-  }
-  if (opts.currency !== 'silver' && opts.currency !== 'gold') {
-    throw new Error('无效的押注货币（仅支持银两或金砖）');
-  }
-  const currency = opts.currency;
-  const amount = Math.floor(opts.amount);
-  const minBet = currency === 'gold' ? 10 : 50;
-  const maxBet = currency === 'gold' ? 2000 : 50000;
-  if (!Number.isFinite(amount) || amount < minBet || amount > maxBet) {
-    throw new Error(`单局押注范围：${minBet} ~ ${maxBet} ${currency === 'gold' ? '金砖' : '银两'}`);
-  }
-  const balance = currency === 'gold' ? ch.gold : ch.silver;
-  if (balance < amount) {
-    throw new Error(`${currency === 'gold' ? '金砖' : '银两'}不足`);
-  }
+const CASINO_INTERVAL_MS: Record<CasinoGameType, number> = {
+  dice: Math.max(10_000, Number(process.env.HXSG_CASINO_DICE_INTERVAL_MS || 60_000)),
+  chibi: Math.max(10_000, Number(process.env.HXSG_CASINO_CHIBI_INTERVAL_MS || 180_000)),
+};
+const CASINO_LOCK_MS = 3_000;
+const CASINO_INITIAL_HISTORY = 10;
+const CASINO_BACKFILL_MAX = 15;
+const CASINO_HISTORY_LIMIT = 20;
+const CASINO_MAX_BETS_PER_ROUND = 10;
 
+const DICE_CHOICE_LABELS: Record<CasinoDiceChoice, string> = {
+  big: '大(11~18)',
+  small: '小(3~10)',
+  odd: '单数',
+  even: '双数',
+  baozi: '豹子',
+};
+
+const CHIBI_CHOICE_LABELS: Record<CasinoChibiChoice, string> = {
+  wei: '魏军',
+  wu: '吴军',
+  shu: '蜀军',
+};
+
+const CHIBI_MULT_MAP: Record<CasinoChibiChoice, number> = {
+  wei: 2.1,
+  wu: 2.3,
+  shu: 4.2,
+};
+
+const CHIBI_REPORT_MAP: Record<CasinoChibiChoice, string> = {
+  wei: '曹军铁索横江，张辽率虎豹骑强登江岸，魏军大捷！',
+  wu: '黄盖苦肉诈降，周瑜借东风火烧连营，东吴水师完胜！',
+  shu: '诸葛亮奇谋设伏，赵云关羽华容道奇兵突袭，蜀军爆冷大胜！',
+};
+
+interface CasinoRoundRow {
+  id: number;
+  realm_id: string;
+  game: CasinoGameType;
+  round_no: number;
+  status: 'open' | 'settled';
+  opened_at: number;
+  draw_at: number;
+  settled_at: number | null;
+  dice_1: number | null;
+  dice_2: number | null;
+  dice_3: number | null;
+  dice_sum: number | null;
+  is_baozi: number;
+  chibi_winner: CasinoChibiChoice | null;
+  chibi_report: string | null;
+  total_bets: number;
+  total_silver_bet: number;
+  total_gold_bet: number;
+  total_silver_payout: number;
+  total_gold_payout: number;
+}
+
+interface CasinoBetRow {
+  id: number;
+  round_id: number;
+  realm_id: string;
+  game: CasinoGameType;
+  round_no: number;
+  character_id: number;
+  character_name: string;
+  choice: string;
+  currency: CasinoCurrency;
+  amount: number;
+  status: 'pending' | 'won' | 'lost';
+  payout: number;
+  created_at: number;
+  settled_at: number | null;
+}
+
+function rollDiceOutcome(): { d1: number; d2: number; d3: number; sum: number; isBaozi: boolean } {
   const d1 = 1 + Math.floor(Math.random() * 6);
   const d2 = 1 + Math.floor(Math.random() * 6);
   const d3 = 1 + Math.floor(Math.random() * 6);
-  const sum = d1 + d2 + d3;
-  const isBaozi = d1 === d2 && d2 === d3;
+  return {
+    d1,
+    d2,
+    d3,
+    sum: d1 + d2 + d3,
+    isBaozi: d1 === d2 && d2 === d3,
+  };
+}
 
-  let won = false;
-  let mult = 0;
-  if (opts.betType === 'baozi') {
-    won = isBaozi;
-    mult = 16;
-  } else if (!isBaozi) {
-    if (opts.betType === 'big') won = sum >= 11;
-    else if (opts.betType === 'small') won = sum <= 10;
-    else if (opts.betType === 'odd') won = sum % 2 === 1;
-    else if (opts.betType === 'even') won = sum % 2 === 0;
-    mult = 2;
+function rollChibiOutcome(): { winner: CasinoChibiChoice; report: string } {
+  const r = Math.random();
+  const winner: CasinoChibiChoice = r < 0.42 ? 'wei' : r < 0.8 ? 'wu' : 'shu';
+  return { winner, report: CHIBI_REPORT_MAP[winner] };
+}
+
+function insertSettledHistoricalRound(
+  realmId: string,
+  game: CasinoGameType,
+  roundNo: number,
+  openedAt: number,
+  drawAt: number,
+) {
+  if (game === 'dice') {
+    const out = rollDiceOutcome();
+    db.prepare(
+      `INSERT INTO casino_rounds (
+        realm_id, game, round_no, status, opened_at, draw_at, settled_at,
+        dice_1, dice_2, dice_3, dice_sum, is_baozi
+      ) VALUES (?, 'dice', ?, 'settled', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(realmId, roundNo, openedAt, drawAt, drawAt, out.d1, out.d2, out.d3, out.sum, out.isBaozi ? 1 : 0);
+  } else {
+    const out = rollChibiOutcome();
+    db.prepare(
+      `INSERT INTO casino_rounds (
+        realm_id, game, round_no, status, opened_at, draw_at, settled_at,
+        chibi_winner, chibi_report
+      ) VALUES (?, 'chibi', ?, 'settled', ?, ?, ?, ?, ?)`,
+    ).run(realmId, roundNo, openedAt, drawAt, drawAt, out.winner, out.report);
+  }
+}
+
+function syncCasinoGame(
+  realmId: string,
+  game: CasinoGameType,
+  now = Date.now(),
+): { announcements: string[] } {
+  const intervalMs = CASINO_INTERVAL_MS[game];
+  const slotStart = Math.floor(now / intervalMs) * intervalMs;
+  const slotDraw = slotStart + intervalMs;
+  const announcements: string[] = [];
+
+  withTx(() => {
+    let latest = db
+      .prepare(
+        'SELECT * FROM casino_rounds WHERE realm_id = ? AND game = ? ORDER BY round_no DESC LIMIT 1',
+      )
+      .get(realmId, game) as CasinoRoundRow | undefined;
+
+    // Fast path: current round is still open and not due yet
+    if (latest && latest.status === 'open' && latest.draw_at > now) {
+      return;
+    }
+
+    // Bootstrap fresh DB with recent continuous history so the board is immediately alive
+    if (!latest) {
+      let roundNo = 0;
+      for (let i = CASINO_INITIAL_HISTORY; i >= 1; i--) {
+        roundNo += 1;
+        const openedAt = slotStart - i * intervalMs;
+        insertSettledHistoricalRound(realmId, game, roundNo, openedAt, openedAt + intervalMs);
+      }
+      db.prepare(
+        `INSERT INTO casino_rounds (realm_id, game, round_no, status, opened_at, draw_at)
+         VALUES (?, ?, ?, 'open', ?, ?)`,
+      ).run(realmId, game, roundNo + 1, slotStart, slotDraw);
+      return;
+    }
+
+    // Settle overdue open round and distribute payouts atomically
+    if (latest.status === 'open' && latest.draw_at <= now) {
+      const pendingBets = db
+        .prepare("SELECT * FROM casino_bets WHERE round_id = ? AND status = 'pending' ORDER BY id ASC")
+        .all(latest.id) as unknown as CasinoBetRow[];
+
+      let totalSilverPayout = 0;
+      let totalGoldPayout = 0;
+      const bigWinners: string[] = [];
+
+      if (game === 'dice') {
+        const out = rollDiceOutcome();
+        for (const bet of pendingBets) {
+          let won = false;
+          let mult = 0;
+          if (bet.choice === 'baozi') {
+            won = out.isBaozi;
+            mult = 16;
+          } else if (!out.isBaozi) {
+            if (bet.choice === 'big') won = out.sum >= 11;
+            else if (bet.choice === 'small') won = out.sum <= 10;
+            else if (bet.choice === 'odd') won = out.sum % 2 === 1;
+            else if (bet.choice === 'even') won = out.sum % 2 === 0;
+            mult = 2;
+          }
+          const payout = won ? Math.round(bet.amount * mult) : 0;
+          db.prepare('UPDATE casino_bets SET status = ?, payout = ?, settled_at = ? WHERE id = ?').run(
+            won ? 'won' : 'lost',
+            payout,
+            now,
+            bet.id,
+          );
+          if (payout > 0) {
+            const col = bet.currency === 'gold' ? 'gold' : 'silver';
+            db.prepare(`UPDATE characters SET ${col} = ${col} + ?, updated_at = ? WHERE id = ?`).run(
+              payout,
+              now,
+              bet.character_id,
+            );
+            if (bet.currency === 'gold') totalGoldPayout += payout;
+            else totalSilverPayout += payout;
+
+            const isBig =
+              bet.choice === 'baozi' ||
+              (bet.currency === 'gold' ? payout >= 100 : payout >= 2000);
+            if (isBig) {
+              const unit = bet.currency === 'gold' ? '金砖' : '银两';
+              bigWinners.push(`「${bet.character_name}」喜赢 ${payout} ${unit}`);
+            }
+          }
+        }
+
+        db.prepare(
+          `UPDATE casino_rounds
+           SET status = 'settled', settled_at = ?,
+               dice_1 = ?, dice_2 = ?, dice_3 = ?, dice_sum = ?, is_baozi = ?,
+               total_silver_payout = ?, total_gold_payout = ?
+           WHERE id = ?`,
+        ).run(
+          now,
+          out.d1,
+          out.d2,
+          out.d3,
+          out.sum,
+          out.isBaozi ? 1 : 0,
+          totalSilverPayout,
+          totalGoldPayout,
+          latest.id,
+        );
+
+        if (bigWinners.length > 0) {
+          const tag = out.isBaozi
+            ? `【豹子 ${out.d1}·${out.d2}·${out.d3}】`
+            : `[${out.d1}·${out.d2}·${out.d3}] ${out.sum}点(${out.sum >= 11 ? '大' : '小'}/${out.sum % 2 === 1 ? '单' : '双'})`;
+          announcements.push(
+            `【许昌赌坊】猜大小第 ${latest.round_no} 期开盅 ${tag}！${bigWinners.slice(0, 3).join('、')}！`,
+          );
+        }
+      } else {
+        const out = rollChibiOutcome();
+        const mult = CHIBI_MULT_MAP[out.winner];
+        for (const bet of pendingBets) {
+          const won = bet.choice === out.winner;
+          const payout = won ? Math.round(bet.amount * mult) : 0;
+          db.prepare('UPDATE casino_bets SET status = ?, payout = ?, settled_at = ? WHERE id = ?').run(
+            won ? 'won' : 'lost',
+            payout,
+            now,
+            bet.id,
+          );
+          if (payout > 0) {
+            const col = bet.currency === 'gold' ? 'gold' : 'silver';
+            db.prepare(`UPDATE characters SET ${col} = ${col} + ?, updated_at = ? WHERE id = ?`).run(
+              payout,
+              now,
+              bet.character_id,
+            );
+            if (bet.currency === 'gold') totalGoldPayout += payout;
+            else totalSilverPayout += payout;
+
+            const isBig =
+              out.winner === 'shu' ||
+              (bet.currency === 'gold' ? payout >= 100 : payout >= 2000);
+            if (isBig) {
+              const unit = bet.currency === 'gold' ? '金砖' : '银两';
+              bigWinners.push(`「${bet.character_name}」喜赢 ${payout} ${unit}`);
+            }
+          }
+        }
+
+        db.prepare(
+          `UPDATE casino_rounds
+           SET status = 'settled', settled_at = ?,
+               chibi_winner = ?, chibi_report = ?,
+               total_silver_payout = ?, total_gold_payout = ?
+           WHERE id = ?`,
+        ).run(now, out.winner, out.report, totalSilverPayout, totalGoldPayout, latest.id);
+
+        if (bigWinners.length > 0) {
+          announcements.push(
+            `【许昌赌坊】赤壁押注第 ${latest.round_no} 期【${CHIBI_CHOICE_LABELS[out.winner]}】胜出！${bigWinners.slice(0, 3).join('、')}！`,
+          );
+        }
+      }
+
+      latest = { ...latest, status: 'settled', settled_at: now };
+    }
+
+    // Backfill missed slots if server was paused, capped to CASINO_BACKFILL_MAX
+    let roundNo = latest.round_no;
+    if (latest.draw_at < slotStart) {
+      const missed = Math.floor((slotStart - latest.draw_at) / intervalMs);
+      const count = Math.min(missed, CASINO_BACKFILL_MAX);
+      const startAt = slotStart - count * intervalMs;
+      for (let i = 0; i < count; i++) {
+        roundNo += 1;
+        const t = startAt + i * intervalMs;
+        insertSettledHistoricalRound(realmId, game, roundNo, t, t + intervalMs);
+      }
+    }
+
+    // Open the live current round
+    db.prepare(
+      `INSERT INTO casino_rounds (realm_id, game, round_no, status, opened_at, draw_at)
+       VALUES (?, ?, ?, 'open', ?, ?)`,
+    ).run(realmId, game, roundNo + 1, slotStart, slotDraw);
+  });
+
+  return { announcements };
+}
+
+export function tickAllCasinoRounds(
+  now = Date.now(),
+): Array<{ realmId: string; message: string }> {
+  const out: Array<{ realmId: string; message: string }> = [];
+  for (const realm of REALMS) {
+    for (const game of ['dice', 'chibi'] as const) {
+      const res = syncCasinoGame(realm.id, game, now);
+      for (const message of res.announcements) {
+        out.push({ realmId: realm.id, message });
+      }
+    }
+  }
+  return out;
+}
+
+function toCasinoBetView(b: CasinoBetRow): CasinoBetView {
+  return {
+    id: b.id,
+    roundId: b.round_id,
+    game: b.game,
+    roundNo: b.round_no,
+    choice: b.choice,
+    currency: b.currency,
+    amount: b.amount,
+    status: b.status,
+    payout: b.payout,
+    createdAt: b.created_at,
+    settledAt: b.settled_at,
+  };
+}
+
+function toCasinoRoundView(
+  r: CasinoRoundRow,
+  extras?: {
+    poolByChoice?: Record<string, { silver: number; gold: number; count: number }>;
+    mySummary?: {
+      count: number;
+      silverBet: number;
+      goldBet: number;
+      silverPayout: number;
+      goldPayout: number;
+    };
+  },
+): CasinoRoundView {
+  const intervalSec = Math.round(CASINO_INTERVAL_MS[r.game] / 1000);
+  const lockBeforeSec = Math.round(CASINO_LOCK_MS / 1000);
+  const view: CasinoRoundView = {
+    id: r.id,
+    realmId: r.realm_id,
+    game: r.game,
+    roundNo: r.round_no,
+    status: r.status,
+    openedAt: r.opened_at,
+    drawAt: r.draw_at,
+    settledAt: r.settled_at,
+    intervalSec,
+    lockBeforeSec,
+    totalBets: r.total_bets,
+    totalSilverBet: r.total_silver_bet,
+    totalGoldBet: r.total_gold_bet,
+    totalSilverPayout: r.total_silver_payout,
+    totalGoldPayout: r.total_gold_payout,
+  };
+  if (r.game === 'dice' && r.dice_1 !== null && r.dice_2 !== null && r.dice_3 !== null) {
+    view.dice = [r.dice_1, r.dice_2, r.dice_3];
+    view.sum = r.dice_sum ?? r.dice_1 + r.dice_2 + r.dice_3;
+    view.isBaozi = Boolean(r.is_baozi);
+  }
+  if (r.game === 'chibi' && r.chibi_winner) {
+    view.chibiWinner = r.chibi_winner;
+    view.chibiReport = r.chibi_report ?? CHIBI_REPORT_MAP[r.chibi_winner];
+  }
+  if (extras?.poolByChoice) {
+    view.poolByChoice = extras.poolByChoice;
+  }
+  if (extras?.mySummary) {
+    view.myBetCount = extras.mySummary.count;
+    view.mySilverBet = extras.mySummary.silverBet;
+    view.myGoldBet = extras.mySummary.goldBet;
+    view.mySilverPayout = extras.mySummary.silverPayout;
+    view.myGoldPayout = extras.mySummary.goldPayout;
+  }
+  return view;
+}
+
+function buildCasinoGameState(
+  realmId: string,
+  characterId: number,
+  game: CasinoGameType,
+): CasinoGameStateView {
+  const currentRow = db
+    .prepare(
+      "SELECT * FROM casino_rounds WHERE realm_id = ? AND game = ? AND status = 'open' ORDER BY round_no DESC LIMIT 1",
+    )
+    .get(realmId, game) as unknown as CasinoRoundRow;
+
+  const historyRows = db
+    .prepare(
+      "SELECT * FROM casino_rounds WHERE realm_id = ? AND game = ? AND status = 'settled' ORDER BY round_no DESC LIMIT ?",
+    )
+    .all(realmId, game, CASINO_HISTORY_LIMIT) as unknown as CasinoRoundRow[];
+
+  const currentBetsAll = db
+    .prepare('SELECT choice, currency, amount FROM casino_bets WHERE round_id = ?')
+    .all(currentRow.id) as unknown as Array<{
+    choice: string;
+    currency: CasinoCurrency;
+    amount: number;
+  }>;
+
+  const poolByChoice: Record<string, { silver: number; gold: number; count: number }> = {};
+  for (const b of currentBetsAll) {
+    if (!poolByChoice[b.choice]) poolByChoice[b.choice] = { silver: 0, gold: 0, count: 0 };
+    poolByChoice[b.choice].count += 1;
+    if (b.currency === 'gold') poolByChoice[b.choice].gold += b.amount;
+    else poolByChoice[b.choice].silver += b.amount;
   }
 
-  const payout = won ? Math.round(amount * mult) : 0;
-  const netDelta = payout - amount;
-  const col = currency === 'gold' ? 'gold' : 'silver';
-  db.prepare(`UPDATE characters SET ${col} = MAX(0, ${col} + ?), updated_at = ? WHERE id = ?`).run(
-    netDelta,
-    Date.now(),
-    characterId,
-  );
+  const myCurrentRows = db
+    .prepare('SELECT * FROM casino_bets WHERE round_id = ? AND character_id = ? ORDER BY id DESC')
+    .all(currentRow.id, characterId) as unknown as CasinoBetRow[];
 
-  const unit = currency === 'gold' ? '金砖' : '银两';
-  const outcomeTag = isBaozi ? `【豹子 ${d1}-${d2}-${d3}】` : `${sum}点（${sum >= 11 ? '大' : '小'}/${sum % 2 === 1 ? '单' : '双'}）`;
-  const message = won
-    ? `开盅：${d1}·${d2}·${d3} ${outcomeTag}！大获全胜，净赢 ${netDelta} ${unit}！`
-    : `开盅：${d1}·${d2}·${d3} ${outcomeTag}，遗憾落空，输掉 ${amount} ${unit}。`;
+  const myRecentRows = db
+    .prepare(
+      'SELECT * FROM casino_bets WHERE character_id = ? AND game = ? ORDER BY id DESC LIMIT 25',
+    )
+    .all(characterId, game) as unknown as CasinoBetRow[];
+
+  // Aggregate player's bets per historical round
+  const myByRound = new Map<
+    number,
+    { count: number; silverBet: number; goldBet: number; silverPayout: number; goldPayout: number }
+  >();
+  if (historyRows.length > 0) {
+    const placeholders = historyRows.map(() => '?').join(',');
+    const histMyBets = db
+      .prepare(
+        `SELECT round_id, currency, amount, payout FROM casino_bets
+         WHERE character_id = ? AND round_id IN (${placeholders})`,
+      )
+      .all(characterId, ...historyRows.map((r) => r.id)) as unknown as Array<{
+      round_id: number;
+      currency: CasinoCurrency;
+      amount: number;
+      payout: number;
+    }>;
+    for (const b of histMyBets) {
+      const cur = myByRound.get(b.round_id) ?? {
+        count: 0,
+        silverBet: 0,
+        goldBet: 0,
+        silverPayout: 0,
+        goldPayout: 0,
+      };
+      cur.count += 1;
+      if (b.currency === 'gold') {
+        cur.goldBet += b.amount;
+        cur.goldPayout += b.payout;
+      } else {
+        cur.silverBet += b.amount;
+        cur.silverPayout += b.payout;
+      }
+      myByRound.set(b.round_id, cur);
+    }
+  }
 
   return {
-    result: {
-      dice: [d1, d2, d3],
-      sum,
-      isBaozi,
-      betType: opts.betType,
-      currency,
-      amount,
-      won,
-      payout,
-      netDelta,
-      message,
-    },
-    character: getCharacterById(characterId)!,
+    game,
+    intervalSec: Math.round(CASINO_INTERVAL_MS[game] / 1000),
+    lockBeforeSec: Math.round(CASINO_LOCK_MS / 1000),
+    currentRound: toCasinoRoundView(currentRow, { poolByChoice }),
+    history: historyRows.map((r) => toCasinoRoundView(r, { mySummary: myByRound.get(r.id) })),
+    myCurrentBets: myCurrentRows.map(toCasinoBetView),
+    myRecentBets: myRecentRows.map(toCasinoBetView),
   };
+}
+
+export function getCasinoState(
+  realmId: string,
+  characterId: number,
+): { state: CasinoStateView; character: CharacterView; announcements: string[] } {
+  const now = Date.now();
+  const a1 = syncCasinoGame(realmId, 'dice', now).announcements;
+  const a2 = syncCasinoGame(realmId, 'chibi', now).announcements;
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  return {
+    state: {
+      serverNow: Date.now(),
+      dice: buildCasinoGameState(realmId, characterId, 'dice'),
+      chibi: buildCasinoGameState(realmId, characterId, 'chibi'),
+    },
+    character: ch,
+    announcements: [...a1, ...a2],
+  };
+}
+
+function placeCasinoBet(
+  characterId: number,
+  game: CasinoGameType,
+  choice: string,
+  currency: CasinoCurrency,
+  rawAmount: number,
+): CasinoBetPlacementResult & { announcements: string[] } {
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  if (game === 'dice') {
+    if (!['big', 'small', 'odd', 'even', 'baozi'].includes(choice)) {
+      throw new Error('无效的骰子押注类型');
+    }
+  } else {
+    if (!['wei', 'wu', 'shu'].includes(choice)) {
+      throw new Error('无效的赤壁押注阵营（仅支持魏/吴/蜀）');
+    }
+  }
+  if (currency !== 'silver' && currency !== 'gold') {
+    throw new Error('无效的押注货币（仅支持银两或金砖）');
+  }
+  const amount = Math.floor(rawAmount);
+  const minBet = currency === 'gold' ? 10 : 50;
+  const maxBet = currency === 'gold' ? 2000 : 50000;
+  if (!Number.isFinite(amount) || amount < minBet || amount > maxBet) {
+    throw new Error(`单注范围：${minBet} ~ ${maxBet} ${currency === 'gold' ? '金砖' : '银两'}`);
+  }
+
+  const now = Date.now();
+  const syncRes = syncCasinoGame(ch.realmId, game, now);
+
+  const insertedBet = withTx(() => {
+    const round = db
+      .prepare(
+        "SELECT * FROM casino_rounds WHERE realm_id = ? AND game = ? AND status = 'open' ORDER BY round_no DESC LIMIT 1",
+      )
+      .get(ch.realmId, game) as CasinoRoundRow | undefined;
+    if (!round) throw new Error('当前赌局暂未开盘，请稍后重试');
+    if (round.draw_at - now <= CASINO_LOCK_MS) {
+      throw new Error('本期已封盘开奖中，请稍候下注下期');
+    }
+
+    const myRoundCount = (
+      db
+        .prepare('SELECT COUNT(*) AS cnt FROM casino_bets WHERE round_id = ? AND character_id = ?')
+        .get(round.id, characterId) as { cnt: number }
+    ).cnt;
+    if (myRoundCount >= CASINO_MAX_BETS_PER_ROUND) {
+      throw new Error(`每期最多下注 ${CASINO_MAX_BETS_PER_ROUND} 笔，请等待本期开奖`);
+    }
+
+    const col = currency === 'gold' ? 'gold' : 'silver';
+    const liveRow = db
+      .prepare(`SELECT ${col} AS bal FROM characters WHERE id = ?`)
+      .get(characterId) as { bal: number } | undefined;
+    if (!liveRow || liveRow.bal < amount) {
+      throw new Error(`${currency === 'gold' ? '金砖' : '银两'}不足`);
+    }
+
+    db.prepare(`UPDATE characters SET ${col} = ${col} - ?, updated_at = ? WHERE id = ?`).run(
+      amount,
+      now,
+      characterId,
+    );
+
+    const betInfo = db
+      .prepare(
+        `INSERT INTO casino_bets (
+          round_id, realm_id, game, round_no, character_id, character_name,
+          choice, currency, amount, status, payout, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?)`,
+      )
+      .run(
+        round.id,
+        ch.realmId,
+        game,
+        round.round_no,
+        characterId,
+        ch.name,
+        choice,
+        currency,
+        amount,
+        now,
+      );
+
+    const poolCol = currency === 'gold' ? 'total_gold_bet' : 'total_silver_bet';
+    db.prepare(
+      `UPDATE casino_rounds SET total_bets = total_bets + 1, ${poolCol} = ${poolCol} + ? WHERE id = ?`,
+    ).run(amount, round.id);
+
+    return db
+      .prepare('SELECT * FROM casino_bets WHERE id = ?')
+      .get(Number(betInfo.lastInsertRowid)) as unknown as CasinoBetRow;
+  });
+
+  const label =
+    game === 'dice'
+      ? DICE_CHOICE_LABELS[choice as CasinoDiceChoice]
+      : CHIBI_CHOICE_LABELS[choice as CasinoChibiChoice];
+  const unit = currency === 'gold' ? '金砖' : '银两';
+  const full = getCasinoState(ch.realmId, characterId);
+  return {
+    bet: toCasinoBetView(insertedBet),
+    state: full.state,
+    character: full.character,
+    announcements: [...syncRes.announcements, ...full.announcements],
+    message: `已下注第 ${insertedBet.round_no} 期【${label}】${amount} ${unit}，静候开奖！`,
+  };
+}
+
+export function playCasinoDice(
+  characterId: number,
+  opts: {
+    betType: CasinoDiceChoice;
+    currency: CasinoCurrency;
+    amount: number;
+  },
+): CasinoBetPlacementResult & { announcements: string[] } {
+  return placeCasinoBet(characterId, 'dice', opts.betType, opts.currency, opts.amount);
 }
 
 export function playCasinoChibi(
   characterId: number,
   opts: {
-    pick: 'wei' | 'wu' | 'shu';
-    currency: 'silver' | 'gold';
+    pick: CasinoChibiChoice;
+    currency: CasinoCurrency;
     amount: number;
   },
-): { result: CasinoChibiResult; character: CharacterView } {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-  if (!['wei', 'wu', 'shu'].includes(opts.pick)) {
-    throw new Error('无效的赤壁押注阵营（仅支持魏/吴/蜀）');
-  }
-  if (opts.currency !== 'silver' && opts.currency !== 'gold') {
-    throw new Error('无效的押注货币（仅支持银两或金砖）');
-  }
-  const currency = opts.currency;
-  const amount = Math.floor(opts.amount);
-  const minBet = currency === 'gold' ? 10 : 50;
-  const maxBet = currency === 'gold' ? 2000 : 50000;
-  if (!Number.isFinite(amount) || amount < minBet || amount > maxBet) {
-    throw new Error(`单局押注范围：${minBet} ~ ${maxBet} ${currency === 'gold' ? '金砖' : '银两'}`);
-  }
-  const balance = currency === 'gold' ? ch.gold : ch.silver;
-  if (balance < amount) {
-    throw new Error(`${currency === 'gold' ? '金砖' : '银两'}不足`);
-  }
-
-  const r = Math.random();
-  const winner: 'wei' | 'wu' | 'shu' = r < 0.42 ? 'wei' : r < 0.8 ? 'wu' : 'shu';
-  const multMap: Record<'wei' | 'wu' | 'shu', number> = { wei: 2.1, wu: 2.3, shu: 4.2 };
-  const reportMap: Record<'wei' | 'wu' | 'shu', string> = {
-    wei: '曹军铁索横江，张辽率虎豹骑强登江岸，魏军大捷！',
-    wu: '黄盖苦肉诈降，周瑜借东风火烧连营，东吴水师完胜！',
-    shu: '诸葛亮奇谋设伏，赵云关羽华容道奇兵突袭，蜀军爆冷大胜！',
-  };
-
-  const won = winner === opts.pick;
-  const payout = won ? Math.round(amount * multMap[winner]) : 0;
-  const netDelta = payout - amount;
-  const col = currency === 'gold' ? 'gold' : 'silver';
-  db.prepare(`UPDATE characters SET ${col} = MAX(0, ${col} + ?), updated_at = ? WHERE id = ?`).run(
-    netDelta,
-    Date.now(),
-    characterId,
-  );
-
-  const unit = currency === 'gold' ? '金砖' : '银两';
-  const message = won
-    ? `赤壁押注命中！赢得 ${payout} ${unit}（净赚 +${netDelta} ${unit}）！`
-    : `赤壁押注未中，损失 ${amount} ${unit}。`;
-
-  return {
-    result: {
-      winner,
-      pick: opts.pick,
-      currency,
-      amount,
-      won,
-      payout,
-      netDelta,
-      report: reportMap[winner],
-      message,
-    },
-    character: getCharacterById(characterId)!,
-  };
+): CasinoBetPlacementResult & { announcements: string[] } {
+  return placeCasinoBet(characterId, 'chibi', opts.pick, opts.currency, opts.amount);
 }
 
 function withTx<T>(fn: () => T): T {

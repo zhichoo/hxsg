@@ -211,6 +211,55 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_mails_recipient ON mails(recipient_id, created_at DESC);
+
+  CREATE TABLE IF NOT EXISTS casino_rounds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    realm_id TEXT NOT NULL,
+    game TEXT NOT NULL,
+    round_no INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    opened_at INTEGER NOT NULL,
+    draw_at INTEGER NOT NULL,
+    settled_at INTEGER,
+    dice_1 INTEGER,
+    dice_2 INTEGER,
+    dice_3 INTEGER,
+    dice_sum INTEGER,
+    is_baozi INTEGER NOT NULL DEFAULT 0,
+    chibi_winner TEXT,
+    chibi_report TEXT,
+    total_bets INTEGER NOT NULL DEFAULT 0,
+    total_silver_bet INTEGER NOT NULL DEFAULT 0,
+    total_gold_bet INTEGER NOT NULL DEFAULT 0,
+    total_silver_payout INTEGER NOT NULL DEFAULT 0,
+    total_gold_payout INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(realm_id, game, round_no)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_casino_rounds_lookup
+    ON casino_rounds(realm_id, game, round_no DESC);
+
+  CREATE TABLE IF NOT EXISTS casino_bets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id INTEGER NOT NULL,
+    realm_id TEXT NOT NULL,
+    game TEXT NOT NULL,
+    round_no INTEGER NOT NULL,
+    character_id INTEGER NOT NULL,
+    character_name TEXT NOT NULL,
+    choice TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    payout INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    settled_at INTEGER,
+    FOREIGN KEY (round_id) REFERENCES casino_rounds(id) ON DELETE CASCADE,
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_casino_bets_round ON casino_bets(round_id);
+  CREATE INDEX IF NOT EXISTS idx_casino_bets_char ON casino_bets(character_id, game, id DESC);
 `);
 
 // Safe online schema migration for existing DBs created in Phase 1

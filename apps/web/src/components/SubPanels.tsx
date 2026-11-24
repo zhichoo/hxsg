@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_TEMPLATES,
@@ -8,8 +8,7 @@ import {
   ITEMS,
   ROLE_CLASS_META,
   type BattleState,
-  type CasinoChibiResult,
-  type CasinoDiceResult,
+  type CasinoStateView,
   type CharacterView,
   type EquipmentQuality,
   type EquipmentSlot,
@@ -139,10 +138,14 @@ export function SubPanels({
     explanation: string;
   } | null>(null);
   const [casinoTab, setCasinoTab] = useState<'dice' | 'chibi'>('dice');
+  const [casinoRecordTab, setCasinoRecordTab] = useState<'history' | 'mybets'>('history');
   const [betCurrency, setBetCurrency] = useState<'silver' | 'gold'>('silver');
   const [betAmount, setBetAmount] = useState<number>(200);
-  const [diceResult, setDiceResult] = useState<CasinoDiceResult | null>(null);
-  const [chibiResult, setChibiResult] = useState<CasinoChibiResult | null>(null);
+  const [casinoState, setCasinoState] = useState<CasinoStateView | null>(null);
+  const [casinoClockOffset, setCasinoClockOffset] = useState<number>(0);
+  const [casinoNow, setCasinoNow] = useState<number>(() => Date.now());
+  const pendingCasinoBetIdsRef = useRef<Set<number>>(new Set());
+  const lastCasinoFetchRef = useRef<number>(0);
   const [bankAmount, setBankAmount] = useState<string>('500');
   const [marketTab, setMarketTab] = useState<'browse' | 'sell' | 'mine'>('browse');
   const [marketFilter, setMarketFilter] = useState<'all' | MarketListingKind>('all');
@@ -168,6 +171,80 @@ export function SubPanels({
     if (panel === 'paohuan') setQuestTab('paohuan');
     else if (panel === 'quests') setQuestTab('main');
   }, [panel]);
+
+  const syncCasinoState = useCallback(
+    async (silent = false) => {
+      const now = Date.now();
+      lastCasinoFetchRef.current = now;
+      try {
+        const res = await api.getCasinoState(realmId);
+        const allRecent = [...res.state.dice.myRecentBets, ...res.state.chibi.myRecentBets];
+        const prevPending = pendingCasinoBetIdsRef.current;
+        if (prevPending.size > 0) {
+          const settledNow = allRecent.filter(
+            (b) => prevPending.has(b.id) && b.status !== 'pending',
+          );
+          if (settledNow.length > 0) {
+            let wonSilver = 0;
+            let wonGold = 0;
+            let winCount = 0;
+            for (const b of settledNow) {
+              if (b.status === 'won') {
+                winCount += 1;
+                if (b.currency === 'gold') wonGold += b.payout;
+                else wonSilver += b.payout;
+              }
+            }
+            const roundLabel = `第 ${settledNow[0].roundNo} 期`;
+            if (winCount > 0) {
+              const parts: string[] = [];
+              if (wonSilver > 0) parts.push(`${wonSilver} 银两`);
+              if (wonGold > 0) parts.push(`${wonGold} 金砖`);
+              onNotify(`🎲 赌坊${roundLabel}已开奖！恭喜中奖，派彩 ${parts.join(' + ')}！`);
+            } else {
+              onNotify(`🎲 赌坊${roundLabel}已开奖，遗憾未中，再接再厉！`);
+            }
+          }
+        }
+        pendingCasinoBetIdsRef.current = new Set(
+          allRecent.filter((b) => b.status === 'pending').map((b) => b.id),
+        );
+        setCasinoState(res.state);
+        setCasinoClockOffset(res.state.serverNow - Date.now());
+        onUpdateCharacter(res.character);
+      } catch (err) {
+        if (!silent) {
+          onNotify(err instanceof Error ? err.message : '获取赌坊盘口失败');
+        }
+      }
+    },
+    [realmId, onNotify, onUpdateCharacter],
+  );
+
+  useEffect(() => {
+    if (panel !== 'casino') return;
+    void syncCasinoState(false);
+    const tick = window.setInterval(() => {
+      setCasinoNow(Date.now());
+    }, 1000);
+    const poll = window.setInterval(() => {
+      void syncCasinoState(true);
+    }, 10_000);
+    return () => {
+      window.clearInterval(tick);
+      window.clearInterval(poll);
+    };
+  }, [panel, syncCasinoState]);
+
+  useEffect(() => {
+    if (panel !== 'casino' || !casinoState) return;
+    const estServerNow = casinoNow + casinoClockOffset;
+    const diceDue = estServerNow >= casinoState.dice.currentRound.drawAt + 350;
+    const chibiDue = estServerNow >= casinoState.chibi.currentRound.drawAt + 350;
+    if ((diceDue || chibiDue) && Date.now() - lastCasinoFetchRef.current >= 1200) {
+      void syncCasinoState(true);
+    }
+  }, [panel, casinoNow, casinoClockOffset, casinoState, syncCasinoState]);
 
   useEffect(() => {
     if (panel === 'rank') {
@@ -2112,227 +2189,545 @@ export function SubPanels({
             </div>
           )}
 
-          {/* CASINO (许昌赌坊：猜大小/豹子 + 赤壁押注) */}
-          {panel === 'casino' && (
-            <div className="space-y-2.5 text-xs">
-              <div className="flex items-center justify-between bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
-                <span className="text-[#ffe27a] font-bold">银两：{character.silver}</span>
-                <span className="text-[#ffd24d] font-bold">金砖：{character.gold}</span>
-              </div>
+          {/* CASINO (许昌赌坊：定时开盘 · 猜大小/豹子 + 赤壁押注 + 连续历史记录) */}
+          {panel === 'casino' && (() => {
+            const gameState = casinoState ? casinoState[casinoTab] : null;
+            const currentRound = gameState?.currentRound ?? null;
+            const estNow = casinoNow + casinoClockOffset;
+            const remainMs = currentRound ? Math.max(0, currentRound.drawAt - estNow) : 0;
+            const remainSec = Math.ceil(remainMs / 1000);
+            const isLocked = currentRound ? remainMs <= currentRound.lockBeforeSec * 1000 : false;
+            const mm = String(Math.floor(remainSec / 60)).padStart(2, '0');
+            const ss = String(remainSec % 60).padStart(2, '0');
 
-              <div className="grid grid-cols-2 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCasinoTab('dice')}
-                  className={`py-1.5 font-bold border ${
-                    casinoTab === 'dice'
-                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
-                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
-                  }`}
-                >
-                  🎲 猜大小 / 豹子
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCasinoTab('chibi')}
-                  className={`py-1.5 font-bold border ${
-                    casinoTab === 'chibi'
-                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
-                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
-                  }`}
-                >
-                  🔥 赤壁之战押注
-                </button>
-              </div>
+            const choiceLabels: Record<string, string> = {
+              big: '大',
+              small: '小',
+              odd: '单',
+              even: '双',
+              baozi: '豹子',
+              wei: '魏军',
+              wu: '吴军',
+              shu: '蜀军',
+            };
 
-              {/* Currency & Stake Controls */}
-              <div className="p-2 bg-[#26072d]/90 border border-[#8e6299] space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[#e7cfbb]">下注货币：</span>
-                  <div className="flex gap-1.5">
-                    {(['silver', 'gold'] as const).map((cur) => (
-                      <button
-                        key={cur}
-                        type="button"
-                        onClick={() => {
-                          setBetCurrency(cur);
-                          setBetAmount(cur === 'gold' ? 20 : 200);
-                        }}
-                        className={`px-2.5 py-0.5 font-bold border ${
-                          betCurrency === cur
-                            ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
-                            : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
-                        }`}
-                      >
-                        {cur === 'silver' ? '银两' : '金砖'}
-                      </button>
-                    ))}
+            const fmtTime = (ts: number) =>
+              new Date(ts).toLocaleTimeString('zh-CN', {
+                hour12: false,
+                hour: '2-digit',
+                minute: '2-digit',
+              });
+
+            const placeDice = async (bt: 'big' | 'small' | 'odd' | 'even' | 'baozi') => {
+              setBusy(true);
+              try {
+                const res = await api.playCasinoDice({
+                  realmId,
+                  betType: bt,
+                  currency: betCurrency,
+                  amount: betAmount,
+                });
+                pendingCasinoBetIdsRef.current.add(res.bet.id);
+                setCasinoState(res.state);
+                setCasinoClockOffset(res.state.serverNow - Date.now());
+                onUpdateCharacter(res.character);
+                onNotify(res.message);
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '下注失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+
+            const placeChibi = async (pick: 'wei' | 'wu' | 'shu') => {
+              setBusy(true);
+              try {
+                const res = await api.playCasinoChibi({
+                  realmId,
+                  pick,
+                  currency: betCurrency,
+                  amount: betAmount,
+                });
+                pendingCasinoBetIdsRef.current.add(res.bet.id);
+                setCasinoState(res.state);
+                setCasinoClockOffset(res.state.serverNow - Date.now());
+                onUpdateCharacter(res.character);
+                onNotify(res.message);
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '押注失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+
+            const latestSettled = gameState?.history[0] ?? null;
+
+            return (
+              <div className="space-y-2.5 text-xs">
+                <div className="flex items-center justify-between bg-[#230629]/90 border border-[#9d6fa8] px-2.5 py-1.5">
+                  <div className="flex items-center gap-3">
+                    <span className="text-[#ffe27a] font-bold">银两：{character.silver}</span>
+                    <span className="text-[#ffd24d] font-bold">金砖：{character.gold}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void syncCasinoState(false)}
+                    className="px-2 py-0.5 text-[11px] bg-[#3f164a] border border-[#b587c2] text-[#f5defa] hover:brightness-110"
+                  >
+                    刷新盘口
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setCasinoTab('dice')}
+                    className={`py-1.5 font-bold border ${
+                      casinoTab === 'dice'
+                        ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                        : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                    }`}
+                  >
+                    🎲 猜大小/豹子 (1分/期)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCasinoTab('chibi')}
+                    className={`py-1.5 font-bold border ${
+                      casinoTab === 'chibi'
+                        ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                        : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                    }`}
+                  >
+                    🔥 赤壁押注 (3分/期)
+                  </button>
+                </div>
+
+                {/* Live Scheduled Round Countdown & Pool Banner */}
+                {currentRound ? (
+                  <div className="p-2.5 bg-[#1b0520] border-2 border-[#d4a33b] space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[#ffe377] font-black text-sm">
+                          第 {currentRound.roundNo} 期
+                        </span>
+                        <span
+                          className={`px-1.5 py-0.5 text-[10px] font-bold border ${
+                            isLocked
+                              ? 'bg-[#6e1515] border-[#ff8080] text-[#ffe1e1]'
+                              : 'bg-[#174623] border-[#69eb87] text-[#d6ffe0]'
+                          }`}
+                        >
+                          {isLocked ? '封盘开奖中' : '开盘投注中'}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[11px] text-[#e7cfbb] mr-1">距开奖</span>
+                        <span
+                          className={`font-mono text-base font-black tracking-wider ${
+                            isLocked ? 'text-[#ff7878]' : 'text-[#ffe97a]'
+                          }`}
+                        >
+                          {mm}:{ss}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[11px] text-[#e8d2ee] border-t border-white/10 pt-1">
+                      <span>
+                        本期奖池：<b className="text-white">{currentRound.totalBets}</b> 笔
+                      </span>
+                      <span>
+                        银 <b className="text-[#ffe27a]">{currentRound.totalSilverBet}</b> · 金{' '}
+                        <b className="text-[#ffd24d]">{currentRound.totalGoldBet}</b>
+                      </span>
+                    </div>
+
+                    {currentRound.poolByChoice &&
+                      Object.keys(currentRound.poolByChoice).length > 0 && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {Object.entries(currentRound.poolByChoice).map(([k, v]) => (
+                            <span
+                              key={k}
+                              className="px-1.5 py-0.5 text-[10.5px] bg-[#2e0c36] border border-[#7c5087] text-[#f4dff9]"
+                            >
+                              {choiceLabels[k] || k}：{v.silver > 0 ? `${v.silver}银` : ''}
+                              {v.silver > 0 && v.gold > 0 ? '+' : ''}
+                              {v.gold > 0 ? `${v.gold}金` : ''}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                    {gameState && gameState.myCurrentBets.length > 0 && (
+                      <div className="bg-[#13311a]/90 border border-[#5ad175] px-2 py-1 text-[11px] text-[#d9ffe2]">
+                        <span className="font-bold text-[#8cffaa]">我本期已押：</span>
+                        {gameState.myCurrentBets
+                          .map(
+                            (b) =>
+                              `${choiceLabels[b.choice] || b.choice} ${b.amount}${
+                                b.currency === 'gold' ? '金' : '银'
+                              }`,
+                          )
+                          .join('、')}
+                        <span className="text-[#a8e8b8] ml-1">（到点自动开奖派彩）</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 text-center text-[#d8bede] bg-[#230629] border border-[#84578f]">
+                    正在连接许昌赌坊盘口...
+                  </div>
+                )}
+
+                {/* Currency & Stake Controls */}
+                <div className="p-2 bg-[#26072d]/90 border border-[#8e6299] space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[#e7cfbb]">下注货币：</span>
+                    <div className="flex gap-1.5">
+                      {(['silver', 'gold'] as const).map((cur) => (
+                        <button
+                          key={cur}
+                          type="button"
+                          onClick={() => {
+                            setBetCurrency(cur);
+                            setBetAmount(cur === 'gold' ? 20 : 200);
+                          }}
+                          className={`px-2.5 py-0.5 font-bold border ${
+                            betCurrency === cur
+                              ? 'bg-[#c9952b] text-[#240a04] border-[#fff09a]'
+                              : 'bg-[#2a0a30] text-[#f0d9f5] border-[#8b6232]'
+                          }`}
+                        >
+                          {cur === 'silver' ? '银两' : '金砖'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[#e7cfbb]">筹码：</span>
+                    {(betCurrency === 'silver' ? [100, 500, 2000, 10000] : [10, 50, 200, 500]).map(
+                      (amt) => (
+                        <button
+                          key={amt}
+                          type="button"
+                          onClick={() => setBetAmount(amt)}
+                          className={`px-2 py-0.5 border font-bold ${
+                            betAmount === amt
+                              ? 'bg-[#b82018] border-[#ffd86b] text-[#fff6cc]'
+                              : 'bg-[#381440] border-[#8c6496] text-[#f0d9f5]'
+                          }`}
+                        >
+                          {amt}
+                        </button>
+                      ),
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[#e7cfbb]">筹码：</span>
-                  {(betCurrency === 'silver' ? [100, 500, 2000, 10000] : [10, 50, 200, 500]).map(
-                    (amt) => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setBetAmount(amt)}
-                        className={`px-2 py-0.5 border font-bold ${
-                          betAmount === amt
-                            ? 'bg-[#b82018] border-[#ffd86b] text-[#fff6cc]'
-                            : 'bg-[#381440] border-[#8c6496] text-[#f0d9f5]'
-                        }`}
-                      >
-                        {amt}
-                      </button>
-                    ),
-                  )}
-                </div>
-              </div>
 
-              {casinoTab === 'dice' && (
-                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
-                  <div className="text-[11px] text-[#f2dcf7]">
-                    三颗骰子开盅：大(11~18)/小(3~10)/单/双 赔率 <b className="text-[#ffe46e]">1:1</b>
-                    （开豹子通吃非豹子注），押中<b className="text-[#ff8cc8]">豹子</b>狂赢{' '}
-                    <b className="text-[#ffcf54]">1:15</b>！
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {(
-                      [
-                        ['big', '押 大 (11~18) 1:1'],
-                        ['small', '押 小 (3~10) 1:1'],
-                        ['odd', '押 单数 1:1'],
-                        ['even', '押 双数 1:1'],
-                      ] as const
-                    ).map(([bt, label]) => (
+                {/* Betting Buttons */}
+                {casinoTab === 'dice' && (
+                  <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
+                    <div className="text-[11px] text-[#f2dcf7]">
+                      每分钟整点开盅：大(11~18)/小(3~10)/单/双 赔率{' '}
+                      <b className="text-[#ffe46e]">1:1</b>（开豹子通吃非豹子注），押中
+                      <b className="text-[#ff8cc8]">豹子</b>狂赢{' '}
+                      <b className="text-[#ffcf54]">1:15</b>！支持同期多笔组合下注。
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      {(
+                        [
+                          ['big', '押 大 (11~18) 1:1'],
+                          ['small', '押 小 (3~10) 1:1'],
+                          ['odd', '押 单数 1:1'],
+                          ['even', '押 双数 1:1'],
+                        ] as const
+                      ).map(([bt, label]) => (
+                        <button
+                          key={bt}
+                          type="button"
+                          disabled={busy || isLocked || !currentRound}
+                          onClick={() => void placeDice(bt)}
+                          className="hx-btn-gold py-1.5 text-xs disabled:opacity-50"
+                        >
+                          {label}
+                        </button>
+                      ))}
                       <button
-                        key={bt}
                         type="button"
-                        disabled={busy}
-                        onClick={async () => {
-                          setBusy(true);
-                          try {
-                            const res = await api.playCasinoDice({
-                              realmId,
-                              betType: bt,
-                              currency: betCurrency,
-                              amount: betAmount,
-                            });
-                            onUpdateCharacter(res.character);
-                            setDiceResult(res.result);
-                          } catch (err) {
-                            onNotify(err instanceof Error ? err.message : '下注失败');
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                        className="hx-btn-gold py-1.5 text-xs"
+                        disabled={busy || isLocked || !currentRound}
+                        onClick={() => void placeDice('baozi')}
+                        className="col-span-2 hx-btn-red py-1.5 text-xs disabled:opacity-50"
                       >
-                        {label}
+                        🎲 搏一搏 · 押豹子（1:15 暴富！）
                       </button>
-                    ))}
+                    </div>
+                  </div>
+                )}
+
+                {casinoTab === 'chibi' && (
+                  <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
+                    <div className="text-[11px] text-[#f2dcf7]">
+                      每 3 分钟定时开战：选定阵营下注，倒计时归零全服同步开盘派奖！
+                    </div>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(
+                        [
+                          ['wei', '押 魏军', '2.1倍', 'bg-[#1b3a6b] border-[#7cb5ff]'],
+                          ['wu', '押 吴军', '2.3倍', 'bg-[#6b1919] border-[#ff8b8b]'],
+                          ['shu', '押 蜀军', '4.2倍', 'bg-[#1d5428] border-[#82ff99]'],
+                        ] as const
+                      ).map(([pick, label, mult, cls]) => (
+                        <button
+                          key={pick}
+                          type="button"
+                          disabled={busy || isLocked || !currentRound}
+                          onClick={() => void placeChibi(pick)}
+                          className={`py-2 border text-white font-bold hover:brightness-110 disabled:opacity-50 ${cls}`}
+                        >
+                          <div>{label}</div>
+                          <div className="text-[10.5px] text-[#ffe678]">{mult}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Latest Settled Round Spotlight */}
+                {latestSettled && (
+                  <div className="p-2 bg-[#1c0722] border border-[#a87c35] space-y-1">
+                    <div className="flex items-center justify-between text-[11px] text-[#e7cfbb]">
+                      <span className="font-bold text-[#ffe27a]">
+                        上期开奖 · 第 {latestSettled.roundNo} 期
+                      </span>
+                      <span>{fmtTime(latestSettled.drawAt)}</span>
+                    </div>
+                    {casinoTab === 'dice' && latestSettled.dice ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-black tracking-widest text-[#ffe878]">
+                          [ {latestSettled.dice[0]} ] [ {latestSettled.dice[1]} ] [{' '}
+                          {latestSettled.dice[2]} ]
+                        </span>
+                        <span className="font-bold text-white">
+                          {latestSettled.isBaozi
+                            ? '🔥 豹子通吃！'
+                            : `${latestSettled.sum}点 · ${(latestSettled.sum ?? 0) >= 11 ? '大' : '小'} / ${
+                                (latestSettled.sum ?? 0) % 2 === 1 ? '单' : '双'
+                              }`}
+                        </span>
+                      </div>
+                    ) : (
+                      latestSettled.chibiWinner && (
+                        <div className="space-y-0.5">
+                          <div className="font-bold text-[#ffe878]">
+                            胜出阵营：【{choiceLabels[latestSettled.chibiWinner]}】
+                          </div>
+                          {latestSettled.chibiReport && (
+                            <div className="text-[11px] text-[#f0d8f5]">
+                              ⚔ {latestSettled.chibiReport}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    )}
+                  </div>
+                )}
+
+                {/* Trend Strip (走势路珠) */}
+                {gameState && gameState.history.length > 0 && (
+                  <div className="p-2 bg-[#1e0624]/90 border border-[#7c5087] space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#ffd978] font-bold">近期走势（左新右旧）</span>
+                      <span className="text-[#cbb0d4]">持续定时生成</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {gameState.history.slice(0, 14).map((r) => {
+                        if (casinoTab === 'dice') {
+                          const isBz = Boolean(r.isBaozi);
+                          const isBig = (r.sum ?? 0) >= 11;
+                          return (
+                            <span
+                              key={r.id}
+                              title={`第${r.roundNo}期 [${r.dice?.join('·')}] ${r.sum}点`}
+                              className={`w-6 h-6 flex items-center justify-center text-[11px] font-black border ${
+                                isBz
+                                  ? 'bg-[#8f5c08] border-[#ffe76b] text-[#fff8cc]'
+                                  : isBig
+                                    ? 'bg-[#7d1919] border-[#ff8b8b] text-[#ffe2e2]'
+                                    : 'bg-[#173a6e] border-[#7db8ff] text-[#dff0ff]'
+                              }`}
+                            >
+                              {isBz ? '豹' : isBig ? '大' : '小'}
+                            </span>
+                          );
+                        }
+                        const w = r.chibiWinner || 'wei';
+                        return (
+                          <span
+                            key={r.id}
+                            title={`第${r.roundNo}期 ${choiceLabels[w]}胜`}
+                            className={`w-6 h-6 flex items-center justify-center text-[11px] font-black border ${
+                              w === 'wei'
+                                ? 'bg-[#1b3a6b] border-[#7cb5ff] text-[#dff0ff]'
+                                : w === 'wu'
+                                  ? 'bg-[#6b1919] border-[#ff8b8b] text-[#ffe2e2]'
+                                  : 'bg-[#1d5428] border-[#82ff99] text-[#ddffe4]'
+                            }`}
+                          >
+                            {w === 'wei' ? '魏' : w === 'wu' ? '吴' : '蜀'}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* History / My Bets Sub-tabs */}
+                <div className="space-y-1.5">
+                  <div className="grid grid-cols-2 gap-1">
                     <button
                       type="button"
-                      disabled={busy}
-                      onClick={async () => {
-                        setBusy(true);
-                        try {
-                          const res = await api.playCasinoDice({
-                            realmId,
-                            betType: 'baozi',
-                            currency: betCurrency,
-                            amount: betAmount,
-                          });
-                          onUpdateCharacter(res.character);
-                          setDiceResult(res.result);
-                        } catch (err) {
-                          onNotify(err instanceof Error ? err.message : '下注失败');
-                        } finally {
-                          setBusy(false);
-                        }
-                      }}
-                      className="col-span-2 hx-btn-red py-1.5 text-xs"
+                      onClick={() => setCasinoRecordTab('history')}
+                      className={`py-1 text-[11px] font-bold border ${
+                        casinoRecordTab === 'history'
+                          ? 'bg-[#7d4916] border-[#ffdf75] text-[#fff6cc]'
+                          : 'bg-[#2a0a31] border-[#734a7d] text-[#d6badc]'
+                      }`}
                     >
-                      🎲 搏一搏 · 押豹子（1:15 暴富！）
+                      📜 近 20 期开奖记录
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCasinoRecordTab('mybets')}
+                      className={`py-1 text-[11px] font-bold border ${
+                        casinoRecordTab === 'mybets'
+                          ? 'bg-[#7d4916] border-[#ffdf75] text-[#fff6cc]'
+                          : 'bg-[#2a0a31] border-[#734a7d] text-[#d6badc]'
+                      }`}
+                    >
+                      🧾 我的注单 ({gameState?.myRecentBets.length ?? 0})
                     </button>
                   </div>
 
-                  {diceResult && (
-                    <div
-                      className={`p-2 border text-center space-y-1 ${
-                        diceResult.won
-                          ? 'bg-[#1a3319] border-[#7dff92] text-[#d6ffdc]'
-                          : 'bg-[#361116] border-[#d96c78] text-[#ffd4d8]'
-                      }`}
-                    >
-                      <div className="text-base font-black tracking-widest text-[#ffe878]">
-                        [ {diceResult.dice[0]} ] [ {diceResult.dice[1]} ] [ {diceResult.dice[2]} ]
-                      </div>
-                      <div className="font-bold">{diceResult.message}</div>
+                  {casinoRecordTab === 'history' && gameState && (
+                    <div className="max-h-[220px] overflow-y-auto hx-scroll divide-y divide-white/10 border border-[#7c5087] bg-[#18051d]/90">
+                      {gameState.history.map((r) => {
+                        const played = (r.myBetCount ?? 0) > 0;
+                        const myWinSilver = r.mySilverPayout ?? 0;
+                        const myWinGold = r.myGoldPayout ?? 0;
+                        const wonAny = myWinSilver > 0 || myWinGold > 0;
+                        return (
+                          <div
+                            key={r.id}
+                            className="px-2 py-1.5 flex items-center justify-between gap-2 text-[11px]"
+                          >
+                            <div className="min-w-0">
+                              <span className="text-[#ffd875] font-bold mr-1.5">
+                                #{r.roundNo}
+                              </span>
+                              <span className="text-[#bfa2c7] mr-1.5">{fmtTime(r.drawAt)}</span>
+                              {casinoTab === 'dice' && r.dice ? (
+                                <span className="text-white font-bold">
+                                  [{r.dice[0]}·{r.dice[1]}·{r.dice[2]}]{' '}
+                                  {r.isBaozi ? (
+                                    <span className="text-[#ffcf54]">豹子</span>
+                                  ) : (
+                                    <span>
+                                      {r.sum}点{' '}
+                                      <span
+                                        className={
+                                          (r.sum ?? 0) >= 11 ? 'text-[#ff8c8c]' : 'text-[#82c0ff]'
+                                        }
+                                      >
+                                        {(r.sum ?? 0) >= 11 ? '大' : '小'}
+                                      </span>
+                                      /{(r.sum ?? 0) % 2 === 1 ? '单' : '双'}
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="font-bold text-white">
+                                  {r.chibiWinner ? choiceLabels[r.chibiWinner] : '-'}胜
+                                </span>
+                              )}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              {played ? (
+                                wonAny ? (
+                                  <span className="text-[#7dff92] font-bold">
+                                    中{' '}
+                                    {[
+                                      myWinSilver > 0 ? `+${myWinSilver}银` : '',
+                                      myWinGold > 0 ? `+${myWinGold}金` : '',
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' ')}
+                                  </span>
+                                ) : (
+                                  <span className="text-[#ff8e96]">未中</span>
+                                )
+                              ) : r.totalBets > 0 ? (
+                                <span className="text-[#c5a8cc]">{r.totalBets}注</span>
+                              ) : (
+                                <span className="text-[#886d8f]">无人下注</span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {casinoRecordTab === 'mybets' && gameState && (
+                    <div className="max-h-[220px] overflow-y-auto hx-scroll divide-y divide-white/10 border border-[#7c5087] bg-[#18051d]/90">
+                      {gameState.myRecentBets.length === 0 ? (
+                        <div className="p-3 text-center text-[#b79bbe]">
+                          暂未在本玩法下注，选好筹码即可参与本期开盘！
+                        </div>
+                      ) : (
+                        gameState.myRecentBets.map((b) => {
+                          const unit = b.currency === 'gold' ? '金' : '银';
+                          return (
+                            <div
+                              key={b.id}
+                              className="px-2 py-1.5 flex items-center justify-between gap-2 text-[11px]"
+                            >
+                              <div>
+                                <span className="text-[#ffd875] font-bold mr-1.5">
+                                  第{b.roundNo}期
+                                </span>
+                                <span className="text-white font-bold mr-1">
+                                  押【{choiceLabels[b.choice] || b.choice}】
+                                </span>
+                                <span className="text-[#e7cfbb]">
+                                  {b.amount}
+                                  {unit}
+                                </span>
+                              </div>
+                              <div className="shrink-0 font-bold">
+                                {b.status === 'pending' && (
+                                  <span className="text-[#ffe478]">待开奖</span>
+                                )}
+                                {b.status === 'won' && (
+                                  <span className="text-[#7dff92]">
+                                    中奖 +{b.payout}
+                                    {unit}
+                                  </span>
+                                )}
+                                {b.status === 'lost' && (
+                                  <span className="text-[#ff8e96]">未中</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
                     </div>
                   )}
                 </div>
-              )}
-
-              {casinoTab === 'chibi' && (
-                <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2.5">
-                  <div className="text-[11px] text-[#f2dcf7]">
-                    经典赤壁阵营押注：选择看好的阵营下注，即刻开战决胜负！
-                  </div>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(
-                      [
-                        ['wei', '押 魏军', '2.1倍', 'bg-[#1b3a6b] border-[#7cb5ff]'],
-                        ['wu', '押 吴军', '2.3倍', 'bg-[#6b1919] border-[#ff8b8b]'],
-                        ['shu', '押 蜀军', '4.2倍', 'bg-[#1d5428] border-[#82ff99]'],
-                      ] as const
-                    ).map(([pick, label, mult, cls]) => (
-                      <button
-                        key={pick}
-                        type="button"
-                        disabled={busy}
-                        onClick={async () => {
-                          setBusy(true);
-                          try {
-                            const res = await api.playCasinoChibi({
-                              realmId,
-                              pick,
-                              currency: betCurrency,
-                              amount: betAmount,
-                            });
-                            onUpdateCharacter(res.character);
-                            setChibiResult(res.result);
-                          } catch (err) {
-                            onNotify(err instanceof Error ? err.message : '押注失败');
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                        className={`py-2 border text-white font-bold hover:brightness-110 ${cls}`}
-                      >
-                        <div>{label}</div>
-                        <div className="text-[10.5px] text-[#ffe678]">{mult}</div>
-                      </button>
-                    ))}
-                  </div>
-
-                  {chibiResult && (
-                    <div
-                      className={`p-2 border space-y-1 ${
-                        chibiResult.won
-                          ? 'bg-[#1a3319] border-[#7dff92] text-[#d6ffdc]'
-                          : 'bg-[#361116] border-[#d96c78] text-[#ffd4d8]'
-                      }`}
-                    >
-                      <div className="text-[#ffe678] font-bold">⚔ {chibiResult.report}</div>
-                      <div className="font-bold">{chibiResult.message}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {/* BANK (许昌钱庄：存取与金银兑换) */}
           {panel === 'bank' && (() => {

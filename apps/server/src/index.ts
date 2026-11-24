@@ -46,6 +46,7 @@ import {
   drawGeneralWithToken,
   equipItem,
   feedGeneralExpPill,
+  getCasinoState,
   getCharacterByAccountAndRealm,
   getMails,
   getMarketListings,
@@ -66,6 +67,7 @@ import {
   setGeneralSlot,
   startDailyEscort,
   sweepTowerDaily,
+  tickAllCasinoRounds,
   unequipSlot,
   useInventoryItem,
   washGeneral,
@@ -518,6 +520,19 @@ app.post('/api/tower/sweep', async (req) => {
   return sweepTowerDaily(current.id);
 });
 
+app.get('/api/casino/state', async (req) => {
+  const auth = await requireAuth(req);
+  const q = req.query as { realmId?: string };
+  const realmId = q.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const res = getCasinoState(realmId, current.id);
+  for (const msg of res.announcements) {
+    broadcastSystemMessage(realmId, msg, 'shi');
+  }
+  return { state: res.state, character: res.character };
+});
+
 app.post('/api/casino/dice', async (req) => {
   const auth = await requireAuth(req);
   const body = req.body as {
@@ -526,13 +541,18 @@ app.post('/api/casino/dice', async (req) => {
     currency?: 'silver' | 'gold';
     amount?: number;
   };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
   if (!current) throw new Error('尚未创建角色');
-  return playCasinoDice(current.id, {
+  const res = playCasinoDice(current.id, {
     betType: body.betType || 'big',
     currency: body.currency || 'silver',
     amount: Number(body.amount ?? 100),
   });
+  for (const msg of res.announcements) {
+    broadcastSystemMessage(realmId, msg, 'shi');
+  }
+  return { bet: res.bet, state: res.state, character: res.character, message: res.message };
 });
 
 app.post('/api/casino/chibi', async (req) => {
@@ -543,13 +563,18 @@ app.post('/api/casino/chibi', async (req) => {
     currency?: 'silver' | 'gold';
     amount?: number;
   };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
   if (!current) throw new Error('尚未创建角色');
-  return playCasinoChibi(current.id, {
+  const res = playCasinoChibi(current.id, {
     pick: body.pick || 'wu',
     currency: body.currency || 'silver',
     amount: Number(body.amount ?? 100),
   });
+  for (const msg of res.announcements) {
+    broadcastSystemMessage(realmId, msg, 'shi');
+  }
+  return { bet: res.bet, state: res.state, character: res.character, message: res.message };
 });
 
 app.post('/api/bank/transfer', async (req) => {
@@ -789,6 +814,28 @@ if (fs.existsSync(webDistDir)) {
 }
 
 attachSocketServer(app.server);
+
+// Continuous scheduled Casino round settlement & history generator (1m Dice / 3m Chibi)
+try {
+  tickAllCasinoRounds();
+} catch (err) {
+  app.log.error({ err }, 'Initial casino round sync failed');
+}
+const casinoTicker = setInterval(() => {
+  try {
+    const announcements = tickAllCasinoRounds();
+    for (const item of announcements) {
+      broadcastSystemMessage(item.realmId, item.message, 'shi');
+    }
+  } catch (err) {
+    app.log.error({ err }, 'Casino round tick failed');
+  }
+}, 1000);
+casinoTicker.unref();
+
+app.addHook('onClose', async () => {
+  clearInterval(casinoTicker);
+});
 
 await app.listen({ port: PORT, host: HOST });
 app.log.info(
