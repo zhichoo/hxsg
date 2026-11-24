@@ -28,6 +28,7 @@ import {
   addActiveGeneralsIntimacy,
   addItem,
   addSkillProficiency,
+  adjustGeneralLoyalty,
   applyExpAndSilver,
   getCharacterById,
   grantEquipmentToCharacter,
@@ -113,8 +114,10 @@ function applyIncomingDamage(
   battle: ActiveBattle,
   target: BattleUnit,
   rawDamage: number,
+  loyaltyPenaltyIds: Set<number>,
 ): { actualDamage: number; protector?: BattleUnit; protectorDamage?: number } {
   const scaled = hasStatus(target, 'def_down') ? Math.round(rawDamage * 1.28) : rawDamage;
+  // Check if an alive teammate is protecting this target
   const protector = battle.units.find(
     (u) =>
       u.alive &&
@@ -126,13 +129,24 @@ function applyIncomingDamage(
     const takenByTarget = Math.max(1, Math.round(scaled * 0.42));
     const takenByProtector = Math.max(1, Math.round(scaled * 0.45));
     target.hp = Math.max(0, target.hp - takenByTarget);
-    if (target.hp === 0) target.alive = false;
+    if (target.hp === 0) {
+      target.alive = false;
+      if (target.side === 'player' && target.generalId) loyaltyPenaltyIds.add(target.generalId);
+    }
     protector.hp = Math.max(0, protector.hp - takenByProtector);
-    if (protector.hp === 0) protector.alive = false;
+    if (protector.hp === 0) {
+      protector.alive = false;
+      if (protector.side === 'player' && protector.generalId) {
+        loyaltyPenaltyIds.add(protector.generalId);
+      }
+    }
     return { actualDamage: takenByTarget, protector, protectorDamage: takenByProtector };
   }
   target.hp = Math.max(0, target.hp - scaled);
-  if (target.hp === 0) target.alive = false;
+  if (target.hp === 0) {
+    target.alive = false;
+    if (target.side === 'player' && target.generalId) loyaltyPenaltyIds.add(target.generalId);
+  }
   return { actualDamage: scaled };
 }
 
@@ -149,6 +163,7 @@ function buildPlayerGeneralUnit(g: GeneralView, position: number): BattleUnit {
     skillId: g.skillId,
     skill2Id: g.skill2Id ?? undefined,
     intimacy: g.intimacy,
+    loyalty: g.loyalty,
     hp: Math.max(1, g.hp),
     maxHp: g.maxHp,
     mp: g.mp,
@@ -442,6 +457,7 @@ export function performBattleAction(
   if (!ch) throw new Error('角色不存在');
 
   const logs: BattleActionLog[] = [];
+  const loyaltyPenaltyIds = new Set<number>();
   for (const u of battle.units) {
     u.defending = false;
     u.protectingUid = null;
@@ -822,7 +838,7 @@ export function performBattleAction(
                 resistPct: t.resist?.magic,
                 targetTrapped: hasStatus(t, 'trap'),
               });
-              const { actualDamage } = applyIncomingDamage(battle, t, damage);
+              const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
               let poisoned = false;
               if (t.alive) {
                 applyStatus(t, 'poison', pTurns, Math.round(heroAtk * 0.42));
@@ -859,7 +875,7 @@ export function performBattleAction(
               resistPct: primary.resist?.phys,
               targetTrapped: hasStatus(primary, 'trap'),
             });
-            const { actualDamage } = applyIncomingDamage(battle, primary, damage);
+            const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
             if (primary.alive) applyStatus(primary, 'def_down', dTurns);
             logs.push({
               actorUid: actor.uid,
@@ -926,7 +942,7 @@ export function performBattleAction(
                 resistPct: primary.resist?.phys,
                 targetTrapped: hasStatus(primary, 'trap'),
               });
-              const { actualDamage } = applyIncomingDamage(battle, primary, damage);
+              const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
               totalDmg += actualDamage;
               anyCrit = anyCrit || crit;
             }
@@ -966,7 +982,7 @@ export function performBattleAction(
               resistPct,
               targetTrapped: hasStatus(t, 'trap'),
             });
-            const { actualDamage } = applyIncomingDamage(battle, t, damage);
+            const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
             return { uid: t.uid, name: t.name, damage: actualDamage, crit, killed: !t.alive };
           });
           logs.push({
@@ -1002,7 +1018,7 @@ export function performBattleAction(
         resistPct: target.resist?.phys,
         targetTrapped: hasStatus(target, 'trap'),
       });
-      const { actualDamage } = applyIncomingDamage(battle, target, damage);
+      const { actualDamage } = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
       logs.push({
         actorUid: actor.uid,
         actorName: actor.name,
@@ -1012,6 +1028,18 @@ export function performBattleAction(
         message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${actualDamage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
+      // Check classic loyalty refusal when loyalty < 30
+      if ((actor.loyalty ?? 100) < 30 && Math.random() < 0.35) {
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'status',
+          targets: [],
+          message: `副将 ${actor.name} 忠诚度过低（${actor.loyalty}），消极怠战拒绝出手！（请喂食肉包子/忠义丹）`,
+        });
+        continue;
+      }
+
       // Allied general: supports manual player command (Scheme A) or smart AI fallback
       const knownSkills = [actor.skillId, actor.skill2Id]
         .filter((id): id is string => Boolean(id))
@@ -1416,7 +1444,7 @@ export function performBattleAction(
             resistPct: Math.max(0, (t.resist?.magic ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          const res = applyIncomingDamage(battle, t, damage);
+          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
           targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
           if (res.protector && res.protectorDamage) {
             targetResults.push({
@@ -1446,7 +1474,7 @@ export function performBattleAction(
             resistPct: Math.max(0, (t.resist?.phys ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          const res = applyIncomingDamage(battle, t, damage);
+          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
           targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
           if (res.protector && res.protectorDamage) {
             targetResults.push({
@@ -1482,7 +1510,7 @@ export function performBattleAction(
           resistPct: Math.max(0, (target.resist?.phys ?? 0) - resPen),
           targetTrapped: hasStatus(target, 'trap'),
         });
-        const res = applyIncomingDamage(battle, target, damage);
+        const res = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
         const tList: BattleActionLog['targets'] = [
           { uid: target.uid, name: target.name, damage: res.actualDamage, crit, killed: !target.alive },
         ];
@@ -1518,7 +1546,10 @@ export function performBattleAction(
         Math.max(25, Math.round(u.maxHp * 0.065 + (pStatus.value ?? 0))),
       );
       u.hp = Math.max(0, u.hp - poisonDmg);
-      if (u.hp === 0) u.alive = false;
+      if (u.hp === 0) {
+        u.alive = false;
+        if (u.side === 'player' && u.generalId) loyaltyPenaltyIds.add(u.generalId);
+      }
       logs.push({
         actorUid: u.uid,
         actorName: u.name,
@@ -1528,6 +1559,11 @@ export function performBattleAction(
         message: `${u.name} 毒发攻心，损失 ${poisonDmg} 点气血！`,
       });
     }
+  }
+
+  // Classic loyalty penalty for any general knocked out in battle (-6 loyalty)
+  for (const gid of loyaltyPenaltyIds) {
+    adjustGeneralLoyalty(gid, -6);
   }
 
   // Decrement status durations at end of round

@@ -306,6 +306,7 @@ export interface ItemTemplate {
   hpRestore?: number;
   mpRestore?: number;
   reviveHpPct?: number;
+  loyaltyRestore?: number;
   priceSilver: number;
 }
 
@@ -340,6 +341,22 @@ export const ITEMS: Record<string, ItemTemplate> = {
     desc: '原版经典救命仙丹！战斗中复活倒地副将并恢复 45% 气血。',
     type: 'consumable',
     reviveHpPct: 45,
+    priceSilver: 180,
+  },
+  roubaozi: {
+    itemId: 'roubaozi',
+    name: '热腾腾肉包子',
+    desc: '原版副将口粮！在副将营帐喂给副将，恢复 15 点忠诚度。',
+    type: 'material',
+    loyaltyRestore: 15,
+    priceSilver: 60,
+  },
+  zhongyidan: {
+    itemId: 'zhongyidan',
+    name: '忠义丹',
+    desc: '犒赏三军秘药！在副将营帐喂给副将，大幅恢复 40 点忠诚度。',
+    type: 'material',
+    loyaltyRestore: 40,
     priceSilver: 180,
   },
   xuantie: {

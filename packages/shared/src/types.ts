@@ -426,6 +426,7 @@ export interface GeneralView {
   intimacyTitle: string;
   intimacyStatPct: number;
   intimacyResistBonus: number;
+  loyalty: number;
   slot: number | null; // 0, 1, 2 for active battle slots; null for bench
 }
 
@@ -438,6 +439,7 @@ export interface InventoryItemView {
   hpRestore?: number;
   mpRestore?: number;
   reviveHpPct?: number;
+  loyaltyRestore?: number;
   priceSilver: number;
 }
 
@@ -513,6 +515,7 @@ export interface BattleUnit {
   skillId?: string;
   skill2Id?: string;
   intimacy?: number;
+  loyalty?: number;
   hp: number;
   maxHp: number;
   mp: number;

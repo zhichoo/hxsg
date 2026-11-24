@@ -342,6 +342,12 @@ export const api = {
       '/api/equipment/reforge',
       { method: 'POST', body: { realmId, equipId } },
     ),
+  feedGeneralLoyalty: (realmId: string, generalId: number, itemId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'generalsFeedLoyalty',
+      '/api/generals/feed-loyalty',
+      { method: 'POST', body: { realmId, generalId, itemId } },
+    ),
   inspectPlayer: (realmId: string, targetCharacterId: number) =>
     callEndpoint<{ player: PlayerInspectView }>('playersInspect', '/api/players/inspect', {
       query: { realmId, targetCharacterId: String(targetCharacterId) },

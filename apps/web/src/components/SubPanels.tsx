@@ -1139,6 +1139,13 @@ export function SubPanels({
                             {g.exp}/{g.expToNext}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px]">
+                            <span
+                              className={`font-bold ${
+                                g.loyalty < 40 ? 'text-[#ff7070]' : 'text-[#ffe678]'
+                              }`}
+                            >
+                              忠诚 {g.loyalty}/100
+                            </span>
                             <span className="text-[#ff9ed2] font-bold">
                               默契 {g.intimacy}/100 ({g.intimacyTitle})
                             </span>
@@ -1234,6 +1241,36 @@ export function SubPanels({
                       >
                         {showBooks ? '收起秘籍' : `习技(${ownedBooks.length})`}
                       </button>
+                      {g.loyalty < 100 && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            const foodId = character.inventory.some(
+                              (i) => i.itemId === 'roubaozi' && i.quantity > 0,
+                            )
+                              ? 'roubaozi'
+                              : 'zhongyidan';
+                            setBusy(true);
+                            try {
+                              const res = await api.feedGeneralLoyalty(realmId, g.id, foodId);
+                              onUpdateCharacter(res.character);
+                              onNotify(res.message);
+                            } catch (err) {
+                              onNotify(
+                                err instanceof Error
+                                  ? err.message
+                                  : '请先去回春药铺买肉包子或忠义丹',
+                              );
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[11px] bg-[#6e3610] border border-[#ffb96b] text-[#fff1d6] font-bold"
+                        >
+                          喂口粮
+                        </button>
+                      )}
                       {g.rebirth < 2 && (
                         <button
                           type="button"
@@ -2707,55 +2744,6 @@ export function SubPanels({
                         </div>
                       )
                     )}
-                  </div>
-                )}
-
-                {/* Trend Strip (走势路珠) */}
-                {gameState && gameState.history.length > 0 && (
-                  <div className="p-2 bg-[#1e0624]/90 border border-[#7c5087] space-y-1.5">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#ffd978] font-bold">近期走势（左新右旧）</span>
-                      <span className="text-[#cbb0d4]">持续定时生成</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {gameState.history.slice(0, 14).map((r) => {
-                        if (casinoTab === 'dice') {
-                          const isBz = Boolean(r.isBaozi);
-                          const isBig = (r.sum ?? 0) >= 11;
-                          return (
-                            <span
-                              key={r.id}
-                              title={`第${r.roundNo}期 [${r.dice?.join('·')}] ${r.sum}点`}
-                              className={`w-6 h-6 flex items-center justify-center text-[11px] font-black border ${
-                                isBz
-                                  ? 'bg-[#8f5c08] border-[#ffe76b] text-[#fff8cc]'
-                                  : isBig
-                                    ? 'bg-[#7d1919] border-[#ff8b8b] text-[#ffe2e2]'
-                                    : 'bg-[#173a6e] border-[#7db8ff] text-[#dff0ff]'
-                              }`}
-                            >
-                              {isBz ? '豹' : isBig ? '大' : '小'}
-                            </span>
-                          );
-                        }
-                        const w = r.chibiWinner || 'wei';
-                        return (
-                          <span
-                            key={r.id}
-                            title={`第${r.roundNo}期 ${choiceLabels[w]}胜`}
-                            className={`w-6 h-6 flex items-center justify-center text-[11px] font-black border ${
-                              w === 'wei'
-                                ? 'bg-[#1b3a6b] border-[#7cb5ff] text-[#dff0ff]'
-                                : w === 'wu'
-                                  ? 'bg-[#6b1919] border-[#ff8b8b] text-[#ffe2e2]'
-                                  : 'bg-[#1d5428] border-[#82ff99] text-[#ddffe4]'
-                            }`}
-                          >
-                            {w === 'wei' ? '魏' : w === 'wu' ? '吴' : '蜀'}
-                          </span>
-                        );
-                      })}
-                    </div>
                   </div>
                 )}
 

@@ -135,6 +135,7 @@ interface GeneralRow {
   skill_id: string;
   skill2_id: string | null;
   intimacy: number;
+  loyalty?: number;
   slot: number | null;
 }
 
@@ -347,6 +348,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
     const skill2Id = g.skill2_id || null;
     const skill2Def = skill2Id ? SKILLS.find((s) => s.id === skill2Id) : undefined;
     const intimacy = Math.max(0, Math.min(100, g.intimacy ?? 0));
+    const loyalty = Math.max(0, Math.min(100, g.loyalty ?? 100));
     const intInfo = getGeneralIntimacyInfo(intimacy);
     const statMult = 1 + intInfo.statPct / 100;
     const baseHp = g.base_hp || tpl?.baseHp || g.max_hp;
@@ -391,6 +393,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
       intimacyTitle: intInfo.title,
       intimacyStatPct: intInfo.statPct,
       intimacyResistBonus: intInfo.resistBonus,
+      loyalty,
       slot: g.slot,
     };
   });
@@ -412,6 +415,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
         hpRestore: tpl.hpRestore,
         mpRestore: tpl.mpRestore,
         reviveHpPct: tpl.reviveHpPct,
+        loyaltyRestore: tpl.loyaltyRestore,
         priceSilver: tpl.priceSilver,
       };
     })
@@ -1850,8 +1854,8 @@ export function grantGeneralToCharacter(
         character_id, template_id, name, role_class, sprite_key, avatar_key,
         level, exp, hp, max_hp, mp, max_mp, atk, spd,
         base_hp, base_mp, base_atk, base_spd, growth, rebirth, rarity, skill_id,
-        slot, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`,
+        loyalty, slot, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, 100, ?, ?)`,
     )
     .run(
       characterId,
@@ -1909,6 +1913,7 @@ export function grantGeneralToCharacter(
     intimacyTitle: '初识',
     intimacyStatPct: 0,
     intimacyResistBonus: 0,
+    loyalty: 100,
     slot: freeSlot,
   };
 }
@@ -1992,6 +1997,41 @@ export function feedGeneralExpPill(characterId: number, generalId: number): Char
     'UPDATE generals SET level = ?, exp = ?, hp = ?, max_hp = ?, mp = ?, max_mp = ?, atk = ?, spd = ?, intimacy = MIN(100, intimacy + 5) WHERE id = ?',
   ).run(lv, exp, stats.maxHp, stats.maxHp, stats.maxMp, stats.maxMp, stats.atk, stats.spd, g.id);
   return getCharacterById(characterId)!;
+}
+
+export function feedGeneralLoyalty(
+  characterId: number,
+  generalId: number,
+  itemId: string,
+): { character: CharacterView; message: string } {
+  const tpl = ITEMS[itemId];
+  if (!tpl || !tpl.loyaltyRestore) throw new Error('无效的忠诚度口粮道具');
+  const ch = getCharacterById(characterId);
+  if (!ch) throw new Error('角色不存在');
+  const g = ch.generals.find((x) => x.id === generalId);
+  if (!g) throw new Error('副将不存在');
+  if (g.loyalty >= 100) throw new Error(`${g.name} 忠诚度已满（100）`);
+  const owned = ch.inventory.find((i) => i.itemId === itemId);
+  if (!owned || owned.quantity <= 0) throw new Error(`行囊中没有【${tpl.name}】`);
+
+  addItem(characterId, itemId, -1);
+  db.prepare('UPDATE generals SET loyalty = MIN(100, loyalty + ?) WHERE id = ?').run(
+    tpl.loyaltyRestore,
+    generalId,
+  );
+  const updated = getCharacterById(characterId)!;
+  const afterG = updated.generals.find((x) => x.id === generalId)!;
+  return {
+    character: updated,
+    message: `喂食【${tpl.name}】成功！${g.name} 忠诚度提升至 ${afterG.loyalty}/100。`,
+  };
+}
+
+export function adjustGeneralLoyalty(generalId: number, delta: number): void {
+  db.prepare('UPDATE generals SET loyalty = MAX(0, MIN(100, loyalty + ?)) WHERE id = ?').run(
+    delta,
+    generalId,
+  );
 }
 
 export function trainSkillWithSilver(
