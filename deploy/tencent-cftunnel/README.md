@@ -1,8 +1,8 @@
 # 腾讯云上海 + Cloudflare Tunnel 部署指南
 
 适用于无 ICP 备案的大陆 2C4G 5M 机器，通过 `cloudflared`（`--protocol http2`）主动出站接入 Cloudflare，同时承载：
-- 正式环境：`https://hxsg.zhichoo.com`（独立库 `data/prod/hxsg.db`）
-- 沙盒环境：`https://hxsg-sandbox.zhichoo.com`（独立库 `data/sandbox/hxsg-sandbox.db`）
+- 正式环境：`https://hxsg.9961212.xyz`（独立库 `data/prod/hxsg.db`）
+- 沙盒环境：`https://hxsg-sandbox.9961212.xyz`（独立库 `data/sandbox/hxsg-sandbox.db`）
 
 宿主机 **无需开放 80/443 公网端口**，HTTPS 与 WebSocket (`wss://`) 均由 Cloudflare 边缘自动终结。
 
@@ -12,14 +12,14 @@
 
 1. 打开 Cloudflare Zero Trust → **Networks → Tunnels → Create a tunnel**（选 Cloudflared），命名如 `hxsg-shanghai`。
 2. 复制生成的 `CF_TUNNEL_TOKEN`。
-3. 在该 Tunnel 的 **Public Hostname** 添加两条路由（CF 会自动给 `zhichoo.com` 创建对应 CNAME）：
+3. 在该 Tunnel 的 **Public Hostname** 添加两条路由（CF 会自动给 `9961212.xyz` 创建对应 CNAME）：
 
 | Public Hostname | Service Type | URL |
 | :--- | :--- | :--- |
-| `hxsg.zhichoo.com` | `HTTP` | `hxsg-prod:3001` |
-| `hxsg-sandbox.zhichoo.com` | `HTTP` | `hxsg-sandbox:3002` |
+| `hxsg.9961212.xyz` | `HTTP` | `hxsg-prod:3001` |
+| `hxsg-sandbox.9961212.xyz` | `HTTP` | `hxsg-sandbox:3002` |
 
-> 可选优化：在 Cloudflare 的 `zhichoo.com` → **Caching → Cache Rules** 为 `URI Path starts with /assets/hxsg/` 开启 Edge Cache，可让 416 张原版图走 CF 边缘缓存，进一步省掉腾讯云 5M 带宽。
+> 可选优化：在 Cloudflare 的 `9961212.xyz` → **Caching → Cache Rules** 为 `URI Path starts with /assets/hxsg/` 开启 Edge Cache，可让 416 张原版图走 CF 边缘缓存，进一步省掉腾讯云 5M 带宽。
 
 ---
 
@@ -64,21 +64,21 @@ curl -fsS --max-time 8 https://linux.do/mini-app-api/jwks
 
 ## 第四步：在本机打包微应用 `app.zip`
 
-### 沙盒测试包（指向 `hxsg-sandbox.zhichoo.com`）
+### 沙盒测试包（指向 `hxsg-sandbox.9961212.xyz`）
 
 ```bash
 MINI_APP_ID=<社区应用页分配的ID> \
 MINI_APP_VERSION=0.1.0 \
-MAPP_API_BASE_URL=https://hxsg-sandbox.zhichoo.com \
+MAPP_API_BASE_URL=https://hxsg-sandbox.9961212.xyz \
 pnpm build:mapp:debug
 ```
 
-### 正式发布包（指向 `hxsg.zhichoo.com`）
+### 正式发布包（指向 `hxsg.9961212.xyz`）
 
 ```bash
 MINI_APP_ID=<社区应用页分配的ID> \
 MINI_APP_VERSION=0.1.0 \
-MAPP_API_BASE_URL=https://hxsg.zhichoo.com \
+MAPP_API_BASE_URL=https://hxsg.9961212.xyz \
 pnpm build:mapp
 ```
 

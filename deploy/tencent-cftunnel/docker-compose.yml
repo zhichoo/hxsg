@@ -19,12 +19,12 @@ services:
       - HXSG_MAPP_ISSUER=${HXSG_MAPP_ISSUER:-https://linux.do}
       - HXSG_MAPP_JWKS_URL=${HXSG_MAPP_JWKS_URL:-}
       - HXSG_MAPP_PUBLIC_KEY=${HXSG_MAPP_PUBLIC_KEY:-}
-      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.zhichoo.com}
+      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.9961212.xyz}
       - HXSG_MAPP_APP_ID=${HXSG_MAPP_APP_ID:-}
       - HXSG_MAPP_CHANNEL=production
       - HXSG_MAPP_GM_SUBS=${HXSG_MAPP_GM_SUBS:-}
       - HXSG_CORS_STRICT=${HXSG_CORS_STRICT:-1}
-      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.zhichoo.com}
+      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.9961212.xyz}
     volumes:
       - ../../data/prod:/data
     networks:
@@ -58,12 +58,12 @@ services:
       - HXSG_MAPP_ISSUER=${HXSG_MAPP_ISSUER:-https://linux.do}
       - HXSG_MAPP_JWKS_URL=${HXSG_MAPP_JWKS_URL:-}
       - HXSG_MAPP_PUBLIC_KEY=${HXSG_MAPP_PUBLIC_KEY:-}
-      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.zhichoo.com}
+      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.9961212.xyz}
       - HXSG_MAPP_APP_ID=${HXSG_MAPP_APP_ID:-}
       - HXSG_MAPP_CHANNEL=sandbox
       - HXSG_MAPP_GM_SUBS=${HXSG_MAPP_GM_SUBS:-}
       - HXSG_CORS_STRICT=${HXSG_CORS_STRICT:-1}
-      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.zhichoo.com}
+      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.9961212.xyz}
     volumes:
       - ../../data/sandbox:/data
     networks:
