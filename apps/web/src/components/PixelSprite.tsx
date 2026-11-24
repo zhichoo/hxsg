@@ -8,6 +8,12 @@ interface PixelSpriteProps {
   className?: string;
 }
 
+const RIGS = {
+  '1': { legIdle: [0, 18] as const, bodyIdle: [0, 22, -13] as const, bodyY: -19, headY: -36, baseLegsW: 37, baseBodyW: 60 },
+  '2': { legIdle: [0, 14] as const, bodyIdle: [0, 23, -10] as const, bodyY: -17, headY: -34, baseLegsW: 28, baseBodyW: 61 },
+  '3': { legIdle: [0, 14] as const, bodyIdle: [0, 31, -11] as const, bodyY: -18, headY: -34, baseLegsW: 28, baseBodyW: 67 },
+};
+
 export function PixelSprite({
   spriteKey,
   scale = 1,
@@ -25,6 +31,12 @@ export function PixelSprite({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 2));
+    canvas.width = Math.round(logicalW * dpr);
+    canvas.height = Math.round(logicalH * dpr);
+
+    const rig = spriteKey.includes('2') ? RIGS['2'] : spriteKey.includes('3') ? RIGS['3'] : RIGS['1'];
+
     let cancelled = false;
     let rafId = 0;
 
@@ -34,58 +46,58 @@ export function PixelSprite({
       loadAssetImage(`${spriteKey}_f.png`),
     ]).then(([head, body, legs]) => {
       if (cancelled) return;
+      const hiRes = Boolean((head && head.width > 21) || (body && body.width > rig.baseBodyW));
       const draw = (now: number) => {
         if (cancelled) return;
         const bob = Math.sin(now / 260) > 0 ? intScale : 0;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.imageSmoothingEnabled = false;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, logicalW, logicalH);
+        ctx.imageSmoothingEnabled = hiRes;
+        if (hiRes) ctx.imageSmoothingQuality = 'high';
         ctx.save();
-        if (flipX) {
-          ctx.translate(canvas.width, 0);
-          ctx.scale(-1, 1);
-        }
-        const cx = Math.floor(canvas.width / 2);
-        const baseY = canvas.height - 4 * intScale;
+        ctx.translate(Math.floor(logicalW / 2), logicalH - 4 * intScale);
+        if (flipX) ctx.scale(-1, 1);
 
         if (legs) {
-          const fw = Math.floor(legs.width / 2);
-          ctx.drawImage(
-            legs,
-            0,
-            0,
-            fw,
-            legs.height,
-            cx - Math.floor((fw * intScale) / 2),
-            baseY - legs.height * intScale,
-            fw * intScale,
-            legs.height * intScale,
-          );
+          const legRes = Math.max(1, legs.width / rig.baseLegsW);
+          const [sx, sw] = rig.legIdle;
+          const dw = sw * intScale;
+          const dh = (legs.height / legRes) * intScale;
+          ctx.drawImage(legs, sx * legRes, 0, sw * legRes, legs.height, Math.round(-dw / 2), -dh, dw, dh);
         }
         if (body) {
-          const bw = Math.round(body.width * 0.42);
+          const isWideWarrior = !spriteKey.includes('2') && !spriteKey.includes('3') && body.width === 288;
+          const baseBodyW = isWideWarrior ? 72 : rig.baseBodyW;
+          const bodyRes = Math.max(1, body.width / baseBodyW);
+          const [sx, sw, dxPx] = isWideWarrior ? ([0, 34, -17] as const) : rig.bodyIdle;
+          const dw = sw * intScale;
+          const dh = (body.height / bodyRes) * intScale;
           ctx.drawImage(
             body,
+            sx * bodyRes,
             0,
-            0,
-            bw,
+            sw * bodyRes,
             body.height,
-            cx - Math.floor((bw * intScale) / 2),
-            baseY - (body.height + 6) * intScale + bob,
-            bw * intScale,
-            body.height * intScale,
+            Math.round(dxPx * intScale),
+            Math.round(rig.bodyY * intScale) + bob,
+            dw,
+            dh,
           );
         }
         if (head) {
+          const headRes = Math.max(1, head.width / 21);
+          const dw = (head.width / headRes) * intScale;
+          const dh = (head.height / headRes) * intScale;
           ctx.drawImage(
             head,
             0,
             0,
             head.width,
             head.height,
-            cx - Math.floor((head.width * intScale) / 2),
-            baseY - (head.height + 16) * intScale + bob,
-            head.width * intScale,
-            head.height * intScale,
+            Math.round(-dw / 2),
+            Math.round(rig.headY * intScale) + bob,
+            dw,
+            dh,
           );
         }
         ctx.restore();
@@ -98,15 +110,13 @@ export function PixelSprite({
       cancelled = true;
       cancelAnimationFrame(rafId);
     };
-  }, [spriteKey, intScale, flipX]);
+  }, [spriteKey, intScale, flipX, logicalW, logicalH]);
 
   return (
     <canvas
       ref={canvasRef}
-      width={logicalW}
-      height={logicalH}
       style={{ width: logicalW, height: logicalH }}
-      className={`pixelated ${className}`}
+      className={className}
     />
   );
 }

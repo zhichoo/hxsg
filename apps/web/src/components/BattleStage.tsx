@@ -109,7 +109,7 @@ const FX_PRELOAD_LIST = [
 
 // Pixel-verified per-class rig anchors for official HXSG 3-part character sprites (_h/_b/_f)
 const CLASS_SPRITE_RIG = {
-  // 武士 (r1 / r1n / n1 / n1n): legs 37x10, body 60x15, head 21x21
+  // 武士 (r1 / r1n / n1 / n1n): legs 37x10, body 60x15, head 21x21 (supports 1x Web & Nx hi-DPI MAPP)
   '1': {
     legIdle: [0, 18] as const,
     legAtk: [18, 19] as const,
@@ -118,6 +118,8 @@ const CLASS_SPRITE_RIG = {
     bodyY: -19,
     headY: -36,
     headYAtk: -35,
+    baseLegsW: 37,
+    baseBodyW: 60,
   },
   // 文人 (r2 / r2n / n2 / n2n): legs 28x9, body 61x16, head 21x21
   '2': {
@@ -128,6 +130,8 @@ const CLASS_SPRITE_RIG = {
     bodyY: -17,
     headY: -34,
     headYAtk: -33,
+    baseLegsW: 28,
+    baseBodyW: 61,
   },
   // 异人 (r3 / r3n / n3 / n3n): legs 28x8, body 67x15, head 21x21
   '3': {
@@ -138,6 +142,8 @@ const CLASS_SPRITE_RIG = {
     bodyY: -18,
     headY: -34,
     headYAtk: -31,
+    baseLegsW: 28,
+    baseBodyW: 67,
   },
 };
 
@@ -869,8 +875,12 @@ export function BattleStage({
       const topL = getImg(`${bgPrefix}_5.png`);
       const topR = getImg(`${bgPrefix}_6.png`);
       if (topL && topR) {
+        const hiBg = topL.width > 160;
+        ctx.imageSmoothingEnabled = hiBg;
+        if (hiBg) ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(topL, 0, 0, w / 2, topH);
         ctx.drawImage(topR, w / 2, 0, w / 2, topH);
+        ctx.imageSmoothingEnabled = false;
       } else {
         ctx.fillStyle = '#4f6d31';
         ctx.fillRect(0, 0, w, topH);
@@ -879,8 +889,12 @@ export function BattleStage({
       const btmL = getImg(`${bgPrefix}_3.png`);
       const btmR = getImg(`${bgPrefix}_4.png`);
       if (btmL && btmR) {
+        const hiBg = btmL.width > 160;
+        ctx.imageSmoothingEnabled = hiBg;
+        if (hiBg) ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(btmL, 0, h - btmH, w / 2, btmH);
         ctx.drawImage(btmR, w / 2, h - btmH, w / 2, btmH);
+        ctx.imageSmoothingEnabled = false;
       } else {
         ctx.fillStyle = '#5c6b2d';
         ctx.fillRect(0, h - btmH, w, btmH);
@@ -888,8 +902,17 @@ export function BattleStage({
 
       const bush1 = getImg('f_bg_c.png');
       const bush2 = getImg('f_bg_c2.png');
-      if (bush1) ctx.drawImage(bush1, Math.round(w * 0.54), Math.round(topH - 12), 31, 27);
-      if (bush2) ctx.drawImage(bush2, Math.round(w * 0.68), Math.round(h * 0.72), 29, 20);
+      if (bush1) {
+        ctx.imageSmoothingEnabled = bush1.width > 40;
+        if (bush1.width > 40) ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(bush1, Math.round(w * 0.54), Math.round(topH - 12), 34, 30);
+      }
+      if (bush2) {
+        ctx.imageSmoothingEnabled = bush2.width > 40;
+        if (bush2.width > 40) ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(bush2, Math.round(w * 0.68), Math.round(h * 0.72), 32, 24);
+      }
+      ctx.imageSmoothingEnabled = false;
 
       const desiredScale = h < 270 ? 1.5 : 2;
       const physScale = Math.max(2, Math.round(desiredScale * dpr));
@@ -1003,18 +1026,22 @@ export function BattleStage({
           if (smoke) {
             const sIdx = Math.min(2, Math.floor(smokeProgress * 3));
             const [sx, sy, sw, sh] = SPRITE_FRAMES.smoke[sIdx];
+            const srcRes = Math.max(1, smoke.height / sh);
             const dustX = u.side === 'player' ? pos.x + 4 : pos.x - Math.round(sw * 1.4);
+            ctx.imageSmoothingEnabled = srcRes > 1;
+            if (srcRes > 1) ctx.imageSmoothingQuality = 'high';
             ctx.drawImage(
               smoke,
-              sx,
-              sy,
-              sw,
-              sh,
+              sx * srcRes,
+              sy * srcRes,
+              sw * srcRes,
+              sh * srcRes,
               Math.round(dustX),
               Math.round(pos.y - 12),
               Math.round(sw * 1.35),
               Math.round(sh * 1.35),
             );
+            ctx.imageSmoothingEnabled = false;
           }
         }
 
@@ -1073,21 +1100,35 @@ export function BattleStage({
         ctx.translate(ux, uy);
         if (u.side === 'player') ctx.scale(-1, 1);
 
+        const hiResChar = Boolean((head && head.width > 21) || (body && body.width > rig.baseBodyW));
+        ctx.imageSmoothingEnabled = hiResChar;
+        if (hiResChar) ctx.imageSmoothingQuality = 'high';
+
         if (legs) {
+          const legRes = Math.max(1, legs.width / rig.baseLegsW);
           const [sx, sw] = isAttacking ? rig.legAtk : rig.legIdle;
           const dw = sw * spriteScale;
-          const dh = legs.height * spriteScale;
-          ctx.drawImage(legs, sx, 0, sw, legs.height, Math.round(-dw / 2), -dh, dw, dh);
+          const dh = (legs.height / legRes) * spriteScale;
+          ctx.drawImage(legs, sx * legRes, 0, sw * legRes, legs.height, Math.round(-dw / 2), -dh, dw, dh);
         }
         if (body) {
-          const [sx, sw, dxPx] = isAttacking ? rig.bodyAtk : rig.bodyIdle;
+          const isWideWarrior = !u.spriteKey.includes('2') && !u.spriteKey.includes('3') && body.width === 288;
+          const baseBodyW = isWideWarrior ? 72 : rig.baseBodyW;
+          const bodyRes = Math.max(1, body.width / baseBodyW);
+          const [sx, sw, dxPx] = isWideWarrior
+            ? isAttacking
+              ? ([34, 38, -11] as const)
+              : ([0, 34, -17] as const)
+            : isAttacking
+              ? rig.bodyAtk
+              : rig.bodyIdle;
           const dw = sw * spriteScale;
-          const dh = body.height * spriteScale;
+          const dh = (body.height / bodyRes) * spriteScale;
           ctx.drawImage(
             body,
-            sx,
+            sx * bodyRes,
             0,
-            sw,
+            sw * bodyRes,
             body.height,
             Math.round(dxPx * spriteScale),
             Math.round(rig.bodyY * spriteScale) + bob,
@@ -1096,8 +1137,9 @@ export function BattleStage({
           );
         }
         if (head) {
-          const dw = head.width * spriteScale;
-          const dh = head.height * spriteScale;
+          const headRes = Math.max(1, head.width / 21);
+          const dw = (head.width / headRes) * spriteScale;
+          const dh = (head.height / headRes) * spriteScale;
           const headY = isAttacking ? rig.headYAtk : rig.headY;
           ctx.drawImage(
             head,
@@ -1171,7 +1213,7 @@ export function BattleStage({
         }
       }
 
-      // 3. Authentic Official Pixel-Sprite Skill VFX (zero crude canvas shapes!)
+      // 3. Authentic Official Pixel-Sprite Skill VFX (supports 1x Web & Nx hi-DPI MAPP)
       const drawSheetFrame = (
         img: HTMLImageElement | null,
         frames: readonly SpriteFrame[],
@@ -1183,9 +1225,23 @@ export function BattleStage({
         if (!img || frames.length === 0) return;
         const idx = Math.min(frames.length - 1, Math.floor(t * frames.length));
         const [sx, sy, sw, sh] = frames[idx];
+        const srcRes = Math.max(1, img.height / sh);
         const dw = Math.round(sw * scale);
         const dh = Math.round(sh * scale);
-        ctx.drawImage(img, sx, sy, sw, sh, Math.round(cx - dw / 2), Math.round(bottomY - dh), dw, dh);
+        ctx.imageSmoothingEnabled = srcRes > 1;
+        if (srcRes > 1) ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(
+          img,
+          sx * srcRes,
+          sy * srcRes,
+          sw * srcRes,
+          sh * srcRes,
+          Math.round(cx - dw / 2),
+          Math.round(bottomY - dh),
+          dw,
+          dh,
+        );
+        ctx.imageSmoothingEnabled = false;
       };
 
       fxRef.current = fxRef.current.filter((f) => now - f.startedAt < f.duration);
