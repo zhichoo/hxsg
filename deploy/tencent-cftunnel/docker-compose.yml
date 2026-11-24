@@ -1,0 +1,99 @@
+services:
+  hxsg-prod:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    image: hxsg-classic:latest
+    container_name: hxsg-prod
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - HXSG_DATA_DIR=/data
+      - HXSG_DB_FILE=hxsg.db
+      - HXSG_SECRET=${HXSG_SECRET_PROD:?set HXSG_SECRET_PROD in .env}
+      - HXSG_GM_CODE=${HXSG_GM_CODE_PROD:-hxsg888}
+      - HXSG_MAPP_ISSUER=${HXSG_MAPP_ISSUER:-https://linux.do}
+      - HXSG_MAPP_JWKS_URL=${HXSG_MAPP_JWKS_URL:-}
+      - HXSG_MAPP_PUBLIC_KEY=${HXSG_MAPP_PUBLIC_KEY:-}
+      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.zhichoo.com}
+      - HXSG_MAPP_APP_ID=${HXSG_MAPP_APP_ID:-}
+      - HXSG_MAPP_CHANNEL=production
+      - HXSG_MAPP_GM_SUBS=${HXSG_MAPP_GM_SUBS:-}
+      - HXSG_CORS_STRICT=${HXSG_CORS_STRICT:-1}
+      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_PROD:-https://hxsg.zhichoo.com}
+    volumes:
+      - ../../data/prod:/data
+    networks:
+      - hxsg-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  hxsg-sandbox:
+    image: hxsg-classic:latest
+    container_name: hxsg-sandbox
+    restart: unless-stopped
+    depends_on:
+      - hxsg-prod
+    ports:
+      - "127.0.0.1:3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - HOST=0.0.0.0
+      - HXSG_DATA_DIR=/data
+      - HXSG_DB_FILE=hxsg-sandbox.db
+      - HXSG_SECRET=${HXSG_SECRET_SANDBOX:?set HXSG_SECRET_SANDBOX in .env}
+      - HXSG_GM_CODE=${HXSG_GM_CODE_SANDBOX:-hxsg888}
+      - HXSG_MAPP_ISSUER=${HXSG_MAPP_ISSUER:-https://linux.do}
+      - HXSG_MAPP_JWKS_URL=${HXSG_MAPP_JWKS_URL:-}
+      - HXSG_MAPP_PUBLIC_KEY=${HXSG_MAPP_PUBLIC_KEY:-}
+      - HXSG_MAPP_AUDIENCE=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.zhichoo.com}
+      - HXSG_MAPP_APP_ID=${HXSG_MAPP_APP_ID:-}
+      - HXSG_MAPP_CHANNEL=sandbox
+      - HXSG_MAPP_GM_SUBS=${HXSG_MAPP_GM_SUBS:-}
+      - HXSG_CORS_STRICT=${HXSG_CORS_STRICT:-1}
+      - HXSG_CORS_ORIGINS=${HXSG_MAPP_AUDIENCE_SANDBOX:-https://hxsg-sandbox.zhichoo.com}
+    volumes:
+      - ../../data/sandbox:/data
+    networks:
+      - hxsg-net
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: hxsg-cloudflared
+    restart: unless-stopped
+    depends_on:
+      - hxsg-prod
+      - hxsg-sandbox
+    # Use HTTP/2 instead of QUIC (UDP) for stable connectivity on mainland China VPS
+    command: tunnel --no-autoupdate --protocol http2 run --token ${CF_TUNNEL_TOKEN:?set CF_TUNNEL_TOKEN in .env}
+    networks:
+      - hxsg-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+networks:
+  hxsg-net:
+    driver: bridge

@@ -13,6 +13,7 @@ export interface MappServerConfig {
   enabled: boolean;
   issuer: string;
   issuerOrigin: string;
+  jwksUrl: string;
   audience: string;
   appId: string;
   channel: 'production' | 'sandbox';
@@ -58,10 +59,13 @@ function loadMappConfig(): MappServerConfig {
     }
   }
 
+  const jwksUrl = (process.env.HXSG_MAPP_JWKS_URL || '').trim() || (issuer ? `${issuer}/mini-app-api/jwks` : '');
+
   return {
     enabled,
     issuer,
     issuerOrigin,
+    jwksUrl,
     audience,
     appId,
     channel,
@@ -118,7 +122,7 @@ async function refreshJwks(force = false): Promise<void> {
 
   inflightJwksFetch = (async () => {
     try {
-      const response = await fetch(`${mappConfig.issuer}/mini-app-api/jwks`, {
+      const response = await fetch(mappConfig.jwksUrl, {
         headers: { Accept: 'application/json' },
         redirect: 'error',
         signal: AbortSignal.timeout(5000),
