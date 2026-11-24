@@ -48,7 +48,6 @@ import {
   drawGeneralWithToken,
   equipItem,
   feedGeneralExpPill,
-  feedGeneralLoyalty,
   getCasinoState,
   getCharacterByAccountAndRealm,
   getFriends,
@@ -307,14 +306,6 @@ app.post('/api/equipment/reforge', async (req) => {
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
   return reforgeEquipment(current.id, Number(body.equipId));
-});
-
-app.post('/api/generals/feed-loyalty', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as { realmId?: string; generalId?: number; itemId?: string };
-  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
-  if (!current) throw new Error('尚未创建角色');
-  return feedGeneralLoyalty(current.id, Number(body.generalId), body.itemId || '');
 });
 
 app.get('/api/players/inspect', async (req) => {

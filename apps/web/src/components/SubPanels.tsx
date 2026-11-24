@@ -1139,13 +1139,6 @@ export function SubPanels({
                             {g.exp}/{g.expToNext}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px]">
-                            <span
-                              className={`font-bold ${
-                                g.loyalty < 40 ? 'text-[#ff7070]' : 'text-[#ffe678]'
-                              }`}
-                            >
-                              忠诚 {g.loyalty}/100
-                            </span>
                             <span className="text-[#ff9ed2] font-bold">
                               默契 {g.intimacy}/100 ({g.intimacyTitle})
                             </span>
@@ -1239,38 +1232,8 @@ export function SubPanels({
                         onClick={() => setLearningGenId(showBooks ? null : g.id)}
                         className="px-2 py-0.5 text-[11px] bg-[#1e5c35] border border-[#7cff9c] text-[#e6ffec] font-bold"
                       >
-                        {showBooks ? '收起打书' : `打书(${ownedBooks.length})`}
+                        {showBooks ? '收起秘籍' : `习技(${ownedBooks.length})`}
                       </button>
-                      {g.loyalty < 100 && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={async () => {
-                            const foodId = character.inventory.some(
-                              (i) => i.itemId === 'roubaozi' && i.quantity > 0,
-                            )
-                              ? 'roubaozi'
-                              : 'zhongyidan';
-                            setBusy(true);
-                            try {
-                              const res = await api.feedGeneralLoyalty(realmId, g.id, foodId);
-                              onUpdateCharacter(res.character);
-                              onNotify(res.message);
-                            } catch (err) {
-                              onNotify(
-                                err instanceof Error
-                                  ? err.message
-                                  : '请先去回春药铺买肉包子或忠义丹',
-                              );
-                            } finally {
-                              setBusy(false);
-                            }
-                          }}
-                          className="px-2 py-0.5 text-[11px] bg-[#6e3610] border border-[#ffb96b] text-[#fff1d6] font-bold"
-                        >
-                          喂口粮(补忠)
-                        </button>
-                      )}
                       {g.rebirth < 2 && (
                         <button
                           type="button"
@@ -1316,7 +1279,7 @@ export function SubPanels({
                     {showBooks && (
                       <div className="p-2 bg-black/35 border border-[#6e9c78] space-y-1.5">
                         <div className="text-[11px] text-[#a6ffba] font-bold">
-                          选择秘籍打入【秘籍槽2】（将覆盖旧秘籍，不影响专属技，默契 +8）：
+                          选择秘籍研习【秘籍槽2】（将覆盖旧秘籍，不影响专属技，默契 +8）：
                         </div>
                         {ownedBooks.length === 0 ? (
                           <div className="text-[11px] text-[#e2cce8]">
@@ -1341,7 +1304,7 @@ export function SubPanels({
                                     onNotify(res.message);
                                     setLearningGenId(null);
                                   } catch (err) {
-                                    onNotify(err instanceof Error ? err.message : '打书失败');
+                                    onNotify(err instanceof Error ? err.message : '研习失败');
                                   } finally {
                                     setBusy(false);
                                   }
@@ -1519,7 +1482,7 @@ export function SubPanels({
                       : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
                   }`}
                 >
-                  武学秘籍（副将打书）
+                  武学秘籍（副将习技）
                 </button>
               </div>
 
@@ -1527,7 +1490,7 @@ export function SubPanels({
                 <div className="space-y-2">
                   <div className="text-xs text-[#ffe27a] flex items-center justify-between">
                     <span>当前银两：{character.silver} 两</span>
-                    <span className="text-[#d7bddf]">购后在「副将营帐」点击打书</span>
+                    <span className="text-[#d7bddf]">购后在「副将营帐」点击习技</span>
                   </div>
                   {Object.values(ITEMS)
                     .filter((it) => Boolean(GENERAL_SKILL_BOOKS[it.itemId]))

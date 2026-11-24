@@ -306,7 +306,6 @@ export interface ItemTemplate {
   hpRestore?: number;
   mpRestore?: number;
   reviveHpPct?: number;
-  loyaltyRestore?: number;
   priceSilver: number;
 }
 
@@ -341,22 +340,6 @@ export const ITEMS: Record<string, ItemTemplate> = {
     desc: '原版经典救命仙丹！战斗中复活倒地副将并恢复 45% 气血。',
     type: 'consumable',
     reviveHpPct: 45,
-    priceSilver: 180,
-  },
-  roubaozi: {
-    itemId: 'roubaozi',
-    name: '热腾腾肉包子',
-    desc: '原版副将口粮！在副将营帐喂给副将，恢复 15 点忠诚度。',
-    type: 'material',
-    loyaltyRestore: 15,
-    priceSilver: 60,
-  },
-  zhongyidan: {
-    itemId: 'zhongyidan',
-    name: '忠义丹',
-    desc: '犒赏三军秘药！在副将营帐喂给副将，大幅恢复 40 点忠诚度。',
-    type: 'material',
-    loyaltyRestore: 40,
     priceSilver: 180,
   },
   xuantie: {
@@ -404,35 +387,35 @@ export const ITEMS: Record<string, ItemTemplate> = {
   book_lianji: {
     itemId: 'book_lianji',
     name: '《连环突刺》秘籍',
-    desc: '副将技能书：在副将营帐给副将打书，习得武士连击【连环突刺】。',
+    desc: '副将技能书：在副将营帐给副将研习，习得武士连击【连环突刺】。',
     type: 'material',
     priceSilver: 900,
   },
   book_psdh: {
     itemId: 'book_psdh',
     name: '《排山倒海》秘籍',
-    desc: '副将技能书：在副将营帐给副将打书，习得群攻绝技【排山倒海】。',
+    desc: '副将技能书：在副将营帐给副将研习，习得群攻绝技【排山倒海】。',
     type: 'material',
     priceSilver: 1200,
   },
   book_hunluan: {
     itemId: 'book_hunluan',
     name: '《离间计》兵书',
-    desc: '副将技能书：在副将营帐给副将打书，习得群体混乱【离间计】。',
+    desc: '副将技能书：在副将营帐给副将研习，习得群体混乱【离间计】。',
     type: 'material',
     priceSilver: 1100,
   },
   book_fengyin: {
     itemId: 'book_fengyin',
     name: '《定身计》兵书',
-    desc: '副将技能书：在副将营帐给副将打书，习得强控封印【定身计】。',
+    desc: '副将技能书：在副将营帐给副将研习，习得强控封印【定身计】。',
     type: 'material',
     priceSilver: 1100,
   },
   book_wlhd: {
     itemId: 'book_wlhd',
     name: '《五雷轰顶》道书',
-    desc: '副将技能书：在副将营帐给副将打书，习得爆发雷法【五雷轰顶】。',
+    desc: '副将技能书：在副将营帐给副将研习，习得爆发雷法【五雷轰顶】。',
     type: 'material',
     priceSilver: 1100,
   },

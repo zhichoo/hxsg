@@ -1385,7 +1385,7 @@ export function BattleStage({
                             {g.name} Lv.{g.level}
                           </div>
                           <div className="text-[10.5px] text-[#e7d0ef]">
-                            血{g.maxHp} 攻{g.atk} 速{g.spd} · 忠{g.loyalty}
+                            血{g.maxHp} 攻{g.atk} 速{g.spd}
                           </div>
                         </button>
                       ))}

@@ -67,11 +67,6 @@
       "method": "POST",
       "auth": "platform"
     },
-    "generalsFeedLoyalty": {
-      "url": "__API_BASE__/api/generals/feed-loyalty",
-      "method": "POST",
-      "auth": "platform"
-    },
     "playersInspect": {
       "url": "__API_BASE__/api/players/inspect",
       "method": "GET",
