@@ -227,14 +227,13 @@ export default function App() {
   };
 
   const handleBattleAction = async (cmd: {
-    action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
+    action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
     targetUid?: string;
     skillId?: string;
     itemId?: string;
-    summonGeneralId?: number;
     generalCommands?: Array<{
       unitUid: string;
-      action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
+      action: 'attack' | 'skill' | 'defend' | 'item';
       targetUid?: string;
       skillId?: string;
       itemId?: string;

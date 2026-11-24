@@ -526,7 +526,6 @@ export interface BattleUnit {
   spd: number;
   alive: boolean;
   defending: boolean;
-  protectingUid?: string | null;
   position: number;
   statuses: UnitStatus[];
   resist?: {
@@ -545,8 +544,6 @@ export interface BattleActionLog {
     | 'attack'
     | 'skill'
     | 'defend'
-    | 'protect'
-    | 'summon'
     | 'item'
     | 'capture'
     | 'flee'

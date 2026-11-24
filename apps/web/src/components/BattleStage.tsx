@@ -15,18 +15,17 @@ import { ChatDock } from './ChatDock';
 
 interface GeneralCommandInput {
   unitUid: string;
-  action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
+  action: 'attack' | 'skill' | 'defend' | 'item';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
 }
 
 interface HeroCommandInput {
-  action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
+  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
-  summonGeneralId?: number;
 }
 
 interface BattleStageProps {
@@ -642,7 +641,7 @@ export function BattleStage({
       setBusy(true);
       setSubMenu('none');
       setPendingItemId(null);
-      if (heroCmd.action !== 'flee' && heroCmd.action !== 'summon') {
+      if (heroCmd.action !== 'flee') {
         setLastRoundCmd({ hero: heroCmd, generals: generalCmds });
       }
       try {
@@ -700,10 +699,7 @@ export function BattleStage({
 
       const heroCmd = queuedHeroCmd ?? { action: 'attack', targetUid: selectedTargetUid };
       const gAction: GeneralCommandInput['action'] =
-        cmd.action === 'skill' ||
-        cmd.action === 'defend' ||
-        cmd.action === 'protect' ||
-        cmd.action === 'item'
+        cmd.action === 'skill' || cmd.action === 'defend' || cmd.action === 'item'
           ? cmd.action
           : 'attack';
       const nextGeneralCmds: GeneralCommandInput[] = [
@@ -712,7 +708,7 @@ export function BattleStage({
           unitUid: activeUnit.uid,
           action: gAction,
           targetUid:
-            gAction === 'item' || gAction === 'protect'
+            gAction === 'item'
               ? cmd.targetUid
               : gAction === 'skill' && SKILLS.find((s) => s.id === cmd.skillId)?.kind === 'heal'
                 ? cmd.targetUid

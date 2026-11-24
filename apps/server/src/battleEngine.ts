@@ -111,37 +111,11 @@ function getEffectiveSpd(u: BattleUnit): number {
 }
 
 function applyIncomingDamage(
-  battle: ActiveBattle,
   target: BattleUnit,
   rawDamage: number,
   loyaltyPenaltyIds: Set<number>,
-): { actualDamage: number; protector?: BattleUnit; protectorDamage?: number } {
+): { actualDamage: number } {
   const scaled = hasStatus(target, 'def_down') ? Math.round(rawDamage * 1.28) : rawDamage;
-  // Check if an alive teammate is protecting this target
-  const protector = battle.units.find(
-    (u) =>
-      u.alive &&
-      u.side === target.side &&
-      u.uid !== target.uid &&
-      u.protectingUid === target.uid,
-  );
-  if (protector) {
-    const takenByTarget = Math.max(1, Math.round(scaled * 0.42));
-    const takenByProtector = Math.max(1, Math.round(scaled * 0.45));
-    target.hp = Math.max(0, target.hp - takenByTarget);
-    if (target.hp === 0) {
-      target.alive = false;
-      if (target.side === 'player' && target.generalId) loyaltyPenaltyIds.add(target.generalId);
-    }
-    protector.hp = Math.max(0, protector.hp - takenByProtector);
-    if (protector.hp === 0) {
-      protector.alive = false;
-      if (protector.side === 'player' && protector.generalId) {
-        loyaltyPenaltyIds.add(protector.generalId);
-      }
-    }
-    return { actualDamage: takenByTarget, protector, protectorDamage: takenByProtector };
-  }
   target.hp = Math.max(0, target.hp - scaled);
   if (target.hp === 0) {
     target.alive = false;
@@ -172,7 +146,6 @@ function buildPlayerGeneralUnit(g: GeneralView, position: number): BattleUnit {
     spd: g.spd,
     alive: true,
     defending: false,
-    protectingUid: null,
     position,
     statuses: [],
     resist: {
@@ -429,18 +402,17 @@ export function startArenaBattle(characterId: number, targetCharacterId: number)
 
 export interface GeneralBattleCommand {
   unitUid: string;
-  action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
+  action: 'attack' | 'skill' | 'defend' | 'item';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
 }
 
 export interface PlayerBattleCommand {
-  action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
+  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
-  summonGeneralId?: number;
   generalCommands?: GeneralBattleCommand[];
 }
 
@@ -460,30 +432,10 @@ export function performBattleAction(
   const loyaltyPenaltyIds = new Set<number>();
   for (const u of battle.units) {
     u.defending = false;
-    u.protectingUid = null;
   }
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
   const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId, ch.level);
-
-  // Pre-register protect intents before combat actions so protectors intercept hits cleanly
-  if (cmd.action === 'protect' && mainUnit.alive && !hasStatus(mainUnit, 'seal') && !hasStatus(mainUnit, 'chaos')) {
-    const protTarget = battle.units.find(
-      (u) => u.side === 'player' && u.alive && u.uid === cmd.targetUid && u.uid !== mainUnit.uid,
-    );
-    if (protTarget) mainUnit.protectingUid = protTarget.uid;
-  }
-  if (cmd.generalCommands) {
-    for (const gc of cmd.generalCommands) {
-      if (gc.action !== 'protect') continue;
-      const genUnit = battle.units.find((u) => u.uid === gc.unitUid && u.alive);
-      if (!genUnit || hasStatus(genUnit, 'seal') || hasStatus(genUnit, 'chaos')) continue;
-      const protTarget = battle.units.find(
-        (u) => u.side === 'player' && u.alive && u.uid === gc.targetUid && u.uid !== genUnit.uid,
-      );
-      if (protTarget) genUnit.protectingUid = protTarget.uid;
-    }
-  }
 
   const aliveActors = battle.units
     .filter((u) => u.alive)
@@ -516,19 +468,18 @@ export function performBattleAction(
       const others = battle.units.filter((u) => u.alive && u.uid !== actor.uid);
       const target = others[Math.floor(Math.random() * others.length)];
       if (target) {
-        const { damage, crit } = calcDamage(actor.atk, target.defending, 0.95, {
+        const { damage, crit } = calcDamage(getEffectiveAtk(actor), target.defending, 0.95, {
           resistPct: target.resist?.phys,
           targetTrapped: hasStatus(target, 'trap'),
         });
-        target.hp = Math.max(0, target.hp - damage);
-        if (target.hp === 0) target.alive = false;
+        const { actualDamage } = applyIncomingDamage(target, damage, loyaltyPenaltyIds);
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'status',
           effect: 'chaos',
-          targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
-          message: `${actor.name} 陷入【混乱】，胡乱攻击了 ${target.name}，造成 ${damage} 点伤害！`,
+          targets: [{ uid: target.uid, name: target.name, damage: actualDamage, crit, killed: !target.alive }],
+          message: `${actor.name} 陷入【混乱】，胡乱攻击了 ${target.name}，造成 ${actualDamage} 点伤害！`,
         });
       }
       continue;
@@ -565,84 +516,6 @@ export function performBattleAction(
           action: 'defend',
           targets: [],
           message: `${actor.name} 凝神防御，本回合所受伤害减半。`,
-        });
-        continue;
-      }
-
-      if (cmd.action === 'protect') {
-        const pt = battle.units.find((u) => u.uid === actor.protectingUid && u.alive);
-        if (pt) {
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'protect',
-            targets: [{ uid: pt.uid, name: pt.name, damage: 0 }],
-            message: `${actor.name} 挺身护卫 ${pt.name}，本回合替其分担伤害！`,
-          });
-        } else {
-          actor.defending = true;
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'defend',
-            targets: [],
-            message: `${actor.name} 未找到保护目标，转入凝神防御。`,
-          });
-        }
-        continue;
-      }
-
-      if (cmd.action === 'summon') {
-        const currentIds = new Set(
-          battle.units.filter((u) => u.side === 'player' && u.generalId).map((u) => u.generalId!),
-        );
-        const aliveGenUnits = battle.units.filter(
-          (u) => u.side === 'player' && !u.isMainRole && u.alive,
-        );
-        const deadGenUnits = battle.units.filter(
-          (u) => u.side === 'player' && !u.isMainRole && !u.alive,
-        );
-        const candidate = ch.generals.find(
-          (g) =>
-            (cmd.summonGeneralId ? g.id === cmd.summonGeneralId : true) &&
-            !currentIds.has(g.id),
-        );
-        if (!candidate) {
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'summon',
-            targets: [],
-            message: `${actor.name} 吹响号角，但营中已无可用备用副将！`,
-          });
-          continue;
-        }
-        if (aliveGenUnits.length >= 3) {
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'summon',
-            targets: [],
-            message: `阵中出战副将已满 3 人，无法再召唤新副将！`,
-          });
-          continue;
-        }
-        let targetPos = aliveGenUnits.length + 1;
-        if (deadGenUnits.length > 0) {
-          const dead = deadGenUnits[0];
-          targetPos = dead.position;
-          const idx = battle.units.indexOf(dead);
-          if (idx >= 0) battle.units.splice(idx, 1);
-        }
-        const spawned = buildPlayerGeneralUnit(candidate, targetPos);
-        battle.units.push(spawned);
-        logs.push({
-          actorUid: actor.uid,
-          actorName: actor.name,
-          action: 'summon',
-          effect: 'heal',
-          targets: [{ uid: spawned.uid, name: spawned.name, damage: 0, revived: true }],
-          message: `${actor.name} 召唤备用副将【${spawned.name}】披挂上阵！`,
         });
         continue;
       }
@@ -761,19 +634,18 @@ export function performBattleAction(
               actor.mp += skill.mpCost;
               const waitRounds = (battle.healCooldownUntilRound ?? 0) - battle.round;
               const fallbackTarget = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
-              const { damage, crit } = calcDamage(actor.atk, fallbackTarget.defending, 1.0, {
+              const { damage, crit } = calcDamage(getEffectiveAtk(actor), fallbackTarget.defending, 1.0, {
                 resistPct: fallbackTarget.resist?.phys,
                 targetTrapped: hasStatus(fallbackTarget, 'trap'),
               });
-              fallbackTarget.hp = Math.max(0, fallbackTarget.hp - damage);
-              if (fallbackTarget.hp === 0) fallbackTarget.alive = false;
+              const { actualDamage } = applyIncomingDamage(fallbackTarget, damage, loyaltyPenaltyIds);
               logs.push({
                 actorUid: actor.uid,
                 actorName: actor.name,
                 action: 'attack',
                 effect: 'slash',
-                targets: [{ uid: fallbackTarget.uid, name: fallbackTarget.name, damage, crit, killed: !fallbackTarget.alive }],
-                message: `【${skill.name}】调息中（剩余 ${waitRounds} 回合），${actor.name} 改以普攻攻击 ${fallbackTarget.name}，造成 ${damage} 点伤害！`,
+                targets: [{ uid: fallbackTarget.uid, name: fallbackTarget.name, damage: actualDamage, crit, killed: !fallbackTarget.alive }],
+                message: `【${skill.name}】调息中（剩余 ${waitRounds} 回合），${actor.name} 改以普攻攻击 ${fallbackTarget.name}，造成 ${actualDamage} 点伤害！`,
               });
               continue;
             }
@@ -838,7 +710,7 @@ export function performBattleAction(
                 resistPct: t.resist?.magic,
                 targetTrapped: hasStatus(t, 'trap'),
               });
-              const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+              const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
               let poisoned = false;
               if (t.alive) {
                 applyStatus(t, 'poison', pTurns, Math.round(heroAtk * 0.42));
@@ -875,7 +747,7 @@ export function performBattleAction(
               resistPct: primary.resist?.phys,
               targetTrapped: hasStatus(primary, 'trap'),
             });
-            const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
+            const { actualDamage } = applyIncomingDamage(primary, damage, loyaltyPenaltyIds);
             if (primary.alive) applyStatus(primary, 'def_down', dTurns);
             logs.push({
               actorUid: actor.uid,
@@ -942,7 +814,7 @@ export function performBattleAction(
                 resistPct: primary.resist?.phys,
                 targetTrapped: hasStatus(primary, 'trap'),
               });
-              const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
+              const { actualDamage } = applyIncomingDamage(primary, damage, loyaltyPenaltyIds);
               totalDmg += actualDamage;
               anyCrit = anyCrit || crit;
             }
@@ -982,7 +854,7 @@ export function performBattleAction(
               resistPct,
               targetTrapped: hasStatus(t, 'trap'),
             });
-            const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+            const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
             return { uid: t.uid, name: t.name, damage: actualDamage, crit, killed: !t.alive };
           });
           logs.push({
@@ -1018,7 +890,7 @@ export function performBattleAction(
         resistPct: target.resist?.phys,
         targetTrapped: hasStatus(target, 'trap'),
       });
-      const { actualDamage } = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
+      const { actualDamage } = applyIncomingDamage(target, damage, loyaltyPenaltyIds);
       logs.push({
         actorUid: actor.uid,
         actorName: actor.name,
@@ -1057,29 +929,6 @@ export function performBattleAction(
             targets: [],
             message: `副将 ${actor.name} 凝神防御，本回合所受伤害减半。`,
           });
-          continue;
-        }
-
-        if (gCmd.action === 'protect') {
-          const pt = battle.units.find((u) => u.uid === actor.protectingUid && u.alive);
-          if (pt) {
-            logs.push({
-              actorUid: actor.uid,
-              actorName: actor.name,
-              action: 'protect',
-              targets: [{ uid: pt.uid, name: pt.name, damage: 0 }],
-              message: `副将 ${actor.name} 挺身护卫 ${pt.name}！`,
-            });
-          } else {
-            actor.defending = true;
-            logs.push({
-              actorUid: actor.uid,
-              actorName: actor.name,
-              action: 'defend',
-              targets: [],
-              message: `副将 ${actor.name} 转入防御姿态。`,
-            });
-          }
           continue;
         }
 
@@ -1216,23 +1065,23 @@ export function performBattleAction(
             }
             if (chosenSkill.kind === 'poison') {
               const pTurns = chosenSkill.debuffTurns ?? 3;
+              const genAtk = getEffectiveAtk(actor);
               const targets = [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, 3);
               const targetResults = targets.map((t) => {
-                const { damage, crit } = calcDamage(actor.atk, t.defending, chosenSkill.power, {
+                const { damage, crit } = calcDamage(genAtk, t.defending, chosenSkill.power, {
                   resistPct: t.resist?.magic,
                   targetTrapped: hasStatus(t, 'trap'),
                 });
-                t.hp = Math.max(0, t.hp - damage);
-                if (t.hp === 0) t.alive = false;
+                const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
                 let poisoned = false;
                 if (t.alive) {
-                  applyStatus(t, 'poison', pTurns, Math.round(actor.atk * 0.42));
+                  applyStatus(t, 'poison', pTurns, Math.round(genAtk * 0.42));
                   poisoned = true;
                 }
                 return {
                   uid: t.uid,
                   name: t.name,
-                  damage,
+                  damage: actualDamage,
                   crit,
                   killed: !t.alive,
                   appliedStatus: poisoned ? ('poison' as BattleStatusKind) : undefined,
@@ -1252,12 +1101,11 @@ export function performBattleAction(
             }
             if (chosenSkill.kind === 'debuff') {
               const dTurns = chosenSkill.debuffTurns ?? 2;
-              const { damage, crit } = calcDamage(actor.atk, primary.defending, chosenSkill.power, {
+              const { damage, crit } = calcDamage(getEffectiveAtk(actor), primary.defending, chosenSkill.power, {
                 resistPct: primary.resist?.phys,
                 targetTrapped: hasStatus(primary, 'trap'),
               });
-              primary.hp = Math.max(0, primary.hp - damage);
-              if (primary.hp === 0) primary.alive = false;
+              const { actualDamage } = applyIncomingDamage(primary, damage, loyaltyPenaltyIds);
               if (primary.alive) applyStatus(primary, 'def_down', dTurns);
               logs.push({
                 actorUid: actor.uid,
@@ -1270,13 +1118,13 @@ export function performBattleAction(
                   {
                     uid: primary.uid,
                     name: primary.name,
-                    damage,
+                    damage: actualDamage,
                     crit,
                     killed: !primary.alive,
                     appliedStatus: primary.alive ? 'def_down' : undefined,
                   },
                 ],
-                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，重创 ${primary.name} ${damage} 点并击碎护甲！`,
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，重创 ${primary.name} ${actualDamage} 点并击碎护甲！`,
               });
               continue;
             }
@@ -1284,17 +1132,17 @@ export function performBattleAction(
               ? [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, 3)
               : [primary];
             const hits = chosenSkill.kind === 'multi_hit' ? chosenSkill.hitCount ?? 2 : 1;
+            const genAtk = getEffectiveAtk(actor);
             const targetResults = targets.map((t) => {
               let totalDmg = 0;
               let anyCrit = false;
               for (let h = 0; h < hits && t.alive; h++) {
-                const { damage, crit } = calcDamage(actor.atk, t.defending, chosenSkill.power, {
+                const { damage, crit } = calcDamage(genAtk, t.defending, chosenSkill.power, {
                   resistPct: chosenSkill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys,
                   targetTrapped: hasStatus(t, 'trap'),
                 });
-                t.hp = Math.max(0, t.hp - damage);
-                if (t.hp === 0) t.alive = false;
-                totalDmg += damage;
+                const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
+                totalDmg += actualDamage;
                 anyCrit = anyCrit || crit;
               }
               return { uid: t.uid, name: t.name, damage: totalDmg, crit: anyCrit, killed: !t.alive };
@@ -1326,19 +1174,18 @@ export function performBattleAction(
           continue;
         }
         const manualTarget = aliveEnemies.find((e) => e.uid === gCmd.targetUid) ?? aliveEnemies[0];
-        const { damage, crit } = calcDamage(actor.atk, manualTarget.defending, 1.05, {
+        const { damage, crit } = calcDamage(getEffectiveAtk(actor), manualTarget.defending, 1.05, {
           resistPct: manualTarget.resist?.phys,
           targetTrapped: hasStatus(manualTarget, 'trap'),
         });
-        manualTarget.hp = Math.max(0, manualTarget.hp - damage);
-        if (manualTarget.hp === 0) manualTarget.alive = false;
+        const { actualDamage } = applyIncomingDamage(manualTarget, damage, loyaltyPenaltyIds);
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'attack',
           effect: 'slash',
-          targets: [{ uid: manualTarget.uid, name: manualTarget.name, damage, crit, killed: !manualTarget.alive }],
-          message: `副将 ${actor.name} 出击 ${manualTarget.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
+          targets: [{ uid: manualTarget.uid, name: manualTarget.name, damage: actualDamage, crit, killed: !manualTarget.alive }],
+          message: `副将 ${actor.name} 出击 ${manualTarget.name}${crit ? '（暴击！）' : ''}，造成 ${actualDamage} 点伤害！`,
         });
         continue;
       }
@@ -1399,19 +1246,19 @@ export function performBattleAction(
         }
         if (sigSkill.kind === 'poison') {
           const pTurns = sigSkill.debuffTurns ?? 3;
+          const genAtk = getEffectiveAtk(actor);
           const targets = aliveEnemies.slice(0, 3);
           const targetResults = targets.map((t) => {
-            const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+            const { damage, crit } = calcDamage(genAtk, t.defending, sigSkill.power, {
               resistPct: t.resist?.magic,
               targetTrapped: hasStatus(t, 'trap'),
             });
-            t.hp = Math.max(0, t.hp - damage);
-            if (t.hp === 0) t.alive = false;
-            if (t.alive) applyStatus(t, 'poison', pTurns, Math.round(actor.atk * 0.42));
+            const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
+            if (t.alive) applyStatus(t, 'poison', pTurns, Math.round(genAtk * 0.42));
             return {
               uid: t.uid,
               name: t.name,
-              damage,
+              damage: actualDamage,
               crit,
               killed: !t.alive,
               appliedStatus: t.alive ? ('poison' as BattleStatusKind) : undefined,
@@ -1431,12 +1278,11 @@ export function performBattleAction(
         }
         if (sigSkill.kind === 'debuff') {
           const t = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
-          const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+          const { damage, crit } = calcDamage(getEffectiveAtk(actor), t.defending, sigSkill.power, {
             resistPct: t.resist?.phys,
             targetTrapped: hasStatus(t, 'trap'),
           });
-          t.hp = Math.max(0, t.hp - damage);
-          if (t.hp === 0) t.alive = false;
+          const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
           if (t.alive) applyStatus(t, 'def_down', sigSkill.debuffTurns ?? 2);
           logs.push({
             actorUid: actor.uid,
@@ -1449,7 +1295,7 @@ export function performBattleAction(
               {
                 uid: t.uid,
                 name: t.name,
-                damage,
+                damage: actualDamage,
                 crit,
                 killed: !t.alive,
                 appliedStatus: t.alive ? 'def_down' : undefined,
@@ -1483,17 +1329,17 @@ export function performBattleAction(
           ? aliveEnemies.slice(0, 3)
           : [aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)]];
         const hits = sigSkill.kind === 'multi_hit' ? sigSkill.hitCount ?? 2 : 1;
+        const genAtk = getEffectiveAtk(actor);
         const targetResults = targets.map((t) => {
           let totalDmg = 0;
           let anyCrit = false;
           for (let h = 0; h < hits && t.alive; h++) {
-            const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+            const { damage, crit } = calcDamage(genAtk, t.defending, sigSkill.power, {
               resistPct: sigSkill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys,
               targetTrapped: hasStatus(t, 'trap'),
             });
-            t.hp = Math.max(0, t.hp - damage);
-            if (t.hp === 0) t.alive = false;
-            totalDmg += damage;
+            const { actualDamage } = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
+            totalDmg += actualDamage;
             anyCrit = anyCrit || crit;
           }
           return { uid: t.uid, name: t.name, damage: totalDmg, crit: anyCrit, killed: !t.alive };
@@ -1523,19 +1369,18 @@ export function performBattleAction(
         continue;
       }
       const target = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
-      const { damage, crit } = calcDamage(actor.atk, target.defending, 1.05, {
+      const { damage, crit } = calcDamage(getEffectiveAtk(actor), target.defending, 1.05, {
         resistPct: target.resist?.phys,
         targetTrapped: hasStatus(target, 'trap'),
       });
-      target.hp = Math.max(0, target.hp - damage);
-      if (target.hp === 0) target.alive = false;
+      const { actualDamage } = applyIncomingDamage(target, damage, loyaltyPenaltyIds);
       logs.push({
         actorUid: actor.uid,
         actorName: actor.name,
         action: 'attack',
         effect: 'slash',
-        targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
-        message: `副将 ${actor.name} 出击 ${target.name}，造成 ${damage} 点伤害！`,
+        targets: [{ uid: target.uid, name: target.name, damage: actualDamage, crit, killed: !target.alive }],
+        message: `副将 ${actor.name} 出击 ${target.name}，造成 ${actualDamage} 点伤害！`,
       });
     } else {
       // Enemy AI (smarter high-level & boss AOE / control / heavy cleave + endgame armor-pierce & enrage)
@@ -1569,7 +1414,7 @@ export function performBattleAction(
       } else if (battle.enemyGroupId.startsWith('world_boss:')) {
         resPen = actor.level >= 25 ? 18 : 10;
       }
-      const effAtk = Math.round(actor.atk * enrageMult);
+      const effAtk = Math.round(getEffectiveAtk(actor) * enrageMult);
 
       const useControl = actor.roleClass === 'wenren' && actor.mp >= 20 && Math.random() < (isStrong ? 0.42 : 0.32);
       const useMagic = actor.roleClass !== 'wushi' && actor.mp >= 20 && Math.random() < (isStrong ? 0.48 : 0.35);
@@ -1614,16 +1459,8 @@ export function performBattleAction(
             resistPct: Math.max(0, (t.resist?.magic ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+          const res = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
           targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
-          if (res.protector && res.protectorDamage) {
-            targetResults.push({
-              uid: res.protector.uid,
-              name: res.protector.name,
-              damage: res.protectorDamage,
-              killed: !res.protector.alive,
-            });
-          }
         }
         logs.push({
           actorUid: actor.uid,
@@ -1644,16 +1481,8 @@ export function performBattleAction(
             resistPct: Math.max(0, (t.resist?.phys ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+          const res = applyIncomingDamage(t, damage, loyaltyPenaltyIds);
           targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
-          if (res.protector && res.protectorDamage) {
-            targetResults.push({
-              uid: res.protector.uid,
-              name: res.protector.name,
-              damage: res.protectorDamage,
-              killed: !res.protector.alive,
-            });
-          }
         }
         logs.push({
           actorUid: actor.uid,
@@ -1680,27 +1509,14 @@ export function performBattleAction(
           resistPct: Math.max(0, (target.resist?.phys ?? 0) - resPen),
           targetTrapped: hasStatus(target, 'trap'),
         });
-        const res = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
-        const tList: BattleActionLog['targets'] = [
-          { uid: target.uid, name: target.name, damage: res.actualDamage, crit, killed: !target.alive },
-        ];
-        if (res.protector && res.protectorDamage) {
-          tList.push({
-            uid: res.protector.uid,
-            name: res.protector.name,
-            damage: res.protectorDamage,
-            killed: !res.protector.alive,
-          });
-        }
+        const res = applyIncomingDamage(target, damage, loyaltyPenaltyIds);
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'attack',
           effect: 'slash',
-          targets: tList,
-          message: res.protector
-            ? `${actor.name} 攻击 ${target.name}，${res.protector.name} 挺身护卫分担了 ${res.protectorDamage} 点伤害！`
-            : `${actor.name} 攻击 ${target.name}，造成 ${res.actualDamage} 点伤害！`,
+          targets: [{ uid: target.uid, name: target.name, damage: res.actualDamage, crit, killed: !target.alive }],
+          message: `${actor.name} 攻击 ${target.name}，造成 ${res.actualDamage} 点伤害！`,
         });
       }
     }
