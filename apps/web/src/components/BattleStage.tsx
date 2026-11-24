@@ -41,9 +41,23 @@ interface BattleStageProps {
 
 interface FloatingNum {
   uid: string;
-  text: string;
+  kind: 'damage' | 'heal' | 'miss' | 'text';
+  value?: number;
+  crit?: boolean;
+  subText?: string;
+  text?: string;
   color: string;
   createdAt: number;
+}
+
+interface ActiveDash {
+  actorUid: string;
+  targetUid: string;
+  startedAt: number;
+  dashMs: number;
+  strikeMs: number;
+  returnMs: number;
+  hits: number;
 }
 
 interface ActiveFx {
@@ -60,7 +74,9 @@ interface ActiveFx {
     | 'poison'
     | 'buff_atk'
     | 'buff_spd'
-    | 'revive';
+    | 'revive'
+    | 'cast_gold'
+    | 'cast_purple';
   startedAt: number;
   duration: number;
 }
@@ -85,11 +101,14 @@ const FX_PRELOAD_LIST = [
   'smoke.png',
   'f_stat.png',
   'dead_1.png',
+  'num.png',
+  'num2.png',
+  'wz.png',
 ];
 
 type SpriteFrame = readonly [number, number, number, number];
 
-// Exact pixel-verified frame rectangles from official HXSG PNG sprite sheets
+// Exact tRNS-verified frame rectangles from official HXSG PNG sprite sheets
 const SPRITE_FRAMES = {
   // 3-frame vertical thunderbolt (f_sd.png 96x71)
   thunder: [
@@ -105,27 +124,28 @@ const SPRITE_FRAMES = {
   ] as readonly SpriteFrame[],
   // Clean right-side blue starburst hit spark (fg.png 92x68 -> x=27..92)
   starburst: [[27, 0, 65, 68]] as readonly SpriteFrame[],
-  // 4-frame golden light pillar for heal / buff (fg2.png 104x28)
+  // 4-frame golden light pillar (fg2.png 104x28, pixel-verified cuts)
   goldLight: [
-    [0, 0, 26, 28],
-    [26, 0, 26, 28],
-    [52, 0, 26, 28],
-    [78, 0, 26, 28],
+    [0, 0, 24, 28],
+    [26, 0, 28, 28],
+    [54, 0, 22, 28],
+    [78, 0, 25, 28],
   ] as readonly SpriteFrame[],
-  // 4-frame purple magic aura for control / poison (fg3.png 166x33)
+  // 5-frame purple magic aura (fg3.png 166x33, pixel-verified zero-gap cuts)
   purpleAura: [
-    [0, 0, 40, 33],
-    [40, 0, 38, 33],
-    [78, 0, 47, 33],
-    [125, 0, 41, 33],
+    [0, 0, 39, 33],
+    [40, 0, 37, 33],
+    [78, 0, 34, 33],
+    [114, 0, 24, 33],
+    [139, 0, 27, 33],
   ] as readonly SpriteFrame[],
-  // 3-frame ice-blue energy wave for 排山倒海 / 疾风咒 / 破甲 (pi_fl.png 86x35)
+  // 3-frame ice-blue energy wave (pi_fl.png 86x35)
   blueWave: [
     [0, 0, 30, 35],
     [30, 0, 32, 35],
     [62, 0, 24, 35],
   ] as readonly SpriteFrame[],
-  // 4-frame luminous spirit flame for revive / summon (dead_fl.png 111x43)
+  // 4-frame luminous spirit flame (dead_fl.png 111x43)
   spiritFlame: [
     [0, 0, 31, 43],
     [31, 0, 30, 43],
@@ -135,14 +155,43 @@ const SPRITE_FRAMES = {
   // 2-frame red hit blood splash (blood.png 38x22)
   blood: [
     [0, 0, 22, 22],
-    [22, 0, 16, 22],
+    [23, 0, 15, 22],
   ] as readonly SpriteFrame[],
   // 3-frame dash dust puff (smoke.png 60x12)
   smoke: [
     [0, 0, 20, 12],
-    [21, 0, 19, 12],
-    [40, 0, 20, 12],
+    [22, 0, 17, 12],
+    [41, 0, 17, 12],
   ] as readonly SpriteFrame[],
+};
+
+// Exact pixel-verified digit rectangles in official num.png (damage) & num2.png (heal)
+const NUM_GLYPHS_DMG: Record<string, SpriteFrame> = {
+  '0': [0, 0, 36, 50],
+  '1': [50, 0, 22, 50],
+  '2': [86, 0, 36, 50],
+  '3': [126, 0, 36, 50],
+  '4': [162, 0, 36, 50],
+  '5': [198, 0, 36, 50],
+  '6': [243, 0, 36, 50],
+  '7': [284, 0, 36, 50],
+  '8': [324, 0, 36, 50],
+  '9': [365, 0, 36, 50],
+  '-': [405, 0, 41, 50],
+};
+
+const NUM_GLYPHS_HEAL: Record<string, SpriteFrame> = {
+  '0': [0, 0, 36, 50],
+  '1': [50, 0, 22, 50],
+  '2': [86, 0, 36, 50],
+  '3': [126, 0, 36, 50],
+  '4': [162, 0, 36, 50],
+  '5': [203, 0, 36, 50],
+  '6': [243, 0, 36, 50],
+  '7': [279, 0, 36, 50],
+  '8': [324, 0, 36, 50],
+  '9': [365, 0, 36, 50],
+  '-': [405, 0, 41, 50],
 };
 
 // Official status glyphs in f_stat.png (118x19): 封 围 攻 乱 毒 速 隐 固
@@ -212,11 +261,14 @@ export function BattleStage({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(30);
+  const [isReplaying, setIsReplaying] = useState(false);
 
   const fxRef = useRef<ActiveFx[]>([]);
   const floatsRef = useRef<FloatingNum[]>([]);
   const calloutsRef = useRef<SkillCallout[]>([]);
+  const dashesRef = useRef<ActiveDash[]>([]);
   const hurtRef = useRef<Map<string, number>>(new Map());
+  const dyingUntilRef = useRef<Map<string, number>>(new Map());
   const lungeRef = useRef<Map<string, number>>(new Map());
   const imgCacheRef = useRef<Map<string, HTMLImageElement | null>>(new Map());
   const timeoutFiredRoundRef = useRef<number>(0);
@@ -313,13 +365,26 @@ export function BattleStage({
     }
   }, [aliveEnemies, selectedTargetUid]);
 
-  // Trigger authentic sequential pixel VFX, hit shake, caster skill banners & floating numbers
+  // Trigger authentic classic HXSG sequential choreography:
+  // - Melee strikes charge directly to target, slash with blood + starburst, then return
+  // - Magic/skills flash caster aura first, then strike targets with pixel sprite VFX & pixel numbers
   useEffect(() => {
     if (!battle.lastLogs.length) return;
     const now = performance.now();
-    battle.lastLogs.forEach((log: BattleActionLog, idx: number) => {
-      const delay = idx * 380;
-      lungeRef.current.set(log.actorUid, now + delay);
+    let cursor = 0;
+
+    const stMap: Record<BattleStatusKind, { text: string; color: string }> = {
+      chaos: { text: '混乱!', color: '#ff7cf0' },
+      seal: { text: '封印!', color: '#7ce2ff' },
+      trap: { text: '围困!', color: '#ffd26b' },
+      poison: { text: '中毒!', color: '#7dff7a' },
+      atk_up: { text: '攻↑', color: '#ff8a5c' },
+      spd_up: { text: '速↑', color: '#70f3ff' },
+      def_down: { text: '破甲!', color: '#ffb35c' },
+    };
+
+    battle.lastLogs.forEach((log: BattleActionLog) => {
+      const startAt = now + cursor;
 
       if (log.skillName) {
         const callColor =
@@ -336,30 +401,122 @@ export function BattleStage({
           uid: log.actorUid,
           label: `【${log.skillName}】`,
           color: callColor,
-          startedAt: now + delay,
-          duration: 780,
+          startedAt: startAt,
+          duration: 760,
         });
       } else if (log.action === 'summon') {
         calloutsRef.current.push({
           uid: log.actorUid,
           label: '【招将上阵】',
           color: '#ffe875',
-          startedAt: now + delay,
-          duration: 780,
+          startedAt: startAt,
+          duration: 760,
         });
       } else if (log.action === 'protect') {
         calloutsRef.current.push({
           uid: log.actorUid,
           label: '【护卫】',
           color: '#8ce6ff',
-          startedAt: now + delay,
-          duration: 700,
+          startedAt: startAt,
+          duration: 680,
         });
       }
 
-      for (const t of log.targets) {
+      const isMelee =
+        (log.action === 'attack' ||
+          log.skillId === 'liandao' ||
+          log.skillId === 'lianji' ||
+          log.skillId === 'pojia') &&
+        log.targets.length > 0;
+
+      if (isMelee) {
+        const primary = log.targets[0];
+        const hits = log.skillId === 'lianji' ? 2 : 1;
+        const dashMs = 150;
+        const strikeMs = hits > 1 ? 350 : 210;
+        const returnMs = 140;
+
+        dashesRef.current.push({
+          actorUid: log.actorUid,
+          targetUid: primary.uid,
+          startedAt: startAt,
+          dashMs,
+          strikeMs,
+          returnMs,
+          hits,
+        });
+
+        for (let hIdx = 0; hIdx < hits; hIdx++) {
+          const hitAt = startAt + dashMs + 25 + hIdx * 165;
+          if (primary.damage > 0) {
+            hurtRef.current.set(primary.uid, hitAt);
+          }
+          if (primary.killed && hIdx === hits - 1) {
+            dyingUntilRef.current.set(primary.uid, hitAt + 320);
+          }
+          fxRef.current.push({
+            uid: primary.uid,
+            effect: 'slash',
+            startedAt: hitAt,
+            duration: 280,
+          });
+          if (primary.damage > 0) {
+            const perHitDmg =
+              hits === 1
+                ? primary.damage
+                : hIdx === 0
+                  ? Math.floor(primary.damage / 2)
+                  : primary.damage - Math.floor(primary.damage / 2);
+            const subText =
+              hIdx === hits - 1 && primary.appliedStatus
+                ? stMap[primary.appliedStatus].text
+                : undefined;
+            floatsRef.current.push({
+              uid: primary.uid,
+              kind: 'damage',
+              value: perHitDmg,
+              crit: primary.crit,
+              subText,
+              color: primary.crit ? '#ffea4f' : '#ff4b4b',
+              createdAt: hitAt + 15,
+            });
+          } else if (primary.resisted) {
+            floatsRef.current.push({
+              uid: primary.uid,
+              kind: 'miss',
+              color: '#ffe46b',
+              createdAt: hitAt + 15,
+            });
+          }
+        }
+        cursor += dashMs + strikeMs + returnMs + 30;
+        return;
+      }
+
+      // Non-melee action: caster startup pose + cast aura -> target impact
+      lungeRef.current.set(log.actorUid, startAt);
+      if (log.action === 'skill') {
+        const isPurpleCast =
+          log.effect === 'chaos' ||
+          log.effect === 'seal' ||
+          log.effect === 'trap' ||
+          log.skillId === 'wudu';
+        fxRef.current.push({
+          uid: log.actorUid,
+          effect: isPurpleCast ? 'cast_purple' : 'cast_gold',
+          startedAt: startAt,
+          duration: 260,
+        });
+      }
+
+      const impactBase = startAt + (log.action === 'skill' ? 165 : 70);
+      log.targets.forEach((t, tIdx) => {
+        const impactAt = impactBase + tIdx * 55;
         if (t.damage > 0) {
-          hurtRef.current.set(t.uid, now + delay + 90);
+          hurtRef.current.set(t.uid, impactAt + 20);
+        }
+        if (t.killed) {
+          dyingUntilRef.current.set(t.uid, impactAt + 360);
         }
         let fxType: ActiveFx['effect'] | null = log.effect ?? null;
         if (t.revived) fxType = 'revive';
@@ -370,75 +527,87 @@ export function BattleStage({
           fxRef.current.push({
             uid: t.uid,
             effect: fxType,
-            startedAt: now + delay + 60,
-            duration: fxType === 'slash' ? 380 : 540,
+            startedAt: impactAt,
+            duration: fxType === 'slash' ? 320 : 540,
           });
         }
 
         if (t.revived) {
           floatsRef.current.push({
             uid: t.uid,
-            text: t.heal ? `复活 +${t.heal}` : '上阵!',
-            color: '#ffe966',
-            createdAt: now + delay + 80,
+            kind: t.heal && t.heal > 0 ? 'heal' : 'text',
+            value: t.heal,
+            subText: t.heal ? '复活' : undefined,
+            text: t.heal ? undefined : '上阵!',
+            color: '#76ff88',
+            createdAt: impactAt + 35,
           });
         } else if (t.heal && t.heal > 0) {
           floatsRef.current.push({
             uid: t.uid,
-            text: `+${t.heal}`,
+            kind: 'heal',
+            value: t.heal,
             color: '#76ff88',
-            createdAt: now + delay + 80,
+            createdAt: impactAt + 35,
           });
         } else if (t.appliedStatus) {
-          const stMap: Record<BattleStatusKind, { text: string; color: string }> = {
-            chaos: { text: '混乱!', color: '#ff7cf0' },
-            seal: { text: '封印!', color: '#7ce2ff' },
-            trap: { text: '围困!', color: '#ffd26b' },
-            poison: { text: '中毒!', color: '#7dff7a' },
-            atk_up: { text: '攻↑', color: '#ff8a5c' },
-            spd_up: { text: '速↑', color: '#70f3ff' },
-            def_down: { text: '破甲!', color: '#ffb35c' },
-          };
           const stInfo = stMap[t.appliedStatus];
           if (t.damage > 0) {
             floatsRef.current.push({
               uid: t.uid,
-              text: `${t.crit ? '暴 ' : ''}-${t.damage} ${stInfo.text}`,
+              kind: 'damage',
+              value: t.damage,
+              crit: t.crit,
+              subText: stInfo.text,
               color: '#ffea4f',
-              createdAt: now + delay + 80,
+              createdAt: impactAt + 35,
             });
           } else {
             floatsRef.current.push({
               uid: t.uid,
+              kind: 'text',
               text: stInfo.text,
               color: stInfo.color,
-              createdAt: now + delay + 80,
+              createdAt: impactAt + 35,
             });
           }
         } else if (t.resisted) {
           floatsRef.current.push({
             uid: t.uid,
-            text: '抵抗',
-            color: '#d9e3ff',
-            createdAt: now + delay + 80,
+            kind: 'miss',
+            color: '#ffe46b',
+            createdAt: impactAt + 35,
           });
         } else if (t.captured) {
           floatsRef.current.push({
             uid: t.uid,
+            kind: 'text',
             text: '招降成功!',
             color: '#ffe863',
-            createdAt: now + delay + 80,
+            createdAt: impactAt + 35,
           });
         } else if (t.damage > 0) {
           floatsRef.current.push({
             uid: t.uid,
-            text: `${t.crit ? '暴击 ' : ''}-${t.damage}`,
+            kind: 'damage',
+            value: t.damage,
+            crit: t.crit,
             color: t.crit ? '#ffea4f' : '#ff4b4b',
-            createdAt: now + delay + 80,
+            createdAt: impactAt + 35,
           });
         }
-      }
+      });
+
+      cursor +=
+        log.targets.length > 0
+          ? 420 + Math.min(3, log.targets.length - 1) * 55
+          : 240;
     });
+
+    const totalMs = Math.min(3600, cursor + 220);
+    setIsReplaying(true);
+    const timer = window.setTimeout(() => setIsReplaying(false), totalMs);
+    return () => window.clearTimeout(timer);
   }, [battle.lastLogs, battle.round]);
 
   const submitRound = useCallback(
@@ -709,10 +878,28 @@ export function BattleStage({
       const arrowImg = getImg('f_jt.png');
       const deadImg = getImg('dead_1.png');
 
-      // 2. Units (alive + fallen allied generals ghost marker so player knows they can revive!)
-      for (const u of battle.units) {
+      // Prune completed dashes and draw dashing attacker on top of other units
+      dashesRef.current = dashesRef.current.filter(
+        (d) => now - d.startedAt < d.dashMs + d.strikeMs + d.returnMs,
+      );
+      const activeDashByActor = new Map<string, ActiveDash>();
+      for (const d of dashesRef.current) {
+        if (now >= d.startedAt) activeDashByActor.set(d.actorUid, d);
+      }
+
+      const orderedUnits = [...battle.units].sort((a, b) => {
+        const da = activeDashByActor.has(a.uid) ? 1 : 0;
+        const db = activeDashByActor.has(b.uid) ? 1 : 0;
+        if (da !== db) return da - db;
+        return a.position - b.position;
+      });
+
+      // 2. Units (alive + dying units still completing hit animation + fallen allied generals ghost marker)
+      for (const u of orderedUnits) {
         const pos = getUnitCoords(u, w, h);
-        if (!u.alive) {
+        const dyingUntil = dyingUntilRef.current.get(u.uid) ?? 0;
+        const stillDying = !u.alive && now < dyingUntil;
+        if (!u.alive && !stillDying) {
           if (u.side === 'player' && !u.isMainRole) {
             ctx.save();
             ctx.globalAlpha = 0.72;
@@ -729,31 +916,84 @@ export function BattleStage({
           }
           continue;
         }
+        const dyingAlpha = stillDying ? Math.min(1, Math.max(0.15, (dyingUntil - now) / 160)) : 1;
 
-        const lungeAt = lungeRef.current.get(u.uid) ?? 0;
-        const lungeElapsed = now - lungeAt;
-        const isAttacking = lungeElapsed >= 0 && lungeElapsed < 340;
-        const lungeShift = isAttacking
-          ? Math.sin((lungeElapsed / 340) * Math.PI) * (u.side === 'player' ? -30 : 30)
-          : 0;
+        // Authentic classic HXSG melee charge-to-target & return interpolation
+        const dash = activeDashByActor.get(u.uid);
+        let dashX = pos.x;
+        let dashY = pos.y;
+        let isAttacking = false;
+        let showSmoke = false;
+        let smokeProgress = 0;
+
+        if (dash) {
+          const targetUnit = battle.units.find((x) => x.uid === dash.targetUid);
+          const tPos = targetUnit ? getUnitCoords(targetUnit, w, h) : pos;
+          const strikeX = tPos.x + (u.side === 'player' ? Math.round(22 * spriteScale) : -Math.round(22 * spriteScale));
+          const strikeY = tPos.y;
+          const el = now - dash.startedAt;
+
+          if (el < dash.dashMs) {
+            const p = el / dash.dashMs;
+            const ease = 1 - (1 - p) * (1 - p);
+            dashX = pos.x + (strikeX - pos.x) * ease;
+            dashY = pos.y + (strikeY - pos.y) * ease;
+            isAttacking = p > 0.6;
+            showSmoke = true;
+            smokeProgress = p;
+          } else if (el < dash.dashMs + dash.strikeMs) {
+            const sEl = el - dash.dashMs;
+            const swing =
+              dash.hits > 1
+                ? Math.sin((sEl / dash.strikeMs) * Math.PI * dash.hits) * (u.side === 'player' ? -8 : 8)
+                : Math.sin((sEl / dash.strikeMs) * Math.PI) * (u.side === 'player' ? -6 : 6);
+            dashX = strikeX + swing;
+            dashY = strikeY;
+            isAttacking = true;
+          } else {
+            const rP = Math.min(1, (el - dash.dashMs - dash.strikeMs) / dash.returnMs);
+            dashX = strikeX + (pos.x - strikeX) * rP;
+            dashY = strikeY + (pos.y - strikeY) * rP;
+          }
+        } else {
+          const lungeAt = lungeRef.current.get(u.uid) ?? 0;
+          const lungeElapsed = now - lungeAt;
+          if (lungeElapsed >= 0 && lungeElapsed < 280) {
+            isAttacking = true;
+            dashX = pos.x + Math.sin((lungeElapsed / 280) * Math.PI) * (u.side === 'player' ? -14 : 14);
+          }
+        }
 
         const hurtAt = hurtRef.current.get(u.uid) ?? 0;
         const hurtElapsed = now - hurtAt;
-        const isHurt = hurtElapsed >= 0 && hurtElapsed < 220;
-        const hurtShake = isHurt ? Math.sin(hurtElapsed * 0.16) * 4 : 0;
+        const isHurt = hurtElapsed >= 0 && hurtElapsed < 260;
+        const hurtRecoil = isHurt
+          ? Math.sin((hurtElapsed / 260) * Math.PI) * (u.side === 'enemy' ? -10 : 10) +
+            Math.sin(hurtElapsed * 0.22) * 3
+          : 0;
 
-        const bob = Math.sin(now / 280 + pos.x) > 0 ? 1 : 0;
-        const ux = Math.round(pos.x + lungeShift + hurtShake);
-        const uy = Math.round(pos.y);
+        const bob = dash ? 0 : Math.sin(now / 280 + pos.x) > 0 ? 1 : 0;
+        const ux = Math.round(dashX + hurtRecoil);
+        const uy = Math.round(dashY);
 
-        // Dash dust puff at feet when lunging forward
-        if (isAttacking && lungeElapsed < 220) {
+        // Dash dust puff at feet when launching forward across the battlefield
+        if (showSmoke) {
           const smoke = getImg('smoke.png');
           if (smoke) {
-            const sIdx = Math.min(2, Math.floor((lungeElapsed / 220) * 3));
+            const sIdx = Math.min(2, Math.floor(smokeProgress * 3));
             const [sx, sy, sw, sh] = SPRITE_FRAMES.smoke[sIdx];
-            const dustX = u.side === 'player' ? pos.x + 8 : pos.x - 28;
-            ctx.drawImage(smoke, sx, sy, sw, sh, Math.round(dustX), Math.round(uy - 10), Math.round(sw * 1.2), Math.round(sh * 1.2));
+            const dustX = u.side === 'player' ? pos.x + 4 : pos.x - Math.round(sw * 1.4);
+            ctx.drawImage(
+              smoke,
+              sx,
+              sy,
+              sw,
+              sh,
+              Math.round(dustX),
+              Math.round(pos.y - 12),
+              Math.round(sw * 1.35),
+              Math.round(sh * 1.35),
+            );
           }
         }
 
@@ -807,6 +1047,7 @@ export function BattleStage({
         const legs = getImg(`${u.spriteKey}_f.png`);
 
         ctx.save();
+        ctx.globalAlpha = dyingAlpha;
         ctx.translate(ux, uy);
         if (u.side === 'player') ctx.scale(-1, 1);
 
@@ -940,10 +1181,22 @@ export function BattleStage({
         ctx.save();
         ctx.globalAlpha = t > 0.78 ? 1 - (t - 0.78) / 0.22 : 1;
 
-        if (fx.effect === 'lei') {
-          // Official 3-frame thunderbolt f_sd.png striking down onto the target
+        if (fx.effect === 'cast_gold') {
+          // Classic caster startup aura (first 2 frames of fg2.png at caster's feet)
+          const fg2 = getImg('fg2.png');
+          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight.slice(0, 2), t, pos.x, pos.y + 4, 1.55 * fxZoom);
+        } else if (fx.effect === 'cast_purple') {
+          // Classic dark/control caster startup ring (first 2 frames of fg3.png)
+          const fg3 = getImg('fg3.png');
+          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura.slice(0, 2), t, pos.x, pos.y + 4, 1.4 * fxZoom);
+        } else if (fx.effect === 'lei') {
+          // Official 3-frame thunderbolt f_sd.png striking down + hit flash fg.png
           const sd = getImg('f_sd.png');
+          const fg = getImg('fg.png');
           drawSheetFrame(sd, SPRITE_FRAMES.thunder, t, pos.x, pos.y + 4, 1.55 * fxZoom);
+          if (fg && t > 0.25 && t < 0.72) {
+            drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 2, 0.52 * fxZoom);
+          }
         } else if (fx.effect === 'fire') {
           // Official 3-frame roaring flame fire.png
           const fire = getImg('fire.png');
@@ -958,25 +1211,18 @@ export function BattleStage({
             drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 4, sc);
           }
         } else if (fx.effect === 'slash') {
-          // Physical attack / 连环突刺 / 破甲重击: cropped blue starburst fg.png + 2-frame blood.png
+          // Physical melee impact: official 2-frame crimson blood.png + crisp fg.png flash
           const fg = getImg('fg.png');
           const blood = getImg('blood.png');
-          if (fg && t < 0.75) {
-            const sc = (0.58 + Math.sin((t / 0.75) * Math.PI) * 0.35) * fxZoom;
-            drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 2, sc);
+          if (fg && t < 0.65) {
+            const sc = (0.5 + Math.sin((t / 0.65) * Math.PI) * 0.3) * fxZoom;
+            drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y - 6 * fxZoom, sc);
           }
-          if (blood && t >= 0.15) {
-            drawSheetFrame(
-              blood,
-              SPRITE_FRAMES.blood,
-              (t - 0.15) / 0.85,
-              pos.x,
-              pos.y - 10 * fxZoom,
-              1.55 * fxZoom,
-            );
+          if (blood) {
+            drawSheetFrame(blood, SPRITE_FRAMES.blood, t, pos.x, pos.y - 12 * fxZoom, 1.6 * fxZoom);
           }
         } else if (fx.effect === 'heal' || fx.effect === 'buff_atk') {
-          // 妙手回春 / 吃药 / 魔神附体: official 4-frame golden light pillar fg2.png
+          // 妙手回春 / 吃药 / 魔神附体: exact 4-frame golden light pillar fg2.png
           const fg2 = getImg('fg2.png');
           drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.95 * fxZoom);
         } else if (fx.effect === 'buff_spd') {
@@ -995,9 +1241,9 @@ export function BattleStage({
           fx.effect === 'trap' ||
           fx.effect === 'poison'
         ) {
-          // 离间计 / 定身计 / 画地为牢 / 五毒攻心: official 4-frame purple magic aura fg3.png
+          // 离间计 / 定身计 / 画地为牢 / 五毒攻心: exact 5-frame purple magic aura fg3.png
           const fg3 = getImg('fg3.png');
-          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura, t, pos.x, pos.y + 4, 1.65 * fxZoom);
+          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura, t, pos.x, pos.y + 4, 1.7 * fxZoom);
         }
         ctx.restore();
       }
@@ -1017,7 +1263,7 @@ export function BattleStage({
         ctx.textAlign = 'center';
         const tw = ctx.measureText(co.label).width;
         const bx = Math.max(4, Math.min(w - tw - 14, pos.x - tw / 2 - 5));
-        const by = Math.max(6, pos.y - 78 - rise);
+        const by = Math.max(6, pos.y - Math.round(48 * spriteScale) - rise);
         ctx.fillStyle = 'rgba(26, 6, 32, 0.88)';
         ctx.fillRect(bx, by, tw + 10, 18);
         ctx.strokeStyle = co.color;
@@ -1028,22 +1274,121 @@ export function BattleStage({
         ctx.restore();
       }
 
-      // 4. Floating damage / heal numbers
-      floatsRef.current = floatsRef.current.filter((fl) => now - fl.createdAt < 1200);
+      // 4. Authentic Official Pixel Damage / Heal Numbers (num.png / num2.png) & Miss (wz.png)
+      const drawPixelDigits = (
+        sheet: HTMLImageElement,
+        glyphs: Record<string, SpriteFrame>,
+        str: string,
+        cx: number,
+        bottomY: number,
+        targetHeight: number,
+      ) => {
+        const scale = targetHeight / 50;
+        let totalW = 0;
+        const parts: SpriteFrame[] = [];
+        for (const ch of str) {
+          const g = glyphs[ch];
+          if (g) {
+            parts.push(g);
+            totalW += Math.round(g[2] * scale) + 1;
+          }
+        }
+        let x = Math.round(cx - totalW / 2);
+        const y = Math.round(bottomY - targetHeight);
+        for (const [sx, sy, sw, sh] of parts) {
+          const dw = Math.round(sw * scale);
+          ctx.drawImage(sheet, sx, sy, sw, sh, x, y, dw, Math.round(targetHeight));
+          x += dw + 1;
+        }
+      };
+
+      floatsRef.current = floatsRef.current.filter((fl) => now - fl.createdAt < 1150);
       for (const fl of floatsRef.current) {
         const elapsed = now - fl.createdAt;
         if (elapsed < 0) continue;
         const unit = battle.units.find((u) => u.uid === fl.uid);
         if (!unit) continue;
         const pos = getUnitCoords(unit, w, h);
-        const dy = (elapsed / 1200) * 34;
-        ctx.font = 'bold 15px "PingFang SC", "Microsoft YaHei", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = '#000';
-        ctx.strokeText(fl.text, pos.x, pos.y - 62 - dy);
-        ctx.fillStyle = fl.color;
-        ctx.fillText(fl.text, pos.x, pos.y - 62 - dy);
+        const p = Math.min(1, elapsed / 1150);
+        // Classic HXSG upward pop + gentle settle
+        const bounce = p < 0.25 ? Math.sin((p / 0.25) * Math.PI * 0.5) * 20 : 20 + (p - 0.25) * 18;
+        const baseY = pos.y - Math.round(36 * spriteScale) - bounce;
+
+        ctx.save();
+        ctx.globalAlpha = p > 0.72 ? 1 - (p - 0.72) / 0.28 : 1;
+
+        if (fl.kind === 'damage' && fl.value !== undefined) {
+          const numImg = getImg('num.png');
+          const digitH = fl.crit ? 22 : 18;
+          if (numImg) {
+            drawPixelDigits(numImg, NUM_GLYPHS_DMG, `-${fl.value}`, pos.x, baseY, digitH);
+          } else {
+            ctx.font = 'bold 16px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#000';
+            ctx.strokeText(`-${fl.value}`, pos.x, baseY);
+            ctx.fillStyle = fl.color;
+            ctx.fillText(`-${fl.value}`, pos.x, baseY);
+          }
+          if (fl.crit || fl.subText) {
+            const extra = [fl.crit ? '暴击!' : '', fl.subText ?? ''].filter(Boolean).join(' ');
+            ctx.font = 'bold 11px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#000';
+            ctx.strokeText(extra, pos.x, baseY - digitH - 3);
+            ctx.fillStyle = '#ffe966';
+            ctx.fillText(extra, pos.x, baseY - digitH - 3);
+          }
+        } else if (fl.kind === 'heal' && fl.value !== undefined) {
+          const num2Img = getImg('num2.png');
+          const digitH = 18;
+          if (num2Img) {
+            drawPixelDigits(num2Img, NUM_GLYPHS_HEAL, `${fl.value}`, pos.x, baseY, digitH);
+          } else {
+            ctx.font = 'bold 16px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#000';
+            ctx.strokeText(`+${fl.value}`, pos.x, baseY);
+            ctx.fillStyle = '#76ff88';
+            ctx.fillText(`+${fl.value}`, pos.x, baseY);
+          }
+          if (fl.subText) {
+            ctx.font = 'bold 11px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#000';
+            ctx.strokeText(fl.subText, pos.x, baseY - digitH - 3);
+            ctx.fillStyle = '#ffe966';
+            ctx.fillText(fl.subText, pos.x, baseY - digitH - 3);
+          }
+        } else if (fl.kind === 'miss') {
+          const wzImg = getImg('wz.png');
+          if (wzImg) {
+            const mw = Math.round(wzImg.width * 1.5);
+            const mh = Math.round(wzImg.height * 1.5);
+            ctx.drawImage(wzImg, Math.round(pos.x - mw / 2), Math.round(baseY - mh), mw, mh);
+          } else {
+            ctx.font = 'bold 13px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#000';
+            ctx.strokeText('未中', pos.x, baseY);
+            ctx.fillStyle = '#ffe46b';
+            ctx.fillText('未中', pos.x, baseY);
+          }
+        } else if (fl.text) {
+          ctx.font = 'bold 13px "PingFang SC", "Microsoft YaHei", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#000';
+          ctx.strokeText(fl.text, pos.x, baseY);
+          ctx.fillStyle = fl.color;
+          ctx.fillText(fl.text, pos.x, baseY);
+        }
+        ctx.restore();
       }
 
       rafId = requestAnimationFrame(render);
@@ -1109,7 +1454,11 @@ export function BattleStage({
 
           {/* Classic 6 Staggered Golden Diamond Command Buttons (3x2) */}
           {battle.status === 'ongoing' && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div
+              className={`pointer-events-none absolute inset-0 flex items-center justify-center transition-opacity duration-200 ${
+                isReplaying ? 'opacity-25' : 'opacity-100'
+              }`}
+            >
               <div className="pointer-events-auto flex items-start">
                 <div className="flex flex-col -space-y-0.5">
                   <button
