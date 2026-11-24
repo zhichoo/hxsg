@@ -12,17 +12,27 @@ import { getCachedAssetImage, loadAssetImage } from '../platform/host';
 import { AssetBg, AssetImg } from './AssetImg';
 import { ChatDock } from './ChatDock';
 
+interface GeneralCommandInput {
+  unitUid: string;
+  action: 'attack' | 'skill' | 'defend' | 'item';
+  targetUid?: string;
+  skillId?: string;
+  itemId?: string;
+}
+
+interface HeroCommandInput {
+  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
+  targetUid?: string;
+  skillId?: string;
+  itemId?: string;
+}
+
 interface BattleStageProps {
   battle: BattleState;
   character: CharacterView;
   messages: ChatMessage[];
   onSendChat: (channel: ChatChannel, content: string) => void;
-  onAction: (cmd: {
-    action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
-    targetUid?: string;
-    skillId?: string;
-    itemId?: string;
-  }) => Promise<void>;
+  onAction: (cmd: HeroCommandInput & { generalCommands?: GeneralCommandInput[] }) => Promise<void>;
   onExitBattle: () => void;
   onNotify: (msg: string) => void;
 }
@@ -76,6 +86,10 @@ export function BattleStage({
   const [selectedTargetUid, setSelectedTargetUid] = useState<string | undefined>(undefined);
   const [subMenu, setSubMenu] = useState<'none' | 'skill' | 'item'>('none');
   const [autoBattle, setAutoBattle] = useState(false);
+  const [autoGenerals, setAutoGenerals] = useState(false);
+  const [stepIdx, setStepIdx] = useState(0);
+  const [queuedHeroCmd, setQueuedHeroCmd] = useState<HeroCommandInput | null>(null);
+  const [queuedGeneralCmds, setQueuedGeneralCmds] = useState<GeneralCommandInput[]>([]);
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(60);
 
@@ -88,14 +102,41 @@ export function BattleStage({
     () => battle.units.filter((u) => u.side === 'enemy' && u.alive),
     [battle.units],
   );
-  const mySkills = useMemo(
-    () => SKILLS.filter((s) => s.roleClass === character.roleClass || s.roleClass === 'all'),
-    [character.roleClass],
-  );
+  const controllableUnits = useMemo(() => {
+    const allies = battle.units
+      .filter((u) => u.side === 'player' && u.alive)
+      .sort((a, b) => a.position - b.position);
+    if (autoGenerals || autoBattle) {
+      return allies.filter((u) => u.isMainRole);
+    }
+    return allies;
+  }, [battle.units, autoGenerals, autoBattle]);
+
+  const activeUnit = controllableUnits[stepIdx] ?? controllableUnits[0];
+  const isCommandingHero = !activeUnit || activeUnit.isMainRole;
+
+  const activeSkills = useMemo(() => {
+    if (isCommandingHero) {
+      return SKILLS.filter((s) => s.roleClass === character.roleClass || s.roleClass === 'all');
+    }
+    const ids = [activeUnit.skillId, activeUnit.skill2Id].filter((id): id is string => Boolean(id));
+    return ids
+      .map((id) => SKILLS.find((s) => s.id === id))
+      .filter((s): s is NonNullable<typeof s> => Boolean(s));
+  }, [isCommandingHero, character.roleClass, activeUnit]);
+
   const consumables = useMemo(
     () => character.inventory.filter((i) => i.type === 'consumable' && i.quantity > 0),
     [character.inventory],
   );
+
+  // Reset turn command queue cleanly on each new round or battle
+  useEffect(() => {
+    setStepIdx(0);
+    setQueuedHeroCmd(null);
+    setQueuedGeneralCmds([]);
+    setSubMenu('none');
+  }, [battle.battleId, battle.round]);
 
   // Sync canvas buffer strictly to actual CSS size * dpr (zero stretching, zero blur)
   useEffect(() => {
@@ -194,15 +235,15 @@ export function BattleStage({
     });
   }, [battle.lastLogs, battle.round]);
 
-  const dispatchCommand = useCallback(
-    async (cmd: Parameters<BattleStageProps['onAction']>[0]) => {
+  const submitRound = useCallback(
+    async (heroCmd: HeroCommandInput, generalCmds: GeneralCommandInput[]) => {
       if (busy || battle.status !== 'ongoing') return;
       setBusy(true);
       setSubMenu('none');
       try {
         await onAction({
-          ...cmd,
-          targetUid: cmd.targetUid ?? selectedTargetUid,
+          ...heroCmd,
+          generalCommands: generalCmds.length > 0 ? generalCmds : undefined,
         });
       } catch (err) {
         onNotify(err instanceof Error ? err.message : '指令执行失败');
@@ -210,16 +251,127 @@ export function BattleStage({
         setBusy(false);
       }
     },
-    [busy, battle.status, onAction, selectedTargetUid, onNotify],
+    [busy, battle.status, onAction, onNotify],
   );
+
+  const dispatchCommand = useCallback(
+    async (cmd: HeroCommandInput) => {
+      if (busy || battle.status !== 'ongoing') return;
+      setSubMenu('none');
+      const targetUid = cmd.targetUid ?? selectedTargetUid;
+
+      if (isCommandingHero) {
+        const heroCmd: HeroCommandInput = { ...cmd, targetUid };
+        // Fleeing, full-auto, auto-generals, or no alive generals -> submit immediately!
+        if (cmd.action === 'flee' || autoBattle || autoGenerals || controllableUnits.length <= 1) {
+          await submitRound(heroCmd, []);
+          return;
+        }
+        setQueuedHeroCmd(heroCmd);
+        setQueuedGeneralCmds([]);
+        setStepIdx(1);
+        return;
+      }
+
+      // Commanding an allied general (stepIdx >= 1)
+      const heroCmd = queuedHeroCmd ?? { action: 'attack', targetUid: selectedTargetUid };
+      const gAction: GeneralCommandInput['action'] =
+        cmd.action === 'skill' || cmd.action === 'defend' || cmd.action === 'item'
+          ? cmd.action
+          : 'attack';
+      const nextGeneralCmds: GeneralCommandInput[] = [
+        ...queuedGeneralCmds.filter((c) => c.unitUid !== activeUnit.uid),
+        {
+          unitUid: activeUnit.uid,
+          action: gAction,
+          targetUid: gAction === 'item' || (gAction === 'skill' && SKILLS.find((s) => s.id === cmd.skillId)?.kind === 'heal') ? undefined : targetUid,
+          skillId: cmd.skillId,
+          itemId: cmd.itemId,
+        },
+      ];
+
+      if (stepIdx + 1 < controllableUnits.length) {
+        setQueuedGeneralCmds(nextGeneralCmds);
+        setStepIdx(stepIdx + 1);
+      } else {
+        await submitRound(heroCmd, nextGeneralCmds);
+      }
+    },
+    [
+      busy,
+      battle.status,
+      selectedTargetUid,
+      isCommandingHero,
+      autoBattle,
+      autoGenerals,
+      controllableUnits.length,
+      submitRound,
+      queuedHeroCmd,
+      queuedGeneralCmds,
+      activeUnit,
+      stepIdx,
+    ],
+  );
+
+  const skipGeneralToAI = useCallback(async () => {
+    if (busy || battle.status !== 'ongoing' || isCommandingHero) return;
+    setSubMenu('none');
+    const heroCmd = queuedHeroCmd ?? { action: 'attack', targetUid: selectedTargetUid };
+    const nextGeneralCmds = queuedGeneralCmds.filter((c) => c.unitUid !== activeUnit.uid);
+    if (stepIdx + 1 < controllableUnits.length) {
+      setQueuedGeneralCmds(nextGeneralCmds);
+      setStepIdx(stepIdx + 1);
+    } else {
+      await submitRound(heroCmd, nextGeneralCmds);
+    }
+  }, [
+    busy,
+    battle.status,
+    isCommandingHero,
+    queuedHeroCmd,
+    selectedTargetUid,
+    queuedGeneralCmds,
+    activeUnit,
+    stepIdx,
+    controllableUnits.length,
+    submitRound,
+  ]);
+
+  const stepBack = useCallback(() => {
+    if (stepIdx <= 0) return;
+    setSubMenu('none');
+    if (stepIdx === 1) {
+      setStepIdx(0);
+      setQueuedHeroCmd(null);
+      setQueuedGeneralCmds([]);
+    } else {
+      const prevIdx = stepIdx - 1;
+      const prevUnit = controllableUnits[prevIdx];
+      setStepIdx(prevIdx);
+      if (prevUnit) {
+        setQueuedGeneralCmds((prev) => prev.filter((c) => c.unitUid !== prevUnit.uid));
+      }
+    }
+  }, [stepIdx, controllableUnits]);
+
+  const toggleAutoGenerals = useCallback(() => {
+    setAutoGenerals((prev) => {
+      const next = !prev;
+      // If user turns ON auto-generals while already mid-way choosing general commands, submit round now!
+      if (next && queuedHeroCmd && battle.status === 'ongoing' && !busy) {
+        void submitRound(queuedHeroCmd, queuedGeneralCmds);
+      }
+      return next;
+    });
+  }, [queuedHeroCmd, queuedGeneralCmds, battle.status, busy, submitRound]);
 
   useEffect(() => {
     if (!autoBattle || battle.status !== 'ongoing' || busy) return;
     const t = setTimeout(() => {
-      void dispatchCommand({ action: 'attack', targetUid: selectedTargetUid });
+      void submitRound({ action: 'attack', targetUid: selectedTargetUid }, []);
     }, 950);
     return () => clearTimeout(t);
-  }, [autoBattle, battle.status, battle.round, busy, dispatchCommand, selectedTargetUid]);
+  }, [autoBattle, battle.status, battle.round, busy, submitRound, selectedTargetUid]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -230,14 +382,18 @@ export function BattleStage({
       }
       if (e.key === '1') void dispatchCommand({ action: 'attack' });
       else if (e.key === '2') setSubMenu((m) => (m === 'skill' ? 'none' : 'skill'));
-      else if (e.key === '3') void dispatchCommand({ action: 'capture' });
-      else if (e.key === '4') setSubMenu((m) => (m === 'item' ? 'none' : 'item'));
-      else if (e.key === '6') void dispatchCommand({ action: 'flee' });
-      else if (e.key === '7') void dispatchCommand({ action: 'defend' });
+      else if (e.key === '3') {
+        if (isCommandingHero) void dispatchCommand({ action: 'capture' });
+        else void skipGeneralToAI();
+      } else if (e.key === '4') setSubMenu((m) => (m === 'item' ? 'none' : 'item'));
+      else if (e.key === '6') {
+        if (isCommandingHero) void dispatchCommand({ action: 'flee' });
+        else stepBack();
+      } else if (e.key === '7') void dispatchCommand({ action: 'defend' });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [battle.status, dispatchCommand, onExitBattle]);
+  }, [battle.status, dispatchCommand, onExitBattle, isCommandingHero, skipGeneralToAI, stepBack]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -324,12 +480,18 @@ export function BattleStage({
         ctx.ellipse(ux, uy + 2, 16, 5, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        // Target ring under selected enemy
+        // Target ring under selected enemy, or active-command ring under currently controlled ally
         if (u.uid === selectedTargetUid && u.side === 'enemy') {
           ctx.strokeStyle = '#fff04d';
           ctx.lineWidth = 2;
           ctx.beginPath();
           ctx.ellipse(ux, uy + 2, 20, 7, 0, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (battle.status === 'ongoing' && activeUnit && u.uid === activeUnit.uid) {
+          ctx.strokeStyle = '#5cf2ff';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.ellipse(ux, uy + 2, 21, 7.5, 0, 0, Math.PI * 2);
           ctx.stroke();
         }
 
@@ -505,7 +667,7 @@ export function BattleStage({
 
     rafId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(rafId);
-  }, [battle, selectedTargetUid]);
+  }, [battle, selectedTargetUid, activeUnit]);
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
@@ -535,13 +697,9 @@ export function BattleStage({
         path="tit_bg.png"
         className="h-[34px] border-b border-[#4c6165] shrink-0"
       >
-        <div className="absolute left-0 top-0 bottom-0 w-[86px] overflow-hidden border-r border-black/60">
-          <AssetImg
-            path={`${battle.battleBg}_5.png`}
-            alt=""
-            className="w-full h-full object-cover pixelated"
-          />
-        </div>
+        <span className="absolute left-2 text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80]">
+          第 {battle.round} 回合
+        </span>
         <span className="text-[16px] font-bold text-white hx-stroke">{battle.mapName}</span>
       </AssetBg>
 
@@ -569,7 +727,7 @@ export function BattleStage({
             className="w-full h-full block cursor-crosshair"
           />
 
-          {/* Classic 7 Staggered Golden Diamond Command Buttons */}
+          {/* Classic Staggered Golden Diamond Command Buttons (Hero + Generals Scheme A) */}
           {battle.status === 'ongoing' && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
               <div className="pointer-events-auto flex items-center">
@@ -583,23 +741,45 @@ export function BattleStage({
                   >
                     <span>攻击</span>
                   </button>
+                  {isCommandingHero ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void dispatchCommand({ action: 'capture' })}
+                      className="hx-diamond-btn"
+                      title="尝试招降残血敌人为副将 (快捷键 3)"
+                    >
+                      <span>招降</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void skipGeneralToAI()}
+                      className="hx-diamond-btn"
+                      title="本回合由该副将自动 AI 出手 (快捷键 3)"
+                    >
+                      <span>智能</span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => void dispatchCommand({ action: 'capture' })}
+                    onClick={() => {
+                      if (isCommandingHero) {
+                        onNotify(
+                          autoGenerals
+                            ? '当前「副将自动」已开启，点击左下角可切换手动控制每位副将'
+                            : '已启用副将手动操控：主角出招后将依次为出战副将下达技能指令',
+                        );
+                      } else {
+                        stepBack();
+                      }
+                    }}
                     className="hx-diamond-btn"
-                    title="尝试招降残血敌人为副将 (快捷键 3)"
+                    title={isCommandingHero ? '副将指令说明' : '返回重选上一位单位的指令'}
                   >
-                    <span>招降</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onNotify('当前已自动上阵副将槽位中的副将')}
-                    className="hx-diamond-btn"
-                    title="副将状态"
-                  >
-                    <span>招将</span>
+                    <span>{isCommandingHero ? '招将' : '重选'}</span>
                   </button>
                   <button
                     type="button"
@@ -617,7 +797,7 @@ export function BattleStage({
                     disabled={busy}
                     onClick={() => setSubMenu((m) => (m === 'skill' ? 'none' : 'skill'))}
                     className={`hx-diamond-btn ${subMenu === 'skill' ? 'active' : ''}`}
-                    title="施放职业技能 (快捷键 2)"
+                    title={isCommandingHero ? '施放职业技能 (快捷键 2)' : '施放副将技能 (快捷键 2)'}
                   >
                     <span>技能</span>
                   </button>
@@ -630,15 +810,27 @@ export function BattleStage({
                   >
                     <span>物品</span>
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void dispatchCommand({ action: 'flee' })}
-                    className="hx-diamond-btn"
-                    title="脱离战斗 (快捷键 6)"
-                  >
-                    <span>逃跑</span>
-                  </button>
+                  {isCommandingHero ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void dispatchCommand({ action: 'flee' })}
+                      className="hx-diamond-btn"
+                      title="脱离战斗 (快捷键 6)"
+                    >
+                      <span>逃跑</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={toggleAutoGenerals}
+                      className="hx-diamond-btn"
+                      title="一键切回副将自动出手并立即结算本回合"
+                    >
+                      <span>全托管</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -648,7 +840,11 @@ export function BattleStage({
           {subMenu !== 'none' && battle.status === 'ongoing' && (
             <div className="absolute left-2 right-2 bottom-2 z-20 bg-[#25092c]/95 border-2 border-[#e2b94e] p-2 shadow-xl">
               <div className="flex items-center justify-between text-xs text-[#ffe273] font-bold mb-1.5 pb-1 border-b border-white/15">
-                <span>{subMenu === 'skill' ? '选择施放技能' : '选择战斗药品'}</span>
+                <span>
+                  {subMenu === 'skill'
+                    ? `${isCommandingHero ? '主角' : `副将 ${activeUnit?.name ?? ''}`} · 选择施放技能（当前精力 ${activeUnit?.mp ?? character.mp}）`
+                    : `${isCommandingHero ? '主角' : `副将 ${activeUnit?.name ?? ''}`} · 选择战斗药品`}
+                </span>
                 <button
                   type="button"
                   onClick={() => setSubMenu('none')}
@@ -659,21 +855,38 @@ export function BattleStage({
               </div>
               {subMenu === 'skill' ? (
                 <div className="grid grid-cols-2 gap-1.5">
-                  {mySkills.map((sk) => {
-                    const prog = character.skills.find((s) => s.skillId === sk.id);
+                  {activeSkills.map((sk, idx) => {
+                    const prog = isCommandingHero
+                      ? character.skills.find((s) => s.skillId === sk.id)
+                      : undefined;
+                    const unitMp = activeUnit?.mp ?? character.mp;
+                    const lackMp = unitMp < sk.mpCost;
                     return (
                       <button
                         key={sk.id}
                         type="button"
+                        disabled={lackMp}
                         onClick={() => void dispatchCommand({ action: 'skill', skillId: sk.id })}
-                        className="p-2 bg-[#44154f] hover:bg-[#5f1d6e] border border-[#c5963d] text-left"
+                        className={`p-2 border text-left ${
+                          lackMp
+                            ? 'bg-[#2c1530] border-[#6b5270] opacity-55 cursor-not-allowed'
+                            : 'bg-[#44154f] hover:bg-[#5f1d6e] border-[#c5963d]'
+                        }`}
                       >
                         <div className="flex justify-between text-xs font-bold text-[#ffea84]">
                           <span>
                             {sk.name}
-                            {prog ? `(${prog.tier}阶)` : ''}
+                            {prog
+                              ? `(${prog.tier}阶)`
+                              : !isCommandingHero
+                                ? idx === 0
+                                  ? '(自带)'
+                                  : '(秘籍)'
+                                : ''}
                           </span>
-                          <span className="text-[#85c6ff]">耗精{sk.mpCost}</span>
+                          <span className={lackMp ? 'text-[#ff8585]' : 'text-[#85c6ff]'}>
+                            耗精{sk.mpCost}
+                          </span>
                         </div>
                         <div className="text-[10.5px] text-[#e7d0ef] truncate mt-0.5">
                           {prog ? `熟练${prog.proficiency} · ` : ''}
@@ -682,6 +895,11 @@ export function BattleStage({
                       </button>
                     );
                   })}
+                  {activeSkills.length === 0 && (
+                    <div className="col-span-2 text-xs text-center text-[#ebd8f0] py-2">
+                      该副将暂无可用技能
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-1.5">
@@ -717,16 +935,31 @@ export function BattleStage({
           </div>
         )}
 
-        {/* Bottom Countdown Trapezoid + Auto Button */}
-        <div className="h-[34px] px-2 bg-[#3d481e] border-t border-[#222910] flex items-center justify-between shrink-0">
-          <div className="w-[56px] text-[11px] text-[#f0f7d4] font-medium">键位1-7</div>
-          <div className="px-4 py-0.5 bg-[#191e1f] border border-[#92a3a5] text-[13px] font-bold text-white hx-stroke">
-            {character.name}-出招({countdown})
+        {/* Bottom Countdown Trapezoid + General Manual/Auto Toggle + Full Auto Button */}
+        <div className="h-[34px] px-2 bg-[#3d481e] border-t border-[#222910] flex items-center justify-between gap-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={toggleAutoGenerals}
+            className={`px-2 py-0.5 text-[11px] font-bold border shrink-0 ${
+              autoGenerals
+                ? 'bg-[#2a3319] border-[#869b5a] text-[#d4e8a8]'
+                : 'bg-[#6e247c] border-[#f2c95b] text-[#ffe985]'
+            }`}
+            title="切换副将手动选技能 / 自动 AI 出手"
+          >
+            {autoGenerals ? '副将:自动' : '副将:手动'}
+          </button>
+          <div className="px-2.5 py-0.5 bg-[#191e1f] border border-[#92a3a5] text-[12px] font-bold text-white hx-stroke truncate">
+            {activeUnit
+              ? `${isCommandingHero ? '主角' : '副将'}·${activeUnit.name}${
+                  controllableUnits.length > 1 ? `(${stepIdx + 1}/${controllableUnits.length})` : ''
+                } (${countdown})`
+              : `${character.name}-出招(${countdown})`}
           </div>
           <button
             type="button"
             onClick={() => setAutoBattle((v) => !v)}
-            className={`hx-btn-red px-3 py-0.5 text-[13px] ${
+            className={`hx-btn-red px-2.5 py-0.5 text-[12px] shrink-0 ${
               autoBattle ? 'ring-2 ring-[#ffe96e]' : ''
             }`}
           >

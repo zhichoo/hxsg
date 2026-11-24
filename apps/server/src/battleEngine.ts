@@ -379,11 +379,20 @@ export function startArenaBattle(characterId: number, targetCharacterId: number)
   return stripInternal(battle);
 }
 
+export interface GeneralBattleCommand {
+  unitUid: string;
+  action: 'attack' | 'skill' | 'defend' | 'item';
+  targetUid?: string;
+  skillId?: string;
+  itemId?: string;
+}
+
 export interface PlayerBattleCommand {
   action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
+  generalCommands?: GeneralBattleCommand[];
 }
 
 export function performBattleAction(
@@ -488,7 +497,8 @@ export function performBattleAction(
 
       if (cmd.action === 'item' && cmd.itemId) {
         const tpl = ITEMS[cmd.itemId];
-        const owned = ch.inventory.find((i) => i.itemId === cmd.itemId);
+        const liveInv = getCharacterById(characterId)?.inventory;
+        const owned = liveInv?.find((i) => i.itemId === cmd.itemId);
         if (tpl && owned && owned.quantity > 0) {
           addItem(characterId, cmd.itemId, -1);
           const hpAdd = tpl.hpRestore ?? 0;
@@ -522,7 +532,7 @@ export function performBattleAction(
         const tplId = group?.capturableTemplateId;
         const hpRatio = target.hp / target.maxHp;
         const chance = tplId ? Math.min(0.78, 0.25 + (1 - hpRatio) * 0.55) : 0;
-        if (tplId && Math.random() < chance && ch.generals.length < 12) {
+        if (tplId && Math.random() < chance && ch.generals.length < 16) {
           target.hp = 0;
           target.alive = false;
           const g = grantGeneralToCharacter(characterId, tplId, target.level);
@@ -731,11 +741,168 @@ export function performBattleAction(
         message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
-      // Allied general: supports both innate skill (slot 1) & learned skill book (slot 2)
+      // Allied general: supports manual player command (Scheme A) or smart AI fallback
       const knownSkills = [actor.skillId, actor.skill2Id]
         .filter((id): id is string => Boolean(id))
         .map((id) => SKILLS.find((s) => s.id === id))
         .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+      const gCmd = cmd.generalCommands?.find((c) => c.unitUid === actor.uid);
+      if (gCmd) {
+        if (gCmd.action === 'defend') {
+          actor.defending = true;
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'defend',
+            targets: [],
+            message: `副将 ${actor.name} 凝神防御，本回合所受伤害减半。`,
+          });
+          continue;
+        }
+
+        if (gCmd.action === 'item' && gCmd.itemId) {
+          const tpl = ITEMS[gCmd.itemId];
+          const liveInv = getCharacterById(characterId)?.inventory;
+          const owned = liveInv?.find((i) => i.itemId === gCmd.itemId);
+          if (tpl && owned && owned.quantity > 0) {
+            addItem(characterId, gCmd.itemId, -1);
+            const hpAdd = tpl.hpRestore ?? 0;
+            const mpAdd = tpl.mpRestore ?? 0;
+            const healTarget =
+              alivePlayers.find((p) => p.uid === gCmd.targetUid) ??
+              (hpAdd > 0
+                ? [...alivePlayers].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+                : actor);
+            healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + hpAdd);
+            healTarget.mp = Math.min(healTarget.maxMp, healTarget.mp + mpAdd);
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'item',
+              effect: 'heal',
+              targets: [{ uid: healTarget.uid, name: healTarget.name, damage: 0, heal: hpAdd }],
+              message: `副将 ${actor.name} 为 ${healTarget.name} 使用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
+            });
+            continue;
+          }
+        }
+
+        if (gCmd.action === 'skill' && gCmd.skillId) {
+          const chosenSkill = knownSkills.find((s) => s.id === gCmd.skillId);
+          if (chosenSkill && actor.mp >= chosenSkill.mpCost) {
+            actor.mp -= chosenSkill.mpCost;
+            if (chosenSkill.kind === 'heal') {
+              const healTarget =
+                alivePlayers.find((p) => p.uid === gCmd.targetUid) ??
+                [...alivePlayers].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+              const healVal = Math.max(30, Math.round(healTarget.maxHp * 0.34));
+              healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + healVal);
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'skill',
+                skillId: chosenSkill.id,
+                skillName: chosenSkill.name,
+                effect: 'heal',
+                targets: [{ uid: healTarget.uid, name: healTarget.name, damage: 0, heal: healVal }],
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，为 ${healTarget.name} 恢复气血 ${healVal} 点！`,
+              });
+              continue;
+            }
+            const primary = aliveEnemies.find((e) => e.uid === gCmd.targetUid) ?? aliveEnemies[0];
+            if (chosenSkill.kind === 'control' && chosenSkill.controlKind) {
+              const kind = chosenSkill.controlKind;
+              const targets = [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, 2);
+              const targetResults = targets.map((t) => {
+                const hit =
+                  Math.random() <
+                  calcControlChance(chosenSkill.baseControlRate ?? 0.65, 200, t.resist?.[kind] ?? 0);
+                if (hit) applyStatus(t, kind, chosenSkill.controlTurns ?? 2);
+                return {
+                  uid: t.uid,
+                  name: t.name,
+                  damage: 0,
+                  appliedStatus: hit ? kind : undefined,
+                  resisted: !hit,
+                };
+              });
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'skill',
+                skillId: chosenSkill.id,
+                skillName: chosenSkill.name,
+                effect: chosenSkill.effect,
+                targets: targetResults,
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】控场！`,
+              });
+              continue;
+            }
+            const targets = chosenSkill.aoe
+              ? [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, 3)
+              : [primary];
+            const hits = chosenSkill.kind === 'multi_hit' ? chosenSkill.hitCount ?? 2 : 1;
+            const targetResults = targets.map((t) => {
+              let totalDmg = 0;
+              let anyCrit = false;
+              for (let h = 0; h < hits && t.alive; h++) {
+                const { damage, crit } = calcDamage(actor.atk, t.defending, chosenSkill.power, {
+                  resistPct: chosenSkill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys,
+                  targetTrapped: hasStatus(t, 'trap'),
+                });
+                t.hp = Math.max(0, t.hp - damage);
+                if (t.hp === 0) t.alive = false;
+                totalDmg += damage;
+                anyCrit = anyCrit || crit;
+              }
+              return { uid: t.uid, name: t.name, damage: totalDmg, crit: anyCrit, killed: !t.alive };
+            });
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: chosenSkill.id,
+              skillName: chosenSkill.name,
+              effect: chosenSkill.effect,
+              targets: targetResults,
+              message: `副将 ${actor.name} 施展【${chosenSkill.name}】，造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害！`,
+            });
+            continue;
+          }
+        }
+
+        // Manual attack (or fallback if out of MP / item depleted)
+        if (hasStatus(actor, 'trap')) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'status',
+            effect: 'trap',
+            targets: [],
+            message: `副将 ${actor.name} 被【围困】，本回合无法普攻！`,
+          });
+          continue;
+        }
+        const manualTarget = aliveEnemies.find((e) => e.uid === gCmd.targetUid) ?? aliveEnemies[0];
+        const { damage, crit } = calcDamage(actor.atk, manualTarget.defending, 1.05, {
+          resistPct: manualTarget.resist?.phys,
+          targetTrapped: hasStatus(manualTarget, 'trap'),
+        });
+        manualTarget.hp = Math.max(0, manualTarget.hp - damage);
+        if (manualTarget.hp === 0) manualTarget.alive = false;
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'attack',
+          effect: 'slash',
+          targets: [{ uid: manualTarget.uid, name: manualTarget.name, damage, crit, killed: !manualTarget.alive }],
+          message: `副将 ${actor.name} 出击 ${manualTarget.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
+        });
+        continue;
+      }
+
+      // Smart AI fallback when no manual general command was given
 
       // Smart heal if general learned 妙手回春 and any ally is wounded (< 55% HP)
       const healSkill = knownSkills.find((s) => s.kind === 'heal' && actor.mp >= s.mpCost);

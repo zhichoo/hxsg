@@ -305,6 +305,13 @@ export const api = {
     targetUid?: string;
     skillId?: string;
     itemId?: string;
+    generalCommands?: Array<{
+      unitUid: string;
+      action: 'attack' | 'skill' | 'defend' | 'item';
+      targetUid?: string;
+      skillId?: string;
+      itemId?: string;
+    }>;
   }) =>
     callEndpoint<{ battle: BattleState; character: CharacterView }>(
       'battleAction',

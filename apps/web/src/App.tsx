@@ -229,6 +229,13 @@ export default function App() {
     targetUid?: string;
     skillId?: string;
     itemId?: string;
+    generalCommands?: Array<{
+      unitUid: string;
+      action: 'attack' | 'skill' | 'defend' | 'item';
+      targetUid?: string;
+      skillId?: string;
+      itemId?: string;
+    }>;
   }) => {
     const res = await api.battleAction({ realmId, ...cmd });
     setBattle(res.battle);

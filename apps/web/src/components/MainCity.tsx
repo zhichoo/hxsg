@@ -157,18 +157,14 @@ export function MainCity({
 
   return (
     <div className="flex-1 flex flex-col bg-[#1b0c0c] overflow-hidden">
-      {/* 1. Top Classic Location Header (matches classic_3.jpg) */}
+      {/* 1. Top Classic Location Header */}
       <AssetBg
         path="tit_bg.png"
         className="h-[38px] border-b border-[#4c6165] shrink-0"
       >
-        <div className="absolute left-0 top-0 bottom-0 w-[96px] overflow-hidden border-r border-black/60">
-          <AssetImg
-            path={`${currentMap.battleBg}_5.png`}
-            alt={currentMap.name}
-            className="w-full h-full object-cover pixelated opacity-90"
-          />
-        </div>
+        <span className="absolute left-2 text-[10px] text-[#cfe3e6] bg-black/45 px-1.5 py-0.5 border border-[#5f7c80] truncate max-w-[96px]">
+          {currentMap.region}
+        </span>
         <span className="text-[17px] font-bold tracking-widest text-white hx-stroke">
           {currentMap.name}
         </span>
@@ -255,7 +251,7 @@ export function MainCity({
               alt="副将槽位"
               className="w-full h-full object-contain pixelated"
             />
-            <div className="absolute inset-0 grid grid-cols-3 px-[10%] py-[12%] gap-2 items-center">
+            <div className="absolute inset-0 grid grid-cols-3 px-[8.5%] py-[10%] gap-1.5 items-center">
               {activeGenerals.map((g, idx) => (
                 <div
                   key={idx}
@@ -263,9 +259,13 @@ export function MainCity({
                 >
                   {g && (
                     <AssetImg
-                      path={`${g.spriteKey}_h.png`}
+                      path={
+                        g.avatarKey.startsWith('f')
+                          ? g.avatarKey
+                          : `portraits/${g.avatarKey}`
+                      }
                       alt={g.name}
-                      className="w-6 h-6 pixelated drop-shadow-[0_1px_1px_#000]"
+                      className="w-[82%] aspect-square rounded-full object-cover pixelated border border-[#e6be56] shadow-[0_1px_2px_#000]"
                     />
                   )}
                 </div>
