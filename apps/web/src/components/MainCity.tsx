@@ -48,7 +48,7 @@ export function MainCity({
   const [tab, setTab] = useState<MainTab>('npc');
   const [dialogue, setDialogue] = useState<{ npc: string; text: string } | null>(null);
 
-  const currentMap = MAPS[character.mapId] ?? MAPS.xuchang;
+  const currentMap = MAPS[character.mapId] ?? MAPS.xinshoucun;
   const classMeta = ROLE_CLASS_META[character.roleClass];
   const hpPct = Math.max(0, Math.min(100, (character.hp / character.maxHp) * 100));
   const mpPct = Math.max(0, Math.min(100, (character.mp / character.maxMp) * 100));
@@ -74,7 +74,12 @@ export function MainCity({
   }
 
   const handleNpcClick = (npc: MapNpc) => {
-    if (npc.id === 'npc_main' || npc.id === 'npc_jingzhou_main') {
+    if (
+      npc.id === 'npc_cunzhang' ||
+      npc.id === 'npc_xiapi_main' ||
+      npc.id === 'npc_main' ||
+      npc.id === 'npc_jingzhou_main'
+    ) {
       onOpenPanel('quests');
       return;
     }
@@ -98,7 +103,12 @@ export function MainCity({
   };
 
   const getNpcBadge = (npc: MapNpc): { label: string; cls: string } => {
-    if (npc.id === 'npc_main' || npc.id === 'npc_jingzhou_main') {
+    if (
+      npc.id === 'npc_cunzhang' ||
+      npc.id === 'npc_xiapi_main' ||
+      npc.id === 'npc_main' ||
+      npc.id === 'npc_jingzhou_main'
+    ) {
       if (currentMainQuest?.status === 'ready') {
         return { label: '可交!', cls: 'bg-[#1b7a2c] text-[#e6ffea] border-[#7dff92] animate-pulse' };
       }

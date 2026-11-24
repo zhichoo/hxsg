@@ -46,7 +46,7 @@ db.exec(`
     spd INTEGER NOT NULL,
     silver INTEGER NOT NULL DEFAULT 500,
     gold INTEGER NOT NULL DEFAULT 100,
-    map_id TEXT NOT NULL DEFAULT 'xuchang',
+    map_id TEXT NOT NULL DEFAULT 'xinshoucun',
     free_points INTEGER NOT NULL DEFAULT 4,
     pt_vit INTEGER NOT NULL DEFAULT 0,
     pt_str INTEGER NOT NULL DEFAULT 0,

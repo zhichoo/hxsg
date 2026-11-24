@@ -741,7 +741,7 @@ export function createCharacter(params: {
         free_points, pt_vit, pt_str, pt_int, pt_agi,
         res_points, res_phys, res_chaos, res_seal, res_trap, res_magic,
         created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, 800, 100, 'xuchang',
+      ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?, ?, ?, 800, 100, 'xinshoucun',
         4, 0, 0, 0, 0,
         5, 0, 0, 0, 0, 0,
         ?, ?)`,
@@ -1094,20 +1094,22 @@ export function acceptPaohuan(characterId: number): { character: CharacterView; 
   if (doVisit) {
     const visitPool = (
       ch.level >= 22
-        ? ['zhuojun', 'luoyang', 'jingzhou', 'chibi', 'jiangling']
-        : ['zhuojun', 'luoyang', 'xuchang_jiao', 'changshe']
+        ? ['xiapi', 'zhuojun', 'luoyang', 'jingzhou', 'chibi', 'jiangling']
+        : ['xiapi', 'xiaopei', 'zhuojun', 'luoyang', 'xuchang_jiao', 'changshe']
     ).filter((m) => m !== ch.mapId);
-    targetMapId = visitPool[Math.floor(Math.random() * visitPool.length)] ?? 'zhuojun';
+    targetMapId = visitPool[Math.floor(Math.random() * visitPool.length)] ?? 'xiapi';
     taskType = 'visit_map';
     targetId = targetMapId;
     targetName = `火速送信至【${MAPS[targetMapId]?.name ?? targetMapId}】`;
     requiredCount = 1;
   } else {
     let killPool: string[];
-    if (ch.level < 5) {
-      killPool = ['xuchang_dipi', 'xuchang_shibing'];
+    if (ch.level < 4) {
+      killPool = ['xinshou_wulai', 'xinshou_daozei'];
+    } else if (ch.level < 7) {
+      killPool = ['xiaopei_shanzei', 'xuchang_dipi'];
     } else if (ch.level < 10) {
-      killPool = ['changshe_daoshi'];
+      killPool = ['xiaopei_huangjin', 'changshe_daoshi'];
     } else if (ch.level < 14) {
       killPool = ['luoyang_weidui', 'hulao_xiliang'];
     } else if (ch.level < 18) {
