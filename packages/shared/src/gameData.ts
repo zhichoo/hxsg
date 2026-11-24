@@ -147,8 +147,22 @@ export const SKILLS: SkillDef[] = [
     effect: 'fg',
     desc: '横扫敌阵，随熟练度提升最多打击 5 个目标。',
   },
+  {
+    id: 'pojia',
+    name: '破甲重击',
+    roleClass: 'wushi',
+    kind: 'debuff',
+    damageType: 'phys',
+    mpCost: 24,
+    power: 1.48,
+    aoe: false,
+    debuffKind: 'def_down',
+    debuffTurns: 2,
+    effect: 'slash',
+    desc: '沉重劈斩震碎敌甲，造成高伤并使目标 2 回合内所受伤害提高 28%。',
+  },
 
-  // 文人技能（经典控场三绝：乱 / 封 / 围 + 呼风唤雨）
+  // 文人技能（经典控场三绝：乱 / 封 / 围 + 毒 + 呼风唤雨）
   {
     id: 'hunluan',
     name: '离间计',
@@ -192,6 +206,20 @@ export const SKILLS: SkillDef[] = [
     desc: '【围】困住敌军 2 回合，无法普攻且所受伤害提高 25%。',
   },
   {
+    id: 'wudu',
+    name: '五毒攻心',
+    roleClass: 'wenren',
+    kind: 'poison',
+    damageType: 'magic',
+    mpCost: 24,
+    power: 0.72,
+    aoe: true,
+    debuffKind: 'poison',
+    debuffTurns: 3,
+    effect: 'fire',
+    desc: '【毒】原版文人四系绝技之一！造成法伤并令敌军中毒 3 回合，每回合持续扣血。',
+  },
+  {
     id: 'hfhy',
     name: '呼风唤雨',
     roleClass: 'wenren',
@@ -204,7 +232,7 @@ export const SKILLS: SkillDef[] = [
     desc: '借风火之势席卷敌军，随熟练度提升目标数与法伤。',
   },
 
-  // 异人技能（经典爆发雷法 + 妙手回春）
+  // 异人技能（经典爆发雷法 + 魔神/疾风团队增益 + 妙手回春）
   {
     id: 'wlhd',
     name: '五雷轰顶',
@@ -230,6 +258,34 @@ export const SKILLS: SkillDef[] = [
     desc: '漫天雷劫降临，随熟练度提升最多劈击 5 个敌方目标。',
   },
   {
+    id: 'moshen',
+    name: '魔神附体',
+    roleClass: 'yiren',
+    kind: 'buff',
+    mpCost: 22,
+    power: 0,
+    aoe: true,
+    buffKind: 'atk_up',
+    buffTurns: 3,
+    buffPct: 28,
+    effect: 'fg',
+    desc: '原版异人核心团队增益！提升我方全体/多目标物理与法术攻击 28%~38%，持续 3 回合。',
+  },
+  {
+    id: 'jifeng',
+    name: '疾风咒',
+    roleClass: 'yiren',
+    kind: 'buff',
+    mpCost: 20,
+    power: 0,
+    aoe: true,
+    buffKind: 'spd_up',
+    buffTurns: 3,
+    buffPct: 26,
+    effect: 'heal',
+    desc: '原版异人团队加速神技！提升我方多目标速度 26%~36%，抢占先手出手权，持续 3 回合。',
+  },
+  {
     id: 'huigong',
     name: '妙手回春',
     roleClass: 'yiren',
@@ -249,6 +305,8 @@ export interface ItemTemplate {
   type: 'consumable' | 'material';
   hpRestore?: number;
   mpRestore?: number;
+  reviveHpPct?: number;
+  loyaltyRestore?: number;
   priceSilver: number;
 }
 
@@ -256,7 +314,7 @@ export const ITEMS: Record<string, ItemTemplate> = {
   jinchuang: {
     itemId: 'jinchuang',
     name: '金创药',
-    desc: '恢复气血 120 点，战斗内外均可使用。',
+    desc: '恢复气血 120 点，战斗内外均可使用（战斗中可喂给副将）。',
     type: 'consumable',
     hpRestore: 120,
     priceSilver: 40,
@@ -264,7 +322,7 @@ export const ITEMS: Record<string, ItemTemplate> = {
   dahuan: {
     itemId: 'dahuan',
     name: '大还丹',
-    desc: '名医秘制丹药，恢复气血 360 点。',
+    desc: '名医秘制丹药，恢复气血 360 点（战斗中可喂给副将）。',
     type: 'consumable',
     hpRestore: 360,
     priceSilver: 140,
@@ -272,10 +330,48 @@ export const ITEMS: Record<string, ItemTemplate> = {
   ningshen: {
     itemId: 'ningshen',
     name: '凝神散',
-    desc: '恢复精力 90 点，文人异人练级必备。',
+    desc: '恢复精力 90 点，文人异人练级必备（战斗中可喂给副将）。',
     type: 'consumable',
     mpRestore: 90,
     priceSilver: 50,
+  },
+  huanhundan: {
+    itemId: 'huanhundan',
+    name: '还魂丹',
+    desc: '原版经典救命仙丹！战斗中复活倒地副将并恢复 45% 气血。',
+    type: 'consumable',
+    reviveHpPct: 45,
+    priceSilver: 180,
+  },
+  roubaozi: {
+    itemId: 'roubaozi',
+    name: '热腾腾肉包子',
+    desc: '原版副将口粮！在副将营帐喂给副将，恢复 15 点忠诚度。',
+    type: 'material',
+    loyaltyRestore: 15,
+    priceSilver: 60,
+  },
+  zhongyidan: {
+    itemId: 'zhongyidan',
+    name: '忠义丹',
+    desc: '犒赏三军秘药！在副将营帐喂给副将，大幅恢复 40 点忠诚度。',
+    type: 'material',
+    loyaltyRestore: 40,
+    priceSilver: 180,
+  },
+  xuantie: {
+    itemId: 'xuantie',
+    name: '玄铁矿',
+    desc: '铁匠铺打造随机高属性装备必备矿石，战斗、挖宝或杂货可获。',
+    type: 'material',
+    priceSilver: 320,
+  },
+  jinglianshi: {
+    itemId: 'jinglianshi',
+    name: '精炼石',
+    desc: '铁匠铺重铸装备品质与随机属性波动的核心灵石。',
+    type: 'material',
+    priceSilver: 480,
   },
   jiangling: {
     itemId: 'jiangling',
@@ -369,6 +465,197 @@ export function getGeneralIntimacyInfo(intimacy: number): {
   if (val >= 30) return { title: '同袍共战', statPct: 4, resistBonus: 5 };
   return { title: '初识', statPct: 0, resistBonus: 0 };
 }
+
+export interface EquipmentSetDef {
+  setId: string;
+  name: string;
+  levelTier: number;
+  twoPieceDesc: string;
+  fourPieceDesc: string;
+  twoPiece: { hp?: number; mp?: number; atk?: number; def?: number; spd?: number; allRes?: number };
+  fourPiece: { hp?: number; mp?: number; atk?: number; def?: number; spd?: number; allRes?: number };
+}
+
+export const EQUIPMENT_SETS: Record<string, EquipmentSetDef> = {
+  set_huwei: {
+    setId: 'set_huwei',
+    name: '虎卫套装',
+    levelTier: 10,
+    twoPieceDesc: '2件：气血+120 · 攻击+18',
+    fourPieceDesc: '4件：速度+15 · 全抗性+6%',
+    twoPiece: { hp: 120, atk: 18 },
+    fourPiece: { spd: 15, allRes: 6 },
+  },
+  set_chibi: {
+    setId: 'set_chibi',
+    name: '赤壁战魂套',
+    levelTier: 22,
+    twoPieceDesc: '2件：气血+360 · 攻击+55',
+    fourPieceDesc: '4件：速度+30 · 全抗性+8%',
+    twoPiece: { hp: 360, atk: 55 },
+    fourPiece: { spd: 30, allRes: 8 },
+  },
+  set_wuhu: {
+    setId: 'set_wuhu',
+    name: '五虎神威套',
+    levelTier: 35,
+    twoPieceDesc: '2件：气血+780 · 攻击+120',
+    fourPieceDesc: '4件：速度+48 · 全抗性+10%',
+    twoPiece: { hp: 780, atk: 120 },
+    fourPiece: { spd: 48, allRes: 10 },
+  },
+  set_wolong: {
+    setId: 'set_wolong',
+    name: '卧龙传世套',
+    levelTier: 50,
+    twoPieceDesc: '2件：气血+1450 · 攻击+210',
+    fourPieceDesc: '4件：速度+70 · 全抗性+12%',
+    twoPiece: { hp: 1450, atk: 210 },
+    fourPiece: { spd: 70, allRes: 12 },
+  },
+};
+
+export const TEMPLATE_SET_MAP: Record<string, string> = {
+  qixing_jian: 'set_huwei',
+  longdan_qiang: 'set_huwei',
+  zijin_guan: 'set_huwei',
+  bagua_pao: 'set_huwei',
+  huangjin_jia: 'set_huwei',
+  jifeng_xue: 'set_huwei',
+  dilu_ma: 'set_huwei',
+  chitu_ma: 'set_huwei',
+  qinglong_dao: 'set_chibi',
+  fengchi_kui: 'set_chibi',
+  mingguang_kai: 'set_chibi',
+  yunlong_xue: 'set_chibi',
+  jueying_ma: 'set_chibi',
+  zhangba_mao: 'set_wuhu',
+  zhuge_yushan: 'set_wuhu',
+  wuhou_jin: 'set_wuhu',
+  xuanwu_jia: 'set_wuhu',
+  lingbo_lv: 'set_wuhu',
+  zhuahuang_ma: 'set_wuhu',
+  fangtian_ji: 'set_wolong',
+  taiji_fajian: 'set_wolong',
+  tianlong_guan: 'set_wolong',
+  qilin_baojia: 'set_wolong',
+  tengyun_xue: 'set_wolong',
+  bailong_ju: 'set_wolong',
+  hanxue_ma: 'set_wolong',
+};
+
+export function calcEquipmentSetBonuses(
+  items: Array<{ templateId: string; setId?: string | null }>,
+): {
+  hp: number;
+  mp: number;
+  atk: number;
+  def: number;
+  spd: number;
+  allRes: number;
+  descriptions: string[];
+} {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const sid = item.setId || TEMPLATE_SET_MAP[item.templateId];
+    if (sid && EQUIPMENT_SETS[sid]) {
+      counts.set(sid, (counts.get(sid) ?? 0) + 1);
+    }
+  }
+  let hp = 0;
+  let mp = 0;
+  let atk = 0;
+  let def = 0;
+  let spd = 0;
+  let allRes = 0;
+  const descriptions: string[] = [];
+  for (const [sid, cnt] of counts.entries()) {
+    const defSet = EQUIPMENT_SETS[sid];
+    if (!defSet) continue;
+    if (cnt >= 2) {
+      hp += defSet.twoPiece.hp ?? 0;
+      mp += defSet.twoPiece.mp ?? 0;
+      atk += defSet.twoPiece.atk ?? 0;
+      def += defSet.twoPiece.def ?? 0;
+      spd += defSet.twoPiece.spd ?? 0;
+      allRes += defSet.twoPiece.allRes ?? 0;
+      descriptions.push(`${defSet.name}(${cnt}件)：${defSet.twoPieceDesc}`);
+    }
+    if (cnt >= 4) {
+      hp += defSet.fourPiece.hp ?? 0;
+      mp += defSet.fourPiece.mp ?? 0;
+      atk += defSet.fourPiece.atk ?? 0;
+      def += defSet.fourPiece.def ?? 0;
+      spd += defSet.fourPiece.spd ?? 0;
+      allRes += defSet.fourPiece.allRes ?? 0;
+      descriptions.push(`${defSet.name}(4件触发)：${defSet.fourPieceDesc}`);
+    }
+  }
+  return { hp, mp, atk, def, spd, allRes, descriptions };
+}
+
+export interface CraftRecipeDef {
+  id: string;
+  name: string;
+  levelReq: number;
+  silverCost: number;
+  oreCost: number;
+  pool: string[];
+  desc: string;
+}
+
+export const CRAFT_RECIPES: CraftRecipeDef[] = [
+  {
+    id: 'craft_lv10',
+    name: '打造 10级 虎卫精工',
+    levelReq: 6,
+    silverCost: 1200,
+    oreCost: 1,
+    pool: ['qixing_jian', 'longdan_qiang', 'zijin_guan', 'bagua_pao', 'huangjin_jia', 'jifeng_xue'],
+    desc: '消耗 1 枚玄铁矿 + 1200 银两，随机锻造带波动词条的 7~10 级虎卫套装部件（有几率出神兵！）',
+  },
+  {
+    id: 'craft_lv22',
+    name: '打造 22级 赤壁战魂',
+    levelReq: 18,
+    silverCost: 3800,
+    oreCost: 2,
+    pool: ['qinglong_dao', 'fengchi_kui', 'mingguang_kai', 'yunlong_xue'],
+    desc: '消耗 2 枚玄铁矿 + 3800 银两，锻造带随机词条的 22 级赤壁套装部件。',
+  },
+  {
+    id: 'craft_lv35',
+    name: '打造 35级 五虎神威',
+    levelReq: 30,
+    silverCost: 9500,
+    oreCost: 3,
+    pool: ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv'],
+    desc: '消耗 3 枚玄铁矿 + 9500 银两，锻造带随机词条的 35 级五虎套装部件。',
+  },
+  {
+    id: 'craft_lv50',
+    name: '打造 50级 卧龙神兵',
+    levelReq: 45,
+    silverCost: 24000,
+    oreCost: 5,
+    pool: ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue'],
+    desc: '消耗 5 枚玄铁矿 + 24000 银两，锻造顶级 50 级卧龙传世神兵部件！',
+  },
+];
+
+export const CLASSIC_EMOJIS: Array<{ code: string; file: string; label: string }> = Array.from(
+  { length: 24 },
+  (_, i) => {
+    const code = `f${String(i).padStart(3, '0')}`;
+    const labels = [
+      '微笑', '呲牙', '大笑', '偷笑', '调皮', '眨眼',
+      '色', '得意', '傲慢', '害羞', '惊讶', '流汗',
+      '尴尬', '发怒', '大哭', '委屈', '衰', '晕',
+      '疑问', '嘘', '酷', '抱拳', '强', '胜利',
+    ];
+    return { code, file: `${code}.png`, label: labels[i] || code };
+  },
+);
 
 export interface EquipmentTemplate {
   templateId: string;

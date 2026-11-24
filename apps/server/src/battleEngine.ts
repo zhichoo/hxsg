@@ -17,15 +17,18 @@ import {
   TOWER_MAX_FLOOR,
   type BattleActionLog,
   type BattleState,
+  type BattleStatusKind,
   type BattleUnit,
   type CharacterView,
   type ControlKind,
   type EnemyGroupDef,
+  type GeneralView,
 } from '@hxsg/shared';
 import {
   addActiveGeneralsIntimacy,
   addItem,
   addSkillProficiency,
+  adjustGeneralLoyalty,
   applyExpAndSilver,
   getCharacterById,
   grantEquipmentToCharacter,
@@ -65,20 +68,126 @@ interface ActiveBattle extends BattleState {
 
 const activeBattles = new Map<number, ActiveBattle>();
 
-const STATUS_LABEL: Record<ControlKind, string> = {
+const BATTLE_TURN_MS = 30_000;
+
+const STATUS_LABEL: Record<BattleStatusKind, string> = {
   chaos: '混乱',
   seal: '封印',
   trap: '围困',
+  poison: '剧毒',
+  atk_up: '魔神加攻',
+  spd_up: '疾风加速',
+  def_down: '破甲',
 };
 
-function hasStatus(u: BattleUnit, kind: ControlKind): boolean {
+function hasStatus(u: BattleUnit, kind: BattleStatusKind): boolean {
   return u.statuses.some((s) => s.kind === kind && s.turns > 0);
 }
 
-function applyStatus(u: BattleUnit, kind: ControlKind, turns: number) {
+function getStatus(u: BattleUnit, kind: BattleStatusKind) {
+  return u.statuses.find((s) => s.kind === kind && s.turns > 0);
+}
+
+function applyStatus(u: BattleUnit, kind: BattleStatusKind, turns: number, value?: number) {
   const existing = u.statuses.find((s) => s.kind === kind);
-  if (existing) existing.turns = Math.max(existing.turns, turns);
-  else u.statuses.push({ kind, turns });
+  if (existing) {
+    existing.turns = Math.max(existing.turns, turns);
+    if (value !== undefined) existing.value = Math.max(existing.value ?? 0, value);
+  } else {
+    u.statuses.push({ kind, turns, value });
+  }
+}
+
+function getEffectiveAtk(u: BattleUnit): number {
+  const buff = getStatus(u, 'atk_up');
+  const pct = buff?.value ?? 0;
+  return Math.round(u.atk * (1 + pct / 100));
+}
+
+function getEffectiveSpd(u: BattleUnit): number {
+  const buff = getStatus(u, 'spd_up');
+  const pct = buff?.value ?? 0;
+  return Math.round(u.spd * (1 + pct / 100));
+}
+
+function applyIncomingDamage(
+  battle: ActiveBattle,
+  target: BattleUnit,
+  rawDamage: number,
+  loyaltyPenaltyIds: Set<number>,
+): { actualDamage: number; protector?: BattleUnit; protectorDamage?: number } {
+  const scaled = hasStatus(target, 'def_down') ? Math.round(rawDamage * 1.28) : rawDamage;
+  // Check if an alive teammate is protecting this target
+  const protector = battle.units.find(
+    (u) =>
+      u.alive &&
+      u.side === target.side &&
+      u.uid !== target.uid &&
+      u.protectingUid === target.uid,
+  );
+  if (protector) {
+    const takenByTarget = Math.max(1, Math.round(scaled * 0.42));
+    const takenByProtector = Math.max(1, Math.round(scaled * 0.45));
+    target.hp = Math.max(0, target.hp - takenByTarget);
+    if (target.hp === 0) {
+      target.alive = false;
+      if (target.side === 'player' && target.generalId) loyaltyPenaltyIds.add(target.generalId);
+    }
+    protector.hp = Math.max(0, protector.hp - takenByProtector);
+    if (protector.hp === 0) {
+      protector.alive = false;
+      if (protector.side === 'player' && protector.generalId) {
+        loyaltyPenaltyIds.add(protector.generalId);
+      }
+    }
+    return { actualDamage: takenByTarget, protector, protectorDamage: takenByProtector };
+  }
+  target.hp = Math.max(0, target.hp - scaled);
+  if (target.hp === 0) {
+    target.alive = false;
+    if (target.side === 'player' && target.generalId) loyaltyPenaltyIds.add(target.generalId);
+  }
+  return { actualDamage: scaled };
+}
+
+function buildPlayerGeneralUnit(g: GeneralView, position: number): BattleUnit {
+  const eqResPhys = g.equippedItems.reduce((s, e) => s + e.resPhys, 0);
+  const eqResChaos = g.equippedItems.reduce((s, e) => s + e.resChaos, 0);
+  const eqResSeal = g.equippedItems.reduce((s, e) => s + e.resSeal, 0);
+  const eqResTrap = g.equippedItems.reduce((s, e) => s + e.resTrap, 0);
+  const eqResMagic = g.equippedItems.reduce((s, e) => s + e.resMagic, 0);
+  return {
+    uid: `p_gen_${g.id}`,
+    side: 'player',
+    isMainRole: false,
+    generalId: g.id,
+    name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
+    level: g.level,
+    roleClass: g.roleClass,
+    spriteKey: g.spriteKey,
+    skillId: g.skillId,
+    skill2Id: g.skill2Id ?? undefined,
+    intimacy: g.intimacy,
+    loyalty: g.loyalty,
+    hp: Math.max(1, g.hp),
+    maxHp: g.maxHp,
+    mp: g.mp,
+    maxMp: g.maxMp,
+    atk: g.atk,
+    spd: g.spd,
+    alive: true,
+    defending: false,
+    protectingUid: null,
+    position,
+    statuses: [],
+    resist: {
+      phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus + eqResPhys),
+      chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResChaos),
+      seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResSeal),
+      trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus + eqResTrap),
+      magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus + eqResMagic),
+    },
+  };
 }
 
 function tickStatuses(units: BattleUnit[]) {
@@ -140,35 +249,7 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
     .filter((g) => g.slot !== null)
     .sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9));
   activeGenerals.forEach((g, idx) => {
-    units.push({
-      uid: `p_gen_${g.id}`,
-      side: 'player',
-      isMainRole: false,
-      name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
-      level: g.level,
-      roleClass: g.roleClass,
-      spriteKey: g.spriteKey,
-      skillId: g.skillId,
-      skill2Id: g.skill2Id ?? undefined,
-      intimacy: g.intimacy,
-      hp: Math.max(1, g.hp),
-      maxHp: g.maxHp,
-      mp: g.mp,
-      maxMp: g.maxMp,
-      atk: g.atk,
-      spd: g.spd,
-      alive: true,
-      defending: false,
-      position: idx + 1,
-      statuses: [],
-      resist: {
-        phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
-        chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-        seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-        trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-        magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
-      },
-    });
+    units.push(buildPlayerGeneralUnit(g, idx + 1));
   });
 
   group.enemies.forEach((e, idx) => {
@@ -210,7 +291,7 @@ export function startBattle(characterId: number, enemyGroupId: string): BattleSt
     enemyGroupName: group.name,
     round: 1,
     status: 'ongoing',
-    deadlineAt: Date.now() + 60_000,
+    deadlineAt: Date.now() + BATTLE_TURN_MS,
     units,
     lastLogs: [],
   };
@@ -265,35 +346,7 @@ export function startArenaBattle(characterId: number, targetCharacterId: number)
     .filter((g) => g.slot !== null)
     .sort((a, b) => (a.slot ?? 9) - (b.slot ?? 9))
     .forEach((g, idx) => {
-      units.push({
-        uid: `p_gen_${g.id}`,
-        side: 'player',
-        isMainRole: false,
-        name: g.rebirth > 0 ? `${g.name}[${g.rebirth}转]` : g.name,
-        level: g.level,
-        roleClass: g.roleClass,
-        spriteKey: g.spriteKey,
-        skillId: g.skillId,
-        skill2Id: g.skill2Id ?? undefined,
-        intimacy: g.intimacy,
-        hp: Math.max(1, g.hp),
-        maxHp: g.maxHp,
-        mp: g.mp,
-        maxMp: g.maxMp,
-        atk: g.atk,
-        spd: g.spd,
-        alive: true,
-        defending: false,
-        position: idx + 1,
-        statuses: [],
-        resist: {
-          phys: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
-          chaos: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-          seal: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-          trap: Math.min(75, 10 + g.rebirth * 8 + g.intimacyResistBonus),
-          magic: Math.min(75, 5 + g.rebirth * 6 + g.intimacyResistBonus),
-        },
-      });
+      units.push(buildPlayerGeneralUnit(g, idx + 1));
     });
 
   // Mirror enemy main character
@@ -370,7 +423,7 @@ export function startArenaBattle(characterId: number, targetCharacterId: number)
     enemyGroupName: `${target.name}（镜像）`,
     round: 1,
     status: 'ongoing',
-    deadlineAt: Date.now() + 60_000,
+    deadlineAt: Date.now() + BATTLE_TURN_MS,
     units,
     lastLogs: [],
   };
@@ -381,17 +434,18 @@ export function startArenaBattle(characterId: number, targetCharacterId: number)
 
 export interface GeneralBattleCommand {
   unitUid: string;
-  action: 'attack' | 'skill' | 'defend' | 'item';
+  action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
 }
 
 export interface PlayerBattleCommand {
-  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
+  action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
   targetUid?: string;
   skillId?: string;
   itemId?: string;
+  summonGeneralId?: number;
   generalCommands?: GeneralBattleCommand[];
 }
 
@@ -408,12 +462,37 @@ export function performBattleAction(
   if (!ch) throw new Error('角色不存在');
 
   const logs: BattleActionLog[] = [];
-  for (const u of battle.units) u.defending = false;
+  const loyaltyPenaltyIds = new Set<number>();
+  for (const u of battle.units) {
+    u.defending = false;
+    u.protectingUid = null;
+  }
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
   const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId, ch.level);
 
-  const aliveActors = battle.units.filter((u) => u.alive).sort((a, b) => b.spd - a.spd);
+  // Pre-register protect intents before combat actions so protectors intercept hits cleanly
+  if (cmd.action === 'protect' && mainUnit.alive && !hasStatus(mainUnit, 'seal') && !hasStatus(mainUnit, 'chaos')) {
+    const protTarget = battle.units.find(
+      (u) => u.side === 'player' && u.alive && u.uid === cmd.targetUid && u.uid !== mainUnit.uid,
+    );
+    if (protTarget) mainUnit.protectingUid = protTarget.uid;
+  }
+  if (cmd.generalCommands) {
+    for (const gc of cmd.generalCommands) {
+      if (gc.action !== 'protect') continue;
+      const genUnit = battle.units.find((u) => u.uid === gc.unitUid && u.alive);
+      if (!genUnit || hasStatus(genUnit, 'seal') || hasStatus(genUnit, 'chaos')) continue;
+      const protTarget = battle.units.find(
+        (u) => u.side === 'player' && u.alive && u.uid === gc.targetUid && u.uid !== genUnit.uid,
+      );
+      if (protTarget) genUnit.protectingUid = protTarget.uid;
+    }
+  }
+
+  const aliveActors = battle.units
+    .filter((u) => u.alive)
+    .sort((a, b) => getEffectiveSpd(b) - getEffectiveSpd(a));
 
   let fled = false;
   let capturedGeneral: { name: string; growth: number } | undefined;
@@ -495,25 +574,140 @@ export function performBattleAction(
         continue;
       }
 
+      if (cmd.action === 'protect') {
+        const pt = battle.units.find((u) => u.uid === actor.protectingUid && u.alive);
+        if (pt) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'protect',
+            targets: [{ uid: pt.uid, name: pt.name, damage: 0 }],
+            message: `${actor.name} 挺身护卫 ${pt.name}，本回合替其分担伤害！`,
+          });
+        } else {
+          actor.defending = true;
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'defend',
+            targets: [],
+            message: `${actor.name} 未找到保护目标，转入凝神防御。`,
+          });
+        }
+        continue;
+      }
+
+      if (cmd.action === 'summon') {
+        const currentIds = new Set(
+          battle.units.filter((u) => u.side === 'player' && u.generalId).map((u) => u.generalId!),
+        );
+        const aliveGenUnits = battle.units.filter(
+          (u) => u.side === 'player' && !u.isMainRole && u.alive,
+        );
+        const deadGenUnits = battle.units.filter(
+          (u) => u.side === 'player' && !u.isMainRole && !u.alive,
+        );
+        const candidate = ch.generals.find(
+          (g) =>
+            (cmd.summonGeneralId ? g.id === cmd.summonGeneralId : true) &&
+            !currentIds.has(g.id),
+        );
+        if (!candidate) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'summon',
+            targets: [],
+            message: `${actor.name} 吹响号角，但营中已无可用备用副将！`,
+          });
+          continue;
+        }
+        if (aliveGenUnits.length >= 3) {
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'summon',
+            targets: [],
+            message: `阵中出战副将已满 3 人，无法再召唤新副将！`,
+          });
+          continue;
+        }
+        let targetPos = aliveGenUnits.length + 1;
+        if (deadGenUnits.length > 0) {
+          const dead = deadGenUnits[0];
+          targetPos = dead.position;
+          const idx = battle.units.indexOf(dead);
+          if (idx >= 0) battle.units.splice(idx, 1);
+        }
+        const spawned = buildPlayerGeneralUnit(candidate, targetPos);
+        battle.units.push(spawned);
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'summon',
+          effect: 'heal',
+          targets: [{ uid: spawned.uid, name: spawned.name, damage: 0, revived: true }],
+          message: `${actor.name} 召唤备用副将【${spawned.name}】披挂上阵！`,
+        });
+        continue;
+      }
+
       if (cmd.action === 'item' && cmd.itemId) {
         const tpl = ITEMS[cmd.itemId];
         const liveInv = getCharacterById(characterId)?.inventory;
         const owned = liveInv?.find((i) => i.itemId === cmd.itemId);
         if (tpl && owned && owned.quantity > 0) {
-          addItem(characterId, cmd.itemId, -1);
-          const hpAdd = tpl.hpRestore ?? 0;
-          const mpAdd = tpl.mpRestore ?? 0;
-          actor.hp = Math.min(actor.maxHp, actor.hp + hpAdd);
-          actor.mp = Math.min(actor.maxMp, actor.mp + mpAdd);
-          logs.push({
-            actorUid: actor.uid,
-            actorName: actor.name,
-            action: 'item',
-            effect: 'heal',
-            targets: [{ uid: actor.uid, name: actor.name, damage: 0, heal: hpAdd }],
-            message: `${actor.name} 服用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
-          });
-          continue;
+          if (tpl.reviveHpPct) {
+            const deadAllies = battle.units.filter(
+              (u) => u.side === 'player' && !u.alive && !u.isMainRole,
+            );
+            const revTarget =
+              deadAllies.find((u) => u.uid === cmd.targetUid) ?? deadAllies[0];
+            if (revTarget) {
+              addItem(characterId, cmd.itemId, -1);
+              const revHp = Math.max(1, Math.round((revTarget.maxHp * tpl.reviveHpPct) / 100));
+              revTarget.alive = true;
+              revTarget.hp = revHp;
+              revTarget.statuses = [];
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'item',
+                effect: 'heal',
+                targets: [
+                  {
+                    uid: revTarget.uid,
+                    name: revTarget.name,
+                    damage: 0,
+                    heal: revHp,
+                    revived: true,
+                  },
+                ],
+                message: `${actor.name} 对 ${revTarget.name} 使用【${tpl.name}】，起死回生恢复 ${revHp} 气血！`,
+              });
+              continue;
+            }
+          } else {
+            addItem(characterId, cmd.itemId, -1);
+            const hpAdd = tpl.hpRestore ?? 0;
+            const mpAdd = tpl.mpRestore ?? 0;
+            const allyTarget =
+              alivePlayers.find((p) => p.uid === cmd.targetUid) ?? actor;
+            allyTarget.hp = Math.min(allyTarget.maxHp, allyTarget.hp + hpAdd);
+            allyTarget.mp = Math.min(allyTarget.maxMp, allyTarget.mp + mpAdd);
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'item',
+              effect: 'heal',
+              targets: [{ uid: allyTarget.uid, name: allyTarget.name, damage: 0, heal: hpAdd }],
+              message:
+                allyTarget.uid === actor.uid
+                  ? `${actor.name} 服用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`
+                  : `${actor.name} 为 ${allyTarget.name} 喂服【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
+            });
+            continue;
+          }
         }
       }
 
@@ -606,11 +800,110 @@ export function performBattleAction(
             continue;
           }
 
+          if (skill.kind === 'buff' && skill.buffKind) {
+            const bKind = skill.buffKind;
+            const bTurns = skill.buffTurns ?? 3;
+            const bPct = (skill.buffPct ?? 26) + (tier - 1) * 3;
+            const maxBuffTargets = getSkillMaxTargets(true, curProf);
+            const buffTargets = alivePlayers.slice(0, maxBuffTargets);
+            for (const ally of buffTargets) {
+              applyStatus(ally, bKind, bTurns, bPct);
+            }
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: skill.id,
+              skillName: skill.name,
+              effect: skill.effect,
+              proficiencyGain: profGain,
+              targets: buffTargets.map((a) => ({
+                uid: a.uid,
+                name: a.name,
+                damage: 0,
+                appliedStatus: bKind,
+              })),
+              message: `${actor.name} 施展【${skill.name}】(${tier}阶)，为我军 ${buffTargets.length} 人施加【${STATUS_LABEL[bKind]} +${bPct}%】（${bTurns}回合，熟练度 +${profGain}）！`,
+            });
+            continue;
+          }
+
           const maxTargets = getSkillMaxTargets(skill.aoe, curProf);
           const primary = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
           const targets = skill.aoe
             ? [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, maxTargets)
             : [primary];
+
+          if (skill.kind === 'poison') {
+            const power = getSkillPowerMultiplier(skill.power, curProf, ch.alloc.int);
+            const pTurns = skill.debuffTurns ?? 3;
+            const heroAtk = getEffectiveAtk(actor);
+            const targetResults = targets.map((t) => {
+              const { damage, crit } = calcDamage(heroAtk, t.defending, power, {
+                resistPct: t.resist?.magic,
+                targetTrapped: hasStatus(t, 'trap'),
+              });
+              const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+              let poisoned = false;
+              if (t.alive) {
+                applyStatus(t, 'poison', pTurns, Math.round(heroAtk * 0.42));
+                poisoned = true;
+              }
+              return {
+                uid: t.uid,
+                name: t.name,
+                damage: actualDamage,
+                crit,
+                killed: !t.alive,
+                appliedStatus: poisoned ? ('poison' as BattleStatusKind) : undefined,
+              };
+            });
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: skill.id,
+              skillName: skill.name,
+              effect: skill.effect,
+              proficiencyGain: profGain,
+              targets: targetResults,
+              message: `${actor.name} 施展【${skill.name}】(${tier}阶)，毒雾侵袭 ${targets.length} 名敌军并使其持续中毒 ${pTurns} 回合（熟练度 +${profGain}）！`,
+            });
+            continue;
+          }
+
+          if (skill.kind === 'debuff' && skill.debuffKind === 'def_down') {
+            const power = getSkillPowerMultiplier(skill.power, curProf, 0);
+            const dTurns = skill.debuffTurns ?? 2;
+            const heroAtk = getEffectiveAtk(actor);
+            const { damage, crit } = calcDamage(heroAtk, primary.defending, power, {
+              resistPct: primary.resist?.phys,
+              targetTrapped: hasStatus(primary, 'trap'),
+            });
+            const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
+            if (primary.alive) applyStatus(primary, 'def_down', dTurns);
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'skill',
+              skillId: skill.id,
+              skillName: skill.name,
+              effect: skill.effect,
+              proficiencyGain: profGain,
+              targets: [
+                {
+                  uid: primary.uid,
+                  name: primary.name,
+                  damage: actualDamage,
+                  crit,
+                  killed: !primary.alive,
+                  appliedStatus: primary.alive ? 'def_down' : undefined,
+                },
+              ],
+              message: `${actor.name} 施展【${skill.name}】(${tier}阶)，对 ${primary.name} 造成 ${actualDamage} 点重击并击碎护甲 ${dTurns} 回合（熟练度 +${profGain}）！`,
+            });
+            continue;
+          }
 
           if (skill.kind === 'control' && skill.controlKind) {
             const kind = skill.controlKind;
@@ -646,16 +939,16 @@ export function performBattleAction(
           if (skill.kind === 'multi_hit') {
             const hits = (skill.hitCount ?? 2) + (tier >= 3 ? 1 : 0);
             const power = getSkillPowerMultiplier(skill.power, curProf, 0);
+            const heroAtk = getEffectiveAtk(actor);
             let totalDmg = 0;
             let anyCrit = false;
             for (let h = 0; h < hits && primary.alive; h++) {
-              const { damage, crit } = calcDamage(actor.atk, primary.defending, power, {
+              const { damage, crit } = calcDamage(heroAtk, primary.defending, power, {
                 resistPct: primary.resist?.phys,
                 targetTrapped: hasStatus(primary, 'trap'),
               });
-              primary.hp = Math.max(0, primary.hp - damage);
-              if (primary.hp === 0) primary.alive = false;
-              totalDmg += damage;
+              const { actualDamage } = applyIncomingDamage(battle, primary, damage, loyaltyPenaltyIds);
+              totalDmg += actualDamage;
               anyCrit = anyCrit || crit;
             }
             logs.push({
@@ -686,16 +979,16 @@ export function performBattleAction(
             curProf,
             skill.damageType === 'magic' ? ch.alloc.int : 0,
           );
+          const heroAtk = getEffectiveAtk(actor);
           const targetResults = targets.map((t) => {
             const resistPct =
               skill.damageType === 'magic' ? t.resist?.magic : t.resist?.phys;
-            const { damage, crit } = calcDamage(actor.atk, t.defending, power, {
+            const { damage, crit } = calcDamage(heroAtk, t.defending, power, {
               resistPct,
               targetTrapped: hasStatus(t, 'trap'),
             });
-            t.hp = Math.max(0, t.hp - damage);
-            if (t.hp === 0) t.alive = false;
-            return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
+            const { actualDamage } = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+            return { uid: t.uid, name: t.name, damage: actualDamage, crit, killed: !t.alive };
           });
           logs.push({
             actorUid: actor.uid,
@@ -726,21 +1019,32 @@ export function performBattleAction(
       }
 
       const target = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
-      const { damage, crit } = calcDamage(actor.atk, target.defending, 1, {
+      const { damage, crit } = calcDamage(getEffectiveAtk(actor), target.defending, 1, {
         resistPct: target.resist?.phys,
         targetTrapped: hasStatus(target, 'trap'),
       });
-      target.hp = Math.max(0, target.hp - damage);
-      if (target.hp === 0) target.alive = false;
+      const { actualDamage } = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
       logs.push({
         actorUid: actor.uid,
         actorName: actor.name,
         action: 'attack',
         effect: 'slash',
-        targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
-        message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${damage} 点伤害！`,
+        targets: [{ uid: target.uid, name: target.name, damage: actualDamage, crit, killed: !target.alive }],
+        message: `${actor.name} 攻击 ${target.name}${crit ? '（暴击！）' : ''}，造成 ${actualDamage} 点伤害！`,
       });
     } else if (actor.side === 'player') {
+      // Check classic loyalty refusal when loyalty < 30
+      if ((actor.loyalty ?? 100) < 30 && Math.random() < 0.35) {
+        logs.push({
+          actorUid: actor.uid,
+          actorName: actor.name,
+          action: 'status',
+          targets: [],
+          message: `副将 ${actor.name} 忠诚度过低（${actor.loyalty}），消极怠战拒绝出手！（请喂食肉包子/忠义丹）`,
+        });
+        continue;
+      }
+
       // Allied general: supports manual player command (Scheme A) or smart AI fallback
       const knownSkills = [actor.skillId, actor.skill2Id]
         .filter((id): id is string => Boolean(id))
@@ -761,30 +1065,85 @@ export function performBattleAction(
           continue;
         }
 
+        if (gCmd.action === 'protect') {
+          const pt = battle.units.find((u) => u.uid === actor.protectingUid && u.alive);
+          if (pt) {
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'protect',
+              targets: [{ uid: pt.uid, name: pt.name, damage: 0 }],
+              message: `副将 ${actor.name} 挺身护卫 ${pt.name}！`,
+            });
+          } else {
+            actor.defending = true;
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'defend',
+              targets: [],
+              message: `副将 ${actor.name} 转入防御姿态。`,
+            });
+          }
+          continue;
+        }
+
         if (gCmd.action === 'item' && gCmd.itemId) {
           const tpl = ITEMS[gCmd.itemId];
           const liveInv = getCharacterById(characterId)?.inventory;
           const owned = liveInv?.find((i) => i.itemId === gCmd.itemId);
           if (tpl && owned && owned.quantity > 0) {
-            addItem(characterId, gCmd.itemId, -1);
-            const hpAdd = tpl.hpRestore ?? 0;
-            const mpAdd = tpl.mpRestore ?? 0;
-            const healTarget =
-              alivePlayers.find((p) => p.uid === gCmd.targetUid) ??
-              (hpAdd > 0
-                ? [...alivePlayers].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
-                : actor);
-            healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + hpAdd);
-            healTarget.mp = Math.min(healTarget.maxMp, healTarget.mp + mpAdd);
-            logs.push({
-              actorUid: actor.uid,
-              actorName: actor.name,
-              action: 'item',
-              effect: 'heal',
-              targets: [{ uid: healTarget.uid, name: healTarget.name, damage: 0, heal: hpAdd }],
-              message: `副将 ${actor.name} 为 ${healTarget.name} 使用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
-            });
-            continue;
+            if (tpl.reviveHpPct) {
+              const deadAllies = battle.units.filter(
+                (u) => u.side === 'player' && !u.alive && !u.isMainRole,
+              );
+              const revTarget =
+                deadAllies.find((u) => u.uid === gCmd.targetUid) ?? deadAllies[0];
+              if (revTarget) {
+                addItem(characterId, gCmd.itemId, -1);
+                const revHp = Math.max(1, Math.round((revTarget.maxHp * tpl.reviveHpPct) / 100));
+                revTarget.alive = true;
+                revTarget.hp = revHp;
+                revTarget.statuses = [];
+                logs.push({
+                  actorUid: actor.uid,
+                  actorName: actor.name,
+                  action: 'item',
+                  effect: 'heal',
+                  targets: [
+                    {
+                      uid: revTarget.uid,
+                      name: revTarget.name,
+                      damage: 0,
+                      heal: revHp,
+                      revived: true,
+                    },
+                  ],
+                  message: `副将 ${actor.name} 使用【${tpl.name}】救活了 ${revTarget.name}！`,
+                });
+                continue;
+              }
+            } else {
+              addItem(characterId, gCmd.itemId, -1);
+              const hpAdd = tpl.hpRestore ?? 0;
+              const mpAdd = tpl.mpRestore ?? 0;
+              const healTarget =
+                alivePlayers.find((p) => p.uid === gCmd.targetUid) ??
+                (hpAdd > 0
+                  ? [...alivePlayers].sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0]
+                  : actor);
+              healTarget.hp = Math.min(healTarget.maxHp, healTarget.hp + hpAdd);
+              healTarget.mp = Math.min(healTarget.maxMp, healTarget.mp + mpAdd);
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'item',
+                effect: 'heal',
+                targets: [{ uid: healTarget.uid, name: healTarget.name, damage: 0, heal: hpAdd }],
+                message: `副将 ${actor.name} 为 ${healTarget.name} 使用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
+              });
+              continue;
+            }
           }
         }
 
@@ -1084,15 +1443,23 @@ export function performBattleAction(
         actor.mp -= 20;
         const aoeTargets = isStrong && alivePlayers.length >= 2 ? alivePlayers.slice(0, 3) : [target];
         const mult = aoeTargets.length > 1 ? 0.92 : 1.28;
-        const targetResults = aoeTargets.map((t) => {
+        const targetResults: BattleActionLog['targets'] = [];
+        for (const t of aoeTargets) {
           const { damage, crit } = calcDamage(effAtk, t.defending, mult, {
             resistPct: Math.max(0, (t.resist?.magic ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          t.hp = Math.max(0, t.hp - damage);
-          if (t.hp === 0) t.alive = false;
-          return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
-        });
+          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+          targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
+          if (res.protector && res.protectorDamage) {
+            targetResults.push({
+              uid: res.protector.uid,
+              name: res.protector.name,
+              damage: res.protectorDamage,
+              killed: !res.protector.alive,
+            });
+          }
+        }
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
@@ -1106,15 +1473,23 @@ export function performBattleAction(
         actor.mp -= 20;
         const cleaveTargets = alivePlayers.length >= 2 && Math.random() < 0.5 ? alivePlayers.slice(0, 2) : [target];
         const mult = cleaveTargets.length > 1 ? 0.96 : 1.38;
-        const targetResults = cleaveTargets.map((t) => {
+        const targetResults: BattleActionLog['targets'] = [];
+        for (const t of cleaveTargets) {
           const { damage, crit } = calcDamage(effAtk, t.defending, mult, {
             resistPct: Math.max(0, (t.resist?.phys ?? 0) - resPen),
             targetTrapped: hasStatus(t, 'trap'),
           });
-          t.hp = Math.max(0, t.hp - damage);
-          if (t.hp === 0) t.alive = false;
-          return { uid: t.uid, name: t.name, damage, crit, killed: !t.alive };
-        });
+          const res = applyIncomingDamage(battle, t, damage, loyaltyPenaltyIds);
+          targetResults.push({ uid: t.uid, name: t.name, damage: res.actualDamage, crit, killed: !t.alive });
+          if (res.protector && res.protectorDamage) {
+            targetResults.push({
+              uid: res.protector.uid,
+              name: res.protector.name,
+              damage: res.protectorDamage,
+              killed: !res.protector.alive,
+            });
+          }
+        }
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
@@ -1140,18 +1515,60 @@ export function performBattleAction(
           resistPct: Math.max(0, (target.resist?.phys ?? 0) - resPen),
           targetTrapped: hasStatus(target, 'trap'),
         });
-        target.hp = Math.max(0, target.hp - damage);
-        if (target.hp === 0) target.alive = false;
+        const res = applyIncomingDamage(battle, target, damage, loyaltyPenaltyIds);
+        const tList: BattleActionLog['targets'] = [
+          { uid: target.uid, name: target.name, damage: res.actualDamage, crit, killed: !target.alive },
+        ];
+        if (res.protector && res.protectorDamage) {
+          tList.push({
+            uid: res.protector.uid,
+            name: res.protector.name,
+            damage: res.protectorDamage,
+            killed: !res.protector.alive,
+          });
+        }
         logs.push({
           actorUid: actor.uid,
           actorName: actor.name,
           action: 'attack',
           effect: 'slash',
-          targets: [{ uid: target.uid, name: target.name, damage, crit, killed: !target.alive }],
-          message: `${actor.name} 攻击 ${target.name}，造成 ${damage} 点伤害！`,
+          targets: tList,
+          message: res.protector
+            ? `${actor.name} 攻击 ${target.name}，${res.protector.name} 挺身护卫分担了 ${res.protectorDamage} 点伤害！`
+            : `${actor.name} 攻击 ${target.name}，造成 ${res.actualDamage} 点伤害！`,
         });
       }
     }
+  }
+
+  // Apply end-of-round Poison DoT ticks
+  for (const u of battle.units) {
+    if (!u.alive) continue;
+    const pStatus = getStatus(u, 'poison');
+    if (pStatus) {
+      const poisonDmg = Math.min(
+        Math.round(u.maxHp * 0.12),
+        Math.max(25, Math.round(u.maxHp * 0.065 + (pStatus.value ?? 0))),
+      );
+      u.hp = Math.max(0, u.hp - poisonDmg);
+      if (u.hp === 0) {
+        u.alive = false;
+        if (u.side === 'player' && u.generalId) loyaltyPenaltyIds.add(u.generalId);
+      }
+      logs.push({
+        actorUid: u.uid,
+        actorName: u.name,
+        action: 'status',
+        effect: 'fire',
+        targets: [{ uid: u.uid, name: u.name, damage: poisonDmg, killed: !u.alive }],
+        message: `${u.name} 毒发攻心，损失 ${poisonDmg} 点气血！`,
+      });
+    }
+  }
+
+  // Classic loyalty penalty for any general knocked out in battle (-6 loyalty)
+  for (const gid of loyaltyPenaltyIds) {
+    adjustGeneralLoyalty(gid, -6);
   }
 
   // Decrement status durations at end of round
@@ -1201,9 +1618,19 @@ export function performBattleAction(
         const bookId = bookIds[Math.floor(Math.random() * bookIds.length)];
         addItem(characterId, bookId, 1);
         droppedItem = { itemId: bookId, name: ITEMS[bookId].name, quantity: 1 };
-      } else if (dropRoll < 0.42) {
+      } else if (battle.enemyGroupId.startsWith('boss_') && dropRoll < 0.65) {
+        const matId = Math.random() < 0.55 ? 'xuantie' : 'jinglianshi';
+        addItem(characterId, matId, 1);
+        droppedItem = { itemId: matId, name: ITEMS[matId].name, quantity: 1 };
+      } else if (dropRoll < 0.48) {
         const dropId =
-          dropRoll < 0.14 ? 'baotu' : dropRoll < 0.28 ? 'jinchuang' : 'ningshen';
+          dropRoll < 0.12
+            ? 'baotu'
+            : dropRoll < 0.24
+              ? 'xuantie'
+              : dropRoll < 0.36
+                ? 'jinchuang'
+                : 'ningshen';
         addItem(characterId, dropId, 1);
         droppedItem = { itemId: dropId, name: ITEMS[dropId].name, quantity: 1 };
       }
@@ -1310,7 +1737,7 @@ export function performBattleAction(
     activeBattles.delete(characterId);
   } else {
     battle.round++;
-    battle.deadlineAt = Date.now() + 60_000;
+    battle.deadlineAt = Date.now() + BATTLE_TURN_MS;
     updatedChar = applyExpAndSilver(characterId, 0, 0, mainUnit.hp, mainUnit.mp).character;
   }
 

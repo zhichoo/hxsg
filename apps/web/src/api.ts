@@ -4,12 +4,15 @@ import type {
   CasinoStateView,
   CharacterView,
   EquipmentSlot,
+  EquipmentView,
+  FriendView,
   Gender,
   GeneralView,
   MailView,
   MarketListingKind,
   MarketListingView,
   OnlinePlayerSummary,
+  PlayerInspectView,
   RankEntry,
   RoleClass,
   ServerRealm,
@@ -301,13 +304,14 @@ export const api = {
     }),
   battleAction: (payload: {
     realmId: string;
-    action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
+    action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
     targetUid?: string;
     skillId?: string;
     itemId?: string;
+    summonGeneralId?: number;
     generalCommands?: Array<{
       unitUid: string;
-      action: 'attack' | 'skill' | 'defend' | 'item';
+      action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
       targetUid?: string;
       skillId?: string;
       itemId?: string;
@@ -320,6 +324,75 @@ export const api = {
         method: 'POST',
         body: payload,
       },
+    ),
+  trainSkill: (realmId: string, skillId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>('skillsTrain', '/api/skills/train', {
+      method: 'POST',
+      body: { realmId, skillId },
+    }),
+  craftEquipment: (realmId: string, recipeId: string) =>
+    callEndpoint<{ equipment: EquipmentView; character: CharacterView; message: string }>(
+      'equipmentCraft',
+      '/api/equipment/craft',
+      { method: 'POST', body: { realmId, recipeId } },
+    ),
+  reforgeEquipment: (realmId: string, equipId: number) =>
+    callEndpoint<{ equipment: EquipmentView; character: CharacterView; message: string }>(
+      'equipmentReforge',
+      '/api/equipment/reforge',
+      { method: 'POST', body: { realmId, equipId } },
+    ),
+  allocateGeneralStats: (
+    realmId: string,
+    generalId: number,
+    delta: { vit?: number; str?: number; int?: number; agi?: number },
+  ) =>
+    callEndpoint<{ character: CharacterView }>(
+      'generalsAllocateStats',
+      '/api/generals/allocate-stats',
+      { method: 'POST', body: { realmId, generalId, ...delta } },
+    ),
+  resetGeneralStats: (realmId: string, generalId: number) =>
+    callEndpoint<{ character: CharacterView }>(
+      'generalsResetStats',
+      '/api/generals/reset-stats',
+      { method: 'POST', body: { realmId, generalId } },
+    ),
+  feedGeneralLoyalty: (realmId: string, generalId: number, itemId: string) =>
+    callEndpoint<{ character: CharacterView; message: string }>(
+      'generalsFeedLoyalty',
+      '/api/generals/feed-loyalty',
+      { method: 'POST', body: { realmId, generalId, itemId } },
+    ),
+  equipItemOnGeneral: (realmId: string, generalId: number, equipId: number) =>
+    callEndpoint<{ character: CharacterView }>('generalsEquip', '/api/generals/equip', {
+      method: 'POST',
+      body: { realmId, generalId, equipId },
+    }),
+  unequipGeneralSlot: (realmId: string, generalId: number, slot: EquipmentSlot) =>
+    callEndpoint<{ character: CharacterView }>('generalsUnequip', '/api/generals/unequip', {
+      method: 'POST',
+      body: { realmId, generalId, slot },
+    }),
+  inspectPlayer: (realmId: string, targetCharacterId: number) =>
+    callEndpoint<{ player: PlayerInspectView }>('playersInspect', '/api/players/inspect', {
+      query: { realmId, targetCharacterId: String(targetCharacterId) },
+    }),
+  getFriends: (realmId: string) =>
+    callEndpoint<{ friends: FriendView[] }>('friendsList', '/api/friends/list', {
+      query: { realmId },
+    }),
+  addFriend: (realmId: string, target: { targetCharacterId?: number; targetName?: string }) =>
+    callEndpoint<{ friends: FriendView[]; character: CharacterView; message: string }>(
+      'friendsAdd',
+      '/api/friends/add',
+      { method: 'POST', body: { realmId, ...target } },
+    ),
+  removeFriend: (realmId: string, friendCharacterId: number) =>
+    callEndpoint<{ friends: FriendView[]; character: CharacterView; message: string }>(
+      'friendsRemove',
+      '/api/friends/remove',
+      { method: 'POST', body: { realmId, friendCharacterId } },
     ),
   acceptMainQuest: (realmId: string, questId?: string) =>
     callEndpoint<{ character: CharacterView; message: string }>(

@@ -260,6 +260,19 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_casino_bets_round ON casino_bets(round_id);
   CREATE INDEX IF NOT EXISTS idx_casino_bets_char ON casino_bets(character_id, game, id DESC);
+
+  CREATE TABLE IF NOT EXISTS friends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    realm_id TEXT NOT NULL,
+    character_id INTEGER NOT NULL,
+    friend_character_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(character_id, friend_character_id),
+    FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+    FOREIGN KEY (friend_character_id) REFERENCES characters(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_friends_char ON friends(character_id);
 `);
 
 // Safe online schema migration for existing DBs created in Phase 1
@@ -348,10 +361,56 @@ const newGeneralCols: Array<[string, string]> = [
   ['skill_id', "TEXT NOT NULL DEFAULT 'liandao'"],
   ['skill2_id', 'TEXT DEFAULT NULL'],
   ['intimacy', 'INTEGER NOT NULL DEFAULT 0'],
+  ['loyalty', 'INTEGER NOT NULL DEFAULT 100'],
+  ['free_points', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_vit', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_str', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_int', 'INTEGER NOT NULL DEFAULT 0'],
+  ['pt_agi', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 
 for (const [col, def] of newGeneralCols) {
   if (!existingGeneralCols.has(col)) {
     db.exec(`ALTER TABLE generals ADD COLUMN ${col} ${def}`);
+  }
+}
+
+// Backfill free_points for legacy generals that leveled up before general allocation existed
+db.exec(`
+  UPDATE generals
+  SET free_points = (level - 1) * 4
+  WHERE level > 1 AND free_points = 0 AND pt_vit = 0 AND pt_str = 0 AND pt_int = 0 AND pt_agi = 0;
+`);
+
+// Online migration for equipment: general wear slot + set_id + random roll_pct
+const existingEquipCols = new Set(
+  (db.prepare('PRAGMA table_info(character_equipment)').all() as unknown as Array<{ name: string }>).map(
+    (c) => c.name,
+  ),
+);
+const newEquipCols: Array<[string, string]> = [
+  ['equipped_general_id', 'INTEGER DEFAULT NULL'],
+  ['set_id', 'TEXT DEFAULT NULL'],
+  ['roll_pct', 'INTEGER NOT NULL DEFAULT 100'],
+];
+for (const [col, def] of newEquipCols) {
+  if (!existingEquipCols.has(col)) {
+    db.exec(`ALTER TABLE character_equipment ADD COLUMN ${col} ${def}`);
+  }
+}
+
+// Online migration for private chat messages
+const existingChatCols = new Set(
+  (db.prepare('PRAGMA table_info(chat_messages)').all() as unknown as Array<{ name: string }>).map(
+    (c) => c.name,
+  ),
+);
+const newChatCols: Array<[string, string]> = [
+  ['recipient_id', 'INTEGER DEFAULT NULL'],
+  ['recipient_name', 'TEXT DEFAULT NULL'],
+];
+for (const [col, def] of newChatCols) {
+  if (!existingChatCols.has(col)) {
+    db.exec(`ALTER TABLE chat_messages ADD COLUMN ${col} ${def}`);
   }
 }

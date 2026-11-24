@@ -26,8 +26,10 @@ import {
   abandonPaohuan,
   acceptMainQuest,
   acceptPaohuan,
+  addFriend,
   allocateCharacterResist,
   allocateCharacterStats,
+  allocateGeneralStats,
   answerKejuQuestion,
   bankTransfer,
   buyEquipment,
@@ -38,6 +40,7 @@ import {
   claimMailAttachment,
   claimMainQuest,
   claimPaohuan,
+  craftEquipment,
   createCharacter,
   createMarketListing,
   deleteMail,
@@ -45,13 +48,17 @@ import {
   dismissGeneral,
   drawGeneralWithToken,
   equipItem,
+  equipItemOnGeneral,
   feedGeneralExpPill,
+  feedGeneralLoyalty,
   getCasinoState,
   getCharacterByAccountAndRealm,
+  getFriends,
   getMails,
   getMarketListings,
   getRankings,
   gmGrant,
+  inspectPlayer,
   learnGeneralSkillBook,
   markMailRead,
   moveCharacter,
@@ -60,7 +67,10 @@ import {
   rebirthCharacter,
   rebirthGeneral,
   recruitGeneral,
+  reforgeEquipment,
+  removeFriend,
   resetCharacterStats,
+  resetGeneralStats,
   restAtInn,
   sellEquipment,
   sendPlayerMail,
@@ -68,6 +78,8 @@ import {
   startDailyEscort,
   sweepTowerDaily,
   tickAllCasinoRounds,
+  trainSkillWithSilver,
+  unequipGeneralSlot,
   unequipSlot,
   useInventoryItem,
   washGeneral,
@@ -82,6 +94,7 @@ import {
   attachSocketServer,
   broadcastSystemMessage,
   getMapOnlinePlayers,
+  getOnlineCharacterIdsByRealm,
   getOnlineCountByRealm,
   syncPlayerMap,
 } from './socket.js';
@@ -274,6 +287,117 @@ app.post('/api/character/rebirth', async (req) => {
   const res = rebirthCharacter(current.id);
   broadcastSystemMessage(realmId, res.broadcast, 'shi');
   return { character: res.character, message: res.message };
+});
+
+app.post('/api/skills/train', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; skillId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return trainSkillWithSilver(current.id, body.skillId || '');
+});
+
+app.post('/api/equipment/craft', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; recipeId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return craftEquipment(current.id, body.recipeId || '');
+});
+
+app.post('/api/equipment/reforge', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; equipId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return reforgeEquipment(current.id, Number(body.equipId));
+});
+
+app.post('/api/generals/allocate-stats', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as {
+    realmId?: string;
+    generalId?: number;
+    vit?: number;
+    str?: number;
+    int?: number;
+    agi?: number;
+  };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: allocateGeneralStats(current.id, Number(body.generalId), body) };
+});
+
+app.post('/api/generals/reset-stats', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: resetGeneralStats(current.id, Number(body.generalId)) };
+});
+
+app.post('/api/generals/feed-loyalty', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number; itemId?: string };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return feedGeneralLoyalty(current.id, Number(body.generalId), body.itemId || '');
+});
+
+app.post('/api/generals/equip', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number; equipId?: number };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: equipItemOnGeneral(current.id, Number(body.generalId), Number(body.equipId)) };
+});
+
+app.post('/api/generals/unequip', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; generalId?: number; slot?: EquipmentSlot };
+  const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
+  if (!current) throw new Error('尚未创建角色');
+  return { character: unequipGeneralSlot(current.id, Number(body.generalId), body.slot || 'weapon') };
+});
+
+app.get('/api/players/inspect', async (req) => {
+  const auth = await requireAuth(req);
+  const q = req.query as { realmId?: string; targetCharacterId?: string };
+  const realmId = q.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const onlineIds = getOnlineCharacterIdsByRealm(realmId);
+  return { player: inspectPlayer(current.id, Number(q.targetCharacterId), onlineIds) };
+});
+
+app.get('/api/friends/list', async (req) => {
+  const auth = await requireAuth(req);
+  const q = req.query as { realmId?: string };
+  const realmId = q.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const onlineIds = getOnlineCharacterIdsByRealm(realmId);
+  return { friends: getFriends(current.id, onlineIds) };
+});
+
+app.post('/api/friends/add', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; targetCharacterId?: number; targetName?: string };
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const onlineIds = getOnlineCharacterIdsByRealm(realmId);
+  return addFriend(current.id, body, onlineIds);
+});
+
+app.post('/api/friends/remove', async (req) => {
+  const auth = await requireAuth(req);
+  const body = req.body as { realmId?: string; friendCharacterId?: number };
+  const realmId = body.realmId || 'dingjunshan';
+  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
+  if (!current) throw new Error('尚未创建角色');
+  const onlineIds = getOnlineCharacterIdsByRealm(realmId);
+  return removeFriend(current.id, Number(body.friendCharacterId), onlineIds);
 });
 
 app.post('/api/map/move', async (req) => {

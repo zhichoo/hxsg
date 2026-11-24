@@ -18,11 +18,14 @@ interface MainCityProps {
   character: CharacterView;
   mapPlayers: OnlinePlayerSummary[];
   messages: ChatMessage[];
-  onSendChat: (channel: ChatChannel, content: string) => void;
+  whisperTarget?: string | null;
+  onClearWhisper?: () => void;
+  onSendChat: (channel: ChatChannel, content: string, recipientName?: string) => void;
   onMoveMap: (mapId: string) => void;
   onStartBattle: (enemyGroupId: string) => void;
   onRestInn: () => void;
   onOpenPanel: (panel: SubPanelType) => void;
+  onInspectPlayer?: (characterId: number) => void;
   onLogout: () => void;
   onNotify: (msg: string) => void;
 }
@@ -31,11 +34,14 @@ export function MainCity({
   character,
   mapPlayers,
   messages,
+  whisperTarget,
+  onClearWhisper,
   onSendChat,
   onMoveMap,
   onStartBattle,
   onRestInn,
   onOpenPanel,
+  onInspectPlayer,
   onLogout,
   onNotify,
 }: MainCityProps) {
@@ -133,6 +139,7 @@ export function MainCity({
     { label: '赌坊', onClick: () => onOpenPanel('casino') },
     { label: '排行', onClick: () => onOpenPanel('rank') },
     { label: '招贤', onClick: () => onOpenPanel('tavern') },
+    { label: '好友', onClick: () => onOpenPanel('friends') },
     { label: '飞鸽', onClick: () => onOpenPanel('mail') },
     { label: '钱庄', onClick: () => onOpenPanel('bank') },
     { label: '集市', onClick: () => onOpenPanel('market') },
@@ -546,33 +553,43 @@ export function MainCity({
         })}
       </div>
 
-      {/* 4. Same-Map Online Players Pixel Avatar Strip (matches classic_3.jpg) */}
+      {/* 4. Same-Map Online Players Pixel Avatar Strip (clickable to inspect/whisper/friend!) */}
       <div className="h-[34px] px-2 bg-[#080708] border-b border-[#3c4d50] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-1.5 overflow-hidden">
-          {mapPlayers.slice(0, 7).map((p) => (
-            <div
+        <div className="flex items-center gap-1.5 overflow-x-auto hx-scroll">
+          {mapPlayers.slice(0, 8).map((p) => (
+            <button
               key={p.id}
-              title={`${p.name} (Lv.${p.level})`}
-              className="flex items-center gap-0.5 bg-[#1b191d] border border-[#5c4e32] px-1 py-0.5"
+              type="button"
+              onClick={() => onInspectPlayer?.(p.id)}
+              title={`点击查看 ${p.name} (Lv.${p.level})`}
+              className="flex items-center gap-1 bg-[#1b191d] hover:bg-[#35233a] border border-[#5c4e32] hover:border-[#f0c75e] px-1.5 py-0.5 shrink-0"
             >
-              <AssetImg
-                path={p.avatarSprite}
-                alt={p.name}
-                className="w-5 h-5 pixelated"
-              />
-            </div>
+              <AssetImg path={p.avatarSprite} alt={p.name} className="w-5 h-5 pixelated" />
+              <span className="text-[10.5px] text-[#ffe9b0] max-w-[52px] truncate">{p.name}</span>
+            </button>
           ))}
           {mapPlayers.length === 0 && (
             <span className="text-[11px] text-[#7c8a8c]">当前地图仅你一人</span>
           )}
         </div>
-        <span className="text-[12px] text-[#9eb6ff] font-bold shrink-0">
+        <button
+          type="button"
+          onClick={() => onOpenPanel('friends')}
+          className="text-[11.5px] text-[#9eb6ff] hover:text-[#ffe478] font-bold shrink-0 ml-1"
+          title="打开好友列表"
+        >
           在线({mapPlayers.length})
-        </span>
+        </button>
       </div>
 
-      {/* 5. Bottom Real-Time Chat Dock (区 派 商 世) */}
-      <ChatDock messages={messages} onSend={onSendChat} />
+      {/* 5. Bottom Real-Time Chat Dock (区 派 商 世 私 + 原版表情) */}
+      <ChatDock
+        messages={messages}
+        onSend={onSendChat}
+        whisperTarget={whisperTarget}
+        onClearWhisper={onClearWhisper}
+        onClickPlayer={(cid) => onInspectPlayer?.(cid)}
+      />
 
       {/* NPC Dialogue Modal */}
       {dialogue && (

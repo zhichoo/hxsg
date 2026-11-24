@@ -48,6 +48,8 @@ export default function App() {
   const [mapPlayers, setMapPlayers] = useState<OnlinePlayerSummary[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [subPanel, setSubPanel] = useState<SubPanelType | null>(null);
+  const [inspectPlayerId, setInspectPlayerId] = useState<number | null>(null);
+  const [whisperTarget, setWhisperTarget] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const realtimeRef = useRef<RealtimeHandle | null>(null);
@@ -190,8 +192,8 @@ export default function App() {
     notify(isMapp ? '已返回选区' : '已退出登录');
   };
 
-  const handleSendChat = (channel: ChatChannel, content: string) => {
-    realtimeRef.current?.sendChat(channel, content);
+  const handleSendChat = (channel: ChatChannel, content: string, recipientName?: string) => {
+    realtimeRef.current?.sendChat(channel, content, recipientName);
   };
 
   const handleMoveMap = async (targetMapId: string) => {
@@ -225,13 +227,14 @@ export default function App() {
   };
 
   const handleBattleAction = async (cmd: {
-    action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee';
+    action: 'attack' | 'skill' | 'defend' | 'protect' | 'summon' | 'item' | 'capture' | 'flee';
     targetUid?: string;
     skillId?: string;
     itemId?: string;
+    summonGeneralId?: number;
     generalCommands?: Array<{
       unitUid: string;
-      action: 'attack' | 'skill' | 'defend' | 'item';
+      action: 'attack' | 'skill' | 'defend' | 'protect' | 'item';
       targetUid?: string;
       skillId?: string;
       itemId?: string;
@@ -292,11 +295,21 @@ export default function App() {
               character={character}
               mapPlayers={mapPlayers}
               messages={messages}
+              whisperTarget={whisperTarget}
+              onClearWhisper={() => setWhisperTarget(null)}
               onSendChat={handleSendChat}
               onMoveMap={(id) => void handleMoveMap(id)}
               onStartBattle={(id) => void handleStartBattle(id)}
               onRestInn={() => void handleRestInn()}
               onOpenPanel={(p) => setSubPanel(p)}
+              onInspectPlayer={(pid) => {
+                if (pid === character.id) {
+                  setSubPanel('status');
+                } else {
+                  setInspectPlayerId(pid);
+                  setSubPanel('inspect');
+                }
+              }}
               onLogout={handleLogout}
               onNotify={notify}
             />
@@ -307,6 +320,15 @@ export default function App() {
               panel={subPanel}
               realmId={realmId}
               character={character}
+              inspectPlayerId={inspectPlayerId}
+              onInspectPlayer={(pid) => {
+                setInspectPlayerId(pid);
+                setSubPanel('inspect');
+              }}
+              onStartWhisper={(name) => {
+                setWhisperTarget(name);
+                setSubPanel(null);
+              }}
               onUpdateCharacter={setCharacter}
               onEnterBattle={(b) => {
                 setBattle(b);

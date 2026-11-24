@@ -23,7 +23,7 @@ export interface RealtimeHandlers {
 }
 
 export interface RealtimeHandle {
-  sendChat: (channel: ChatChannel, content: string) => void;
+  sendChat: (channel: ChatChannel, content: string, recipientName?: string) => void;
   close: () => void;
 }
 
@@ -304,8 +304,14 @@ export function connectPlatformRealtime(
     void openMappSocket();
 
     return {
-      sendChat(channel, content) {
-        void activeConn?.send({ type: 'chat:send', channel, content }).catch(() => {});
+      sendChat(channel, content, recipientName) {
+        void activeConn
+          ?.send(
+            recipientName
+              ? { type: 'chat:send', channel, content, recipientName }
+              : { type: 'chat:send', channel, content },
+          )
+          .catch(() => {});
       },
       close() {
         closed = true;
@@ -363,9 +369,9 @@ export function connectPlatformRealtime(
   openWebSocket();
 
   return {
-    sendChat(channel, content) {
+    sendChat(channel, content, recipientName) {
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'chat:send', channel, content }));
+        ws.send(JSON.stringify({ type: 'chat:send', channel, content, recipientName }));
       }
     },
     close() {

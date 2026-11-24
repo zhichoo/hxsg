@@ -1,7 +1,8 @@
 export type RoleClass = 'wushi' | 'wenren' | 'yiren';
 export type Gender = 'male' | 'female';
-export type ChatChannel = 'qu' | 'pai' | 'shang' | 'shi';
+export type ChatChannel = 'qu' | 'pai' | 'shang' | 'shi' | 'si';
 export type ControlKind = 'chaos' | 'seal' | 'trap';
+export type BattleStatusKind = ControlKind | 'poison' | 'atk_up' | 'spd_up' | 'def_down';
 export type EquipmentSlot = 'weapon' | 'helmet' | 'armor' | 'boots' | 'mount';
 export type EquipmentQuality = 'common' | 'fine' | 'rare' | 'legend';
 
@@ -25,6 +26,10 @@ export interface EquipmentView {
   resMagic: number;
   sellSilver: number;
   equipped: boolean;
+  equippedGeneralId: number | null;
+  setId?: string | null;
+  setName?: string | null;
+  rollPct?: number;
 }
 
 export interface EquipmentBonusSummary {
@@ -197,6 +202,25 @@ export interface CasinoBetView {
   settledAt: number | null;
 }
 
+export interface CasinoWinnerEntry {
+  characterId: number;
+  characterName: string;
+  choice: string;
+  currency: CasinoCurrency;
+  payout: number;
+  netProfit: number;
+  roundNo: number;
+}
+
+export interface CasinoLeaderboardEntry {
+  rank: number;
+  characterId: number;
+  characterName: string;
+  totalSilverWon: number;
+  totalGoldWon: number;
+  winCount: number;
+}
+
 export interface CasinoGameStateView {
   game: CasinoGameType;
   intervalSec: number;
@@ -205,6 +229,8 @@ export interface CasinoGameStateView {
   history: CasinoRoundView[];
   myCurrentBets: CasinoBetView[];
   myRecentBets: CasinoBetView[];
+  lastRoundTopWinners: CasinoWinnerEntry[];
+  todayLeaderboard: CasinoLeaderboardEntry[];
 }
 
 export interface CasinoStateView {
@@ -358,6 +384,7 @@ export interface CharacterView {
   resist: CharacterResistances;
   equipBonus: EquipmentBonusSummary;
   equipment: EquipmentView[];
+  setBonuses: string[];
   skills: SkillProgressView[];
   generals: GeneralView[];
   inventory: InventoryItemView[];
@@ -366,6 +393,7 @@ export interface CharacterView {
   arena: ArenaStateView;
   daily: DailyStateView;
   unreadMailCount: number;
+  friendsCount: number;
 }
 
 export interface GeneralView {
@@ -399,6 +427,10 @@ export interface GeneralView {
   intimacyTitle: string;
   intimacyStatPct: number;
   intimacyResistBonus: number;
+  loyalty: number;
+  alloc: CharacterAllocations;
+  equippedItems: EquipmentView[];
+  setBonuses: string[];
   slot: number | null; // 0, 1, 2 for active battle slots; null for bench
 }
 
@@ -410,6 +442,8 @@ export interface InventoryItemView {
   quantity: number;
   hpRestore?: number;
   mpRestore?: number;
+  reviveHpPct?: number;
+  loyaltyRestore?: number;
   priceSilver: number;
 }
 
@@ -449,7 +483,7 @@ export interface SkillDef {
   id: string;
   name: string;
   roleClass: RoleClass | 'all';
-  kind: 'damage' | 'multi_hit' | 'control' | 'heal';
+  kind: 'damage' | 'multi_hit' | 'control' | 'heal' | 'buff' | 'poison' | 'debuff';
   mpCost: number;
   power: number;
   aoe: boolean;
@@ -457,20 +491,27 @@ export interface SkillDef {
   controlKind?: ControlKind;
   controlTurns?: number;
   baseControlRate?: number;
+  buffKind?: 'atk_up' | 'spd_up';
+  buffTurns?: number;
+  buffPct?: number;
+  debuffKind?: 'def_down' | 'poison';
+  debuffTurns?: number;
   damageType?: 'phys' | 'magic';
   effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap';
   desc: string;
 }
 
 export interface UnitStatus {
-  kind: ControlKind;
+  kind: BattleStatusKind;
   turns: number;
+  value?: number;
 }
 
 export interface BattleUnit {
   uid: string;
   side: 'player' | 'enemy';
   isMainRole: boolean;
+  generalId?: number;
   name: string;
   level: number;
   roleClass: RoleClass;
@@ -478,6 +519,7 @@ export interface BattleUnit {
   skillId?: string;
   skill2Id?: string;
   intimacy?: number;
+  loyalty?: number;
   hp: number;
   maxHp: number;
   mp: number;
@@ -486,6 +528,7 @@ export interface BattleUnit {
   spd: number;
   alive: boolean;
   defending: boolean;
+  protectingUid?: string | null;
   position: number;
   statuses: UnitStatus[];
   resist?: {
@@ -500,7 +543,16 @@ export interface BattleUnit {
 export interface BattleActionLog {
   actorUid: string;
   actorName: string;
-  action: 'attack' | 'skill' | 'defend' | 'item' | 'capture' | 'flee' | 'status';
+  action:
+    | 'attack'
+    | 'skill'
+    | 'defend'
+    | 'protect'
+    | 'summon'
+    | 'item'
+    | 'capture'
+    | 'flee'
+    | 'status';
   skillId?: string;
   skillName?: string;
   effect?: SkillDef['effect'];
@@ -510,10 +562,11 @@ export interface BattleActionLog {
     name: string;
     damage: number;
     heal?: number;
+    revived?: boolean;
     crit?: boolean;
     killed?: boolean;
     captured?: boolean;
-    appliedStatus?: ControlKind;
+    appliedStatus?: BattleStatusKind;
     resisted?: boolean;
   }>;
   message: string;
@@ -557,10 +610,62 @@ export interface ChatMessage {
   channel: ChatChannel;
   senderId: number;
   senderName: string;
+  recipientId?: number | null;
+  recipientName?: string | null;
   isSystem?: boolean;
   content: string;
   time: string;
   timestamp: number;
+}
+
+export interface FriendView {
+  characterId: number;
+  name: string;
+  roleClass: RoleClass;
+  level: number;
+  rebirth: number;
+  mapId: string;
+  mapName: string;
+  online: boolean;
+  portrait: string;
+  createdAt: number;
+}
+
+export interface PlayerInspectView {
+  id: number;
+  name: string;
+  roleClass: RoleClass;
+  gender: Gender;
+  portrait: string;
+  level: number;
+  rebirth: number;
+  mapId: string;
+  mapName: string;
+  online: boolean;
+  isFriend: boolean;
+  maxHp: number;
+  maxMp: number;
+  atk: number;
+  def: number;
+  spd: number;
+  arenaWins: number;
+  arenaLosses: number;
+  towerFloor: number;
+  setBonuses: string[];
+  equippedItems: EquipmentView[];
+  activeGenerals: Array<{
+    id: number;
+    name: string;
+    roleClass: RoleClass;
+    avatarKey: string;
+    level: number;
+    rebirth: number;
+    rarity: EquipmentQuality;
+    growth: number;
+    atk: number;
+    maxHp: number;
+    spd: number;
+  }>;
 }
 
 export interface RankEntry {

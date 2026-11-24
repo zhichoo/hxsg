@@ -60,6 +60,27 @@ export function getOnlineCountByRealm(realmId: string): number {
   return uniqueChars.size;
 }
 
+export function getOnlineCharacterIdsByRealm(realmId: string): Set<number> {
+  const ids = new Set<number>();
+  for (const p of onlineBySocket.values()) {
+    if (p.realmId === realmId) ids.add(p.characterId);
+  }
+  return ids;
+}
+
+function sendToCharacter(realmId: string, characterId: number, payload: unknown) {
+  const encoded = JSON.stringify(payload);
+  for (const p of onlineBySocket.values()) {
+    if (
+      p.realmId === realmId &&
+      p.characterId === characterId &&
+      p.ws.readyState === WebSocket.OPEN
+    ) {
+      p.ws.send(encoded);
+    }
+  }
+}
+
 export function getMapOnlinePlayers(realmId: string, mapId: string): OnlinePlayerSummary[] {
   const seen = new Map<number, OnlinePlayerSummary>();
   for (const p of onlineBySocket.values()) {
@@ -212,17 +233,21 @@ export function attachSocketServer(httpServer: HttpServer) {
           player.alive = true;
         });
 
-        // Send recent chat history
+        // Send recent chat history (public channels + this character's private whispers)
         const historyRows = db
           .prepare(
-            `SELECT id, channel, sender_id, sender_name, is_system, content, created_at
-             FROM chat_messages WHERE realm_id = ? ORDER BY created_at DESC LIMIT 40`,
+            `SELECT id, channel, sender_id, sender_name, recipient_id, recipient_name, is_system, content, created_at
+             FROM chat_messages
+             WHERE realm_id = ? AND (channel != 'si' OR sender_id = ? OR recipient_id = ?)
+             ORDER BY created_at DESC LIMIT 50`,
           )
-          .all(realmId) as unknown as Array<{
+          .all(realmId, ch.id, ch.id) as unknown as Array<{
           id: number;
           channel: ChatChannel;
           sender_id: number;
           sender_name: string;
+          recipient_id: number | null;
+          recipient_name: string | null;
           is_system: number;
           content: string;
           created_at: number;
@@ -233,6 +258,8 @@ export function attachSocketServer(httpServer: HttpServer) {
           channel: r.channel,
           senderId: r.sender_id,
           senderName: r.sender_name,
+          recipientId: r.recipient_id ?? null,
+          recipientName: r.recipient_name ?? null,
           isSystem: Boolean(r.is_system),
           content: r.content,
           time: formatHHMM(r.created_at),
@@ -248,12 +275,18 @@ export function attachSocketServer(httpServer: HttpServer) {
 
         ws.on('message', (raw) => {
           player.alive = true;
-          let payload: { type?: string; channel?: ChatChannel; content?: string };
+          let payload: {
+            type?: string;
+            channel?: ChatChannel;
+            content?: string;
+            recipientName?: string;
+          };
           try {
             payload = JSON.parse(raw.toString('utf8')) as {
               type?: string;
               channel?: ChatChannel;
               content?: string;
+              recipientName?: string;
             };
           } catch {
             return;
@@ -267,12 +300,59 @@ export function attachSocketServer(httpServer: HttpServer) {
           if (payload.type === 'chat:send') {
             const content = String(payload.content ?? '').trim().slice(0, 120);
             if (!content) return;
-            const channel: ChatChannel = ['qu', 'pai', 'shang', 'shi'].includes(
+            const channel: ChatChannel = ['qu', 'pai', 'shang', 'shi', 'si'].includes(
               payload.channel as ChatChannel,
             )
               ? (payload.channel as ChatChannel)
               : 'qu';
             const now = Date.now();
+
+            if (channel === 'si') {
+              const targetName = String(payload.recipientName ?? '').trim();
+              if (!targetName) return;
+              const rec = db
+                .prepare('SELECT id, name FROM characters WHERE realm_id = ? AND name = ?')
+                .get(realmId, targetName) as { id: number; name: string } | undefined;
+              if (!rec) {
+                sendJson(ws, {
+                  type: 'chat:message',
+                  data: {
+                    id: `err_${now}`,
+                    channel: 'si',
+                    senderId: 0,
+                    senderName: '系统提示',
+                    isSystem: true,
+                    content: `未找到玩家【${targetName}】，无法发送私聊。`,
+                    time: formatHHMM(now),
+                    timestamp: now,
+                  } satisfies ChatMessage,
+                });
+                return;
+              }
+              const info = db
+                .prepare(
+                  `INSERT INTO chat_messages (realm_id, channel, sender_id, sender_name, recipient_id, recipient_name, is_system, content, created_at)
+                   VALUES (?, 'si', ?, ?, ?, ?, 0, ?, ?)`,
+                )
+                .run(realmId, ch.id, ch.name, rec.id, rec.name, content, now);
+              const msg: ChatMessage = {
+                id: String(info.lastInsertRowid),
+                channel: 'si',
+                senderId: ch.id,
+                senderName: ch.name,
+                recipientId: rec.id,
+                recipientName: rec.name,
+                content,
+                time: formatHHMM(now),
+                timestamp: now,
+              };
+              sendToCharacter(realmId, ch.id, { type: 'chat:message', data: msg });
+              if (rec.id !== ch.id) {
+                sendToCharacter(realmId, rec.id, { type: 'chat:message', data: msg });
+              }
+              return;
+            }
+
             const info = db
               .prepare(
                 `INSERT INTO chat_messages (realm_id, channel, sender_id, sender_name, is_system, content, created_at)

@@ -52,6 +52,68 @@
       "method": "POST",
       "auth": "platform"
     },
+    "skillsTrain": {
+      "url": "__API_BASE__/api/skills/train",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "equipmentCraft": {
+      "url": "__API_BASE__/api/equipment/craft",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "equipmentReforge": {
+      "url": "__API_BASE__/api/equipment/reforge",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsAllocateStats": {
+      "url": "__API_BASE__/api/generals/allocate-stats",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsResetStats": {
+      "url": "__API_BASE__/api/generals/reset-stats",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsFeedLoyalty": {
+      "url": "__API_BASE__/api/generals/feed-loyalty",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsEquip": {
+      "url": "__API_BASE__/api/generals/equip",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "generalsUnequip": {
+      "url": "__API_BASE__/api/generals/unequip",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "playersInspect": {
+      "url": "__API_BASE__/api/players/inspect",
+      "method": "GET",
+      "query": ["realmId", "targetCharacterId"],
+      "auth": "platform"
+    },
+    "friendsList": {
+      "url": "__API_BASE__/api/friends/list",
+      "method": "GET",
+      "query": ["realmId"],
+      "auth": "platform"
+    },
+    "friendsAdd": {
+      "url": "__API_BASE__/api/friends/add",
+      "method": "POST",
+      "auth": "platform"
+    },
+    "friendsRemove": {
+      "url": "__API_BASE__/api/friends/remove",
+      "method": "POST",
+      "auth": "platform"
+    },
     "mapMove": {
       "url": "__API_BASE__/api/map/move",
       "method": "POST",

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  CRAFT_RECIPES,
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_TEMPLATES,
   GENERAL_SKILL_BOOKS,
@@ -13,9 +14,11 @@ import {
   type EquipmentQuality,
   type EquipmentSlot,
   type EquipmentView,
+  type FriendView,
   type MailView,
   type MarketListingKind,
   type MarketListingView,
+  type PlayerInspectView,
   type RankEntry,
   type TreasureDigResult,
 } from '@hxsg/shared';
@@ -35,6 +38,8 @@ export type SubPanelType =
   | 'bank'
   | 'market'
   | 'mail'
+  | 'friends'
+  | 'inspect'
   | 'rank'
   | 'shop'
   | 'blacksmith'
@@ -88,6 +93,9 @@ interface SubPanelsProps {
   panel: SubPanelType;
   realmId: string;
   character: CharacterView;
+  inspectPlayerId?: number | null;
+  onInspectPlayer?: (characterId: number) => void;
+  onStartWhisper?: (name: string) => void;
   onUpdateCharacter: (ch: CharacterView) => void;
   onEnterBattle?: (battle: BattleState) => void;
   onClose: () => void;
@@ -106,6 +114,8 @@ const TITLES: Record<SubPanelType, string> = {
   bank: '许昌钱庄',
   market: '许昌集市',
   mail: '飞鸽传书',
+  friends: '江湖好友',
+  inspect: '侠士资料',
   rank: '排行榜与擂台',
   shop: '回春药铺',
   blacksmith: '铁匠铺与马市',
@@ -118,6 +128,9 @@ export function SubPanels({
   panel,
   realmId,
   character,
+  inspectPlayerId,
+  onInspectPlayer,
+  onStartWhisper,
   onUpdateCharacter,
   onEnterBattle,
   onClose,
@@ -125,9 +138,14 @@ export function SubPanels({
 }: SubPanelsProps) {
   const [statusTab, setStatusTab] = useState<'stats' | 'resist' | 'skills'>('stats');
   const [bagTab, setBagTab] = useState<'equip' | 'consumable'>('equip');
-  const [smithTab, setSmithTab] = useState<'gear' | 'mount'>('gear');
+  const [smithTab, setSmithTab] = useState<'gear' | 'mount' | 'craft'>('gear');
   const [tavernTab, setTavernTab] = useState<'recruit' | 'books'>('recruit');
   const [learningGenId, setLearningGenId] = useState<number | null>(null);
+  const [allocGenId, setAllocGenId] = useState<number | null>(null);
+  const [equipGenId, setEquipGenId] = useState<number | null>(null);
+  const [friends, setFriends] = useState<FriendView[]>([]);
+  const [friendNameInput, setFriendNameInput] = useState('');
+  const [inspectedPlayer, setInspectedPlayer] = useState<PlayerInspectView | null>(null);
   const [questTab, setQuestTab] = useState<'main' | 'paohuan'>(
     panel === 'paohuan' ? 'paohuan' : 'main',
   );
@@ -138,7 +156,7 @@ export function SubPanels({
     explanation: string;
   } | null>(null);
   const [casinoTab, setCasinoTab] = useState<'dice' | 'chibi'>('dice');
-  const [casinoRecordTab, setCasinoRecordTab] = useState<'history' | 'mybets'>('history');
+  const [casinoRecordTab, setCasinoRecordTab] = useState<'history' | 'mybets' | 'winners'>('history');
   const [betCurrency, setBetCurrency] = useState<'silver' | 'gold'>('silver');
   const [betAmount, setBetAmount] = useState<number>(200);
   const [casinoState, setCasinoState] = useState<CasinoStateView | null>(null);
@@ -265,7 +283,20 @@ export function SubPanels({
         .then((r) => setMails(r.mails))
         .catch((e: Error) => onNotify(e.message));
     }
-  }, [panel, realmId, rankSort, marketFilter, marketTab, onNotify]);
+    if (panel === 'friends') {
+      api
+        .getFriends(realmId)
+        .then((r) => setFriends(r.friends))
+        .catch((e: Error) => onNotify(e.message));
+    }
+    if (panel === 'inspect' && inspectPlayerId) {
+      setInspectedPlayer(null);
+      api
+        .inspectPlayer(realmId, inspectPlayerId)
+        .then((r) => setInspectedPlayer(r.player))
+        .catch((e: Error) => onNotify(e.message));
+    }
+  }, [panel, realmId, rankSort, marketFilter, marketTab, inspectPlayerId, onNotify]);
 
   const run = async (fn: () => Promise<{ character: CharacterView }>, okMsg: string) => {
     setBusy(true);
@@ -568,24 +599,48 @@ export function SubPanels({
 
               {statusTab === 'skills' && (
                 <div className="space-y-2">
-                  <div className="text-xs text-[#ffea84]">
-                    在战斗中多施放技能即可提升熟练度，进阶后群体技能打击人数与威力自动成长！
+                  <div className="flex items-center justify-between text-xs text-[#ffea84]">
+                    <span>战斗施法或武馆消耗银两均可提升技能熟练度与阶位！</span>
+                    <span className="shrink-0 font-bold">银两：{character.silver}</span>
                   </div>
                   {character.skills.map((sk) => {
                     const pct = Math.min(100, Math.round((sk.proficiency / sk.nextTierProf) * 100));
+                    const isMax = sk.proficiency >= 2000;
+                    const trainCost = 300 + sk.tier * 280;
                     return (
                       <div
                         key={sk.skillId}
                         className="p-2.5 bg-[#25072b]/90 border border-[#9666a1] space-y-1 text-xs"
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="font-bold text-[#ffe678] text-sm">
                             {sk.name}{' '}
                             <span className="text-[#8de4ff] text-xs">({sk.tier}阶)</span>
                           </span>
-                          <span className="text-[11px] text-[#e8d2ee]">
-                            耗精 {sk.mpCost} · 最多 {sk.maxTargets} 目标
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[11px] text-[#e8d2ee]">
+                              耗精 {sk.mpCost} · {sk.maxTargets}目标
+                            </span>
+                            <button
+                              type="button"
+                              disabled={busy || isMax}
+                              onClick={async () => {
+                                setBusy(true);
+                                try {
+                                  const res = await api.trainSkill(realmId, sk.skillId);
+                                  onUpdateCharacter(res.character);
+                                  onNotify(res.message);
+                                } catch (err) {
+                                  onNotify(err instanceof Error ? err.message : '修炼失败');
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                              className="hx-btn-gold px-2 py-0.5 text-[10.5px] disabled:opacity-45"
+                            >
+                              {isMax ? '已圆满' : `武馆点技(${trainCost}银)`}
+                            </button>
+                          </div>
                         </div>
                         <div className="text-[11px] text-[#eddcf2]">{sk.desc}</div>
                         <div className="pt-1">
@@ -643,8 +698,15 @@ export function SubPanels({
                   {/* 5 Equipped Slots */}
                   <div className="p-2 bg-[#230629]/90 border border-[#b68d3a] space-y-1.5">
                     <div className="text-xs font-bold text-[#ffea84]">
-                      当前穿戴（无宝石无锻造，穿戴即享全额属性与抗性）
+                      主角穿戴（同系 2件/4件 自动激活经典套装效果！）
                     </div>
+                    {character.setBonuses && character.setBonuses.length > 0 && (
+                      <div className="p-1.5 bg-[#15301a] border border-[#6be884] text-[11px] text-[#caffd5] space-y-0.5">
+                        {character.setBonuses.map((s, idx) => (
+                          <div key={idx}>✨ {s}</div>
+                        ))}
+                      </div>
+                    )}
                     {EQUIP_SLOTS.map((slot) => {
                       const eq = equippedBySlot.get(slot);
                       return (
@@ -817,14 +879,17 @@ export function SubPanels({
             </div>
           )}
 
-          {/* BLACKSMITH & HORSE MARKET */}
+          {/* BLACKSMITH & HORSE MARKET (直购 + 打造/重铸随机词条) */}
           {panel === 'blacksmith' && (
             <div className="space-y-2.5">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[#ffe27a] font-bold">当前银两：{character.silver} 两</span>
-                <span className="text-[#d7bddf]">极品神兵与赤兔需靠打怪/挖宝获得</span>
+                <span className="text-[#ffe27a] font-bold">银两：{character.silver} 两</span>
+                <span className="text-[#9be8ff]">
+                  玄铁矿×{character.inventory.find((i) => i.itemId === 'xuantie')?.quantity ?? 0} · 精炼石×
+                  {character.inventory.find((i) => i.itemId === 'jinglianshi')?.quantity ?? 0}
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <div className="grid grid-cols-3 gap-1.5 text-xs">
                 <button
                   type="button"
                   onClick={() => setSmithTab('gear')}
@@ -845,58 +910,165 @@ export function SubPanels({
                       : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
                   }`}
                 >
-                  军马场（战马）
+                  军马场
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSmithTab('craft')}
+                  className={`py-1.5 font-bold border ${
+                    smithTab === 'craft'
+                      ? 'bg-[#c96215] border-[#ffdf75] text-white'
+                      : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
+                  }`}
+                >
+                  🔨 打造/重铸
                 </button>
               </div>
-              <div className="space-y-2">
-                {Object.values(EQUIPMENT_TEMPLATES)
-                  .filter(
-                    (tpl) =>
-                      tpl.shopAvailable &&
-                      (smithTab === 'mount' ? tpl.slot === 'mount' : tpl.slot !== 'mount'),
-                  )
-                  .map((tpl) => (
-                    <div
-                      key={tpl.templateId}
-                      className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2 text-xs"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <AssetImg
-                          path={tpl.icon}
-                          alt={tpl.name}
-                          className="w-10 h-10 object-contain pixelated shrink-0 bg-[#1a131f] border border-[#c69d46] p-0.5"
-                        />
-                        <div className="min-w-0">
-                          <div className={`font-bold truncate ${QUALITY_COLOR[tpl.quality]}`}>
-                            {tpl.name}
-                            <span className="text-[#d9c1e0] font-normal text-[11px] ml-1">
-                              ({EQUIPMENT_SLOT_LABELS[tpl.slot]} · Lv.{tpl.levelReq})
-                            </span>
-                          </div>
-                          <div className="text-[11px] text-[#9de6ff] truncate">
-                            {formatEquipStats(tpl)}
-                          </div>
-                          <div className="text-[11px] text-[#ffd46b]">
-                            售价：{tpl.priceSilver} 银
+              {smithTab !== 'craft' ? (
+                <div className="space-y-2">
+                  {Object.values(EQUIPMENT_TEMPLATES)
+                    .filter(
+                      (tpl) =>
+                        tpl.shopAvailable &&
+                        (smithTab === 'mount' ? tpl.slot === 'mount' : tpl.slot !== 'mount'),
+                    )
+                    .map((tpl) => (
+                      <div
+                        key={tpl.templateId}
+                        className="p-2 bg-[#27082e]/90 border border-[#9d6fa8] flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <AssetImg
+                            path={tpl.icon}
+                            alt={tpl.name}
+                            className="w-10 h-10 object-contain pixelated shrink-0 bg-[#1a131f] border border-[#c69d46] p-0.5"
+                          />
+                          <div className="min-w-0">
+                            <div className={`font-bold truncate ${QUALITY_COLOR[tpl.quality]}`}>
+                              {tpl.name}
+                              <span className="text-[#d9c1e0] font-normal text-[11px] ml-1">
+                                ({EQUIPMENT_SLOT_LABELS[tpl.slot]} · Lv.{tpl.levelReq})
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-[#9de6ff] truncate">
+                              {formatEquipStats(tpl)}
+                            </div>
+                            <div className="text-[11px] text-[#ffd46b]">
+                              售价：{tpl.priceSilver} 银
+                            </div>
                           </div>
                         </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            run(
+                              () => api.buyEquipment(realmId, tpl.templateId),
+                              `已购入【${tpl.name}】（请到「物品」穿戴）`,
+                            )
+                          }
+                          className="hx-btn-gold px-3 py-1 text-xs shrink-0"
+                        >
+                          购买
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          run(
-                            () => api.buyEquipment(realmId, tpl.templateId),
-                            `已购入【${tpl.name}】（请到「物品」穿戴）`,
-                          )
-                        }
-                        className="hx-btn-gold px-3 py-1 text-xs shrink-0"
-                      >
-                        购买
-                      </button>
+                    ))}
+                </div>
+              ) : (
+                <div className="space-y-2.5 text-xs">
+                  <div className="p-2 bg-[#220728] border border-[#c5963d] space-y-1.5">
+                    <div className="font-bold text-[#ffe478]">
+                      🔥 神兵打造（消耗玄铁矿 + 银两，随机词条波动 96%~130%，几率升品！）
                     </div>
-                  ))}
-              </div>
+                    {CRAFT_RECIPES.map((rec) => (
+                      <div
+                        key={rec.id}
+                        className="p-2 bg-[#2d0c36] border border-[#8e6299] flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#ffea96]">
+                            {rec.name}{' '}
+                            <span className="text-[#b8d4ff] text-[10.5px]">(Lv.{rec.levelReq}+)</span>
+                          </div>
+                          <div className="text-[10.5px] text-[#e6d0ed]">{rec.desc}</div>
+                          <div className="text-[10.5px] text-[#ffd46b]">
+                            需：玄铁矿×{rec.oreCost} + {rec.silverCost} 银
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const res = await api.craftEquipment(realmId, rec.id);
+                              onUpdateCharacter(res.character);
+                              onNotify(res.message);
+                            } catch (err) {
+                              onNotify(err instanceof Error ? err.message : '打造失败');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="hx-btn-red px-2.5 py-1 text-[11px] shrink-0"
+                        >
+                          打造
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-2 bg-[#220728] border border-[#8e6299] space-y-1.5">
+                    <div className="font-bold text-[#9de6ff]">
+                      ✨ 装备重铸（消耗 精炼石×1 + 少量银两，重随装备成色与抗性词条）
+                    </div>
+                    {character.equipment.length === 0 ? (
+                      <div className="text-[#c5aacf] text-center py-2">暂无可重铸装备</div>
+                    ) : (
+                      character.equipment.slice(0, 15).map((eq) => (
+                        <div
+                          key={eq.id}
+                          className="p-1.5 bg-[#2a0a32] border border-[#754d80] flex items-center justify-between gap-2"
+                        >
+                          <div className="min-w-0">
+                            <div className={`font-bold truncate ${QUALITY_COLOR[eq.quality]}`}>
+                              {eq.name}{' '}
+                              <span className="text-[10px] text-[#ffe27a]">
+                                成色{eq.rollPct ?? 100}%
+                              </span>
+                              {eq.setName && (
+                                <span className="ml-1 text-[10px] text-[#7dff92]">[{eq.setName}]</span>
+                              )}
+                            </div>
+                            <div className="text-[10.5px] text-[#dfcae6] truncate">
+                              {formatEquipStats(eq)}
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                const res = await api.reforgeEquipment(realmId, eq.id);
+                                onUpdateCharacter(res.character);
+                                onNotify(res.message);
+                              } catch (err) {
+                                onNotify(err instanceof Error ? err.message : '重铸失败');
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                            className="hx-btn-gold px-2 py-0.5 text-[11px] shrink-0"
+                          >
+                            重铸
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -968,16 +1140,33 @@ export function SubPanels({
                             初值：血{g.baseHp} / 精{g.baseMp} / 攻{g.baseAtk} / 速{g.baseSpd} · 经验
                             {g.exp}/{g.expToNext}
                           </div>
-                          <div className="mt-1 flex items-center gap-1.5 text-[10.5px]">
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px]">
+                            <span
+                              className={`font-bold ${
+                                g.loyalty < 40 ? 'text-[#ff7070]' : 'text-[#ffe678]'
+                              }`}
+                            >
+                              忠诚 {g.loyalty}/100
+                            </span>
                             <span className="text-[#ff9ed2] font-bold">
                               默契 {g.intimacy}/100 ({g.intimacyTitle})
                             </span>
-                            {g.intimacyStatPct > 0 && (
-                              <span className="text-[#8cff9c]">
-                                攻血+{g.intimacyStatPct}% 全抗+{g.intimacyResistBonus}%
+                            {g.alloc.freePoints > 0 && (
+                              <span className="px-1 bg-[#1e6e2e] border border-[#7dff92] text-[#e6ffea] font-bold">
+                                未分配点:{g.alloc.freePoints}
+                              </span>
+                            )}
+                            {g.equippedItems.length > 0 && (
+                              <span className="text-[#9be8ff]">
+                                穿戴 {g.equippedItems.length} 件
                               </span>
                             )}
                           </div>
+                          {g.setBonuses.length > 0 && (
+                            <div className="text-[10px] text-[#7dff92] mt-0.5">
+                              ✨ {g.setBonuses.join('；')}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -1064,6 +1253,56 @@ export function SubPanels({
                       >
                         {showBooks ? '收起打书' : `打书(${ownedBooks.length})`}
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setAllocGenId(allocGenId === g.id ? null : g.id)}
+                        className={`px-2 py-0.5 text-[11px] border font-bold ${
+                          g.alloc.freePoints > 0
+                            ? 'bg-[#8f5210] border-[#ffe36d] text-[#fff6c2]'
+                            : 'bg-[#42204a] border-[#966ca1] text-[#ebd5f0]'
+                        }`}
+                      >
+                        {allocGenId === g.id ? '收起加点' : `加点(${g.alloc.freePoints})`}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setEquipGenId(equipGenId === g.id ? null : g.id)}
+                        className="px-2 py-0.5 text-[11px] bg-[#2a3966] border border-[#8ab8ff] text-[#e0eeff] font-bold"
+                      >
+                        {equipGenId === g.id ? '收起装备' : `穿装备(${g.equippedItems.length})`}
+                      </button>
+                      {g.loyalty < 100 && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            const foodId = character.inventory.some(
+                              (i) => i.itemId === 'roubaozi' && i.quantity > 0,
+                            )
+                              ? 'roubaozi'
+                              : 'zhongyidan';
+                            setBusy(true);
+                            try {
+                              const res = await api.feedGeneralLoyalty(realmId, g.id, foodId);
+                              onUpdateCharacter(res.character);
+                              onNotify(res.message);
+                            } catch (err) {
+                              onNotify(
+                                err instanceof Error
+                                  ? err.message
+                                  : '请先去回春药铺买肉包子或忠义丹',
+                              );
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="px-2 py-0.5 text-[11px] bg-[#6e3610] border border-[#ffb96b] text-[#fff1d6] font-bold"
+                        >
+                          喂口粮(补忠)
+                        </button>
+                      )}
                       {g.rebirth < 2 && (
                         <button
                           type="button"
@@ -1105,6 +1344,143 @@ export function SubPanels({
                         </button>
                       )}
                     </div>
+
+                    {allocGenId === g.id && (
+                      <div className="p-2 bg-black/40 border border-[#d6a742] space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="text-[#ffe478] font-bold">
+                            副将自由加点（剩 {g.alloc.freePoints} 点 · 支持全敏/全血/全力流派）
+                          </span>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              run(
+                                () => api.resetGeneralStats(realmId, g.id),
+                                `${g.name} 已消耗 200 银两洗点重置！`,
+                              )
+                            }
+                            className="px-1.5 py-0.5 text-[10px] bg-[#5c1e28] border border-[#d47a86] text-[#ffdce0]"
+                          >
+                            洗点(200银)
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {(
+                            [
+                              ['vit', '体质(血)', g.alloc.vit],
+                              ['str', '力量(物攻)', g.alloc.str],
+                              ['int', '智力(法/精)', g.alloc.int],
+                              ['agi', '敏捷(速度)', g.alloc.agi],
+                            ] as const
+                          ).map(([k, label, val]) => (
+                            <div
+                              key={k}
+                              className="flex items-center justify-between bg-[#2a0c31] border border-[#7b5285] px-2 py-1"
+                            >
+                              <span className="text-[#f0dbf5]">
+                                {label}: <b className="text-[#ffe478]">{val}</b>
+                              </span>
+                              <div className="flex gap-1">
+                                <button
+                                  type="button"
+                                  disabled={busy || g.alloc.freePoints < 1}
+                                  onClick={() =>
+                                    run(
+                                      () => api.allocateGeneralStats(realmId, g.id, { [k]: 1 }),
+                                      `${g.name} ${label} +1`,
+                                    )
+                                  }
+                                  className="hx-btn-gold px-1.5 py-0.2 text-[10px] disabled:opacity-40"
+                                >
+                                  +1
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={busy || g.alloc.freePoints < 5}
+                                  onClick={() =>
+                                    run(
+                                      () => api.allocateGeneralStats(realmId, g.id, { [k]: 5 }),
+                                      `${g.name} ${label} +5`,
+                                    )
+                                  }
+                                  className="hx-btn-gold px-1.5 py-0.2 text-[10px] disabled:opacity-40"
+                                >
+                                  +5
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {equipGenId === g.id && (() => {
+                      const idleGear = character.equipment.filter(
+                        (e) => !e.equipped && !e.equippedGeneralId,
+                      );
+                      return (
+                        <div className="p-2 bg-black/40 border border-[#7cb5ff] space-y-1.5">
+                          <div className="text-[11px] font-bold text-[#9de6ff]">
+                            副将已穿戴装备（支持套装效果）：
+                          </div>
+                          {g.equippedItems.length === 0 ? (
+                            <div className="text-[11px] text-[#cbb0d4]">暂未穿戴装备</div>
+                          ) : (
+                            <div className="space-y-1">
+                              {g.equippedItems.map((eq) => (
+                                <div
+                                  key={eq.id}
+                                  className="flex items-center justify-between bg-[#260b2e] border border-[#6e4a78] px-2 py-1"
+                                >
+                                  <span className={`truncate ${QUALITY_COLOR[eq.quality]}`}>
+                                    [{EQUIPMENT_SLOT_LABELS[eq.slot]}] {eq.name} ({formatEquipStats(eq)})
+                                  </span>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() =>
+                                      run(
+                                        () => api.unequipGeneralSlot(realmId, g.id, eq.slot),
+                                        `已卸下 ${g.name} 的【${eq.name}】`,
+                                      )
+                                    }
+                                    className="px-1.5 py-0.5 text-[10px] bg-[#52245c] border border-[#c095cc] text-white shrink-0 ml-1"
+                                  >
+                                    卸下
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="text-[11px] font-bold text-[#ffe478] pt-1 border-t border-white/10">
+                            背包闲置装备（点击给 {g.name} 穿戴）：
+                          </div>
+                          {idleGear.length === 0 ? (
+                            <div className="text-[11px] text-[#cbb0d4]">背包中暂无闲置装备</div>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {idleGear.slice(0, 12).map((eq) => (
+                                <button
+                                  key={eq.id}
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() =>
+                                    run(
+                                      () => api.equipItemOnGeneral(realmId, g.id, eq.id),
+                                      `${g.name} 已穿戴【${eq.name}】！`,
+                                    )
+                                  }
+                                  className={`px-2 py-0.5 bg-[#33103d] border border-[#c99d42] text-[10.5px] hover:bg-[#4e195e] ${QUALITY_COLOR[eq.quality]}`}
+                                >
+                                  {eq.name}(Lv.{eq.levelReq})
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {showBooks && (
                       <div className="p-2 bg-black/35 border border-[#6e9c78] space-y-1.5">
@@ -1202,7 +1578,14 @@ export function SubPanels({
                   >
                     <div className="min-w-0 truncate">
                       <span className="text-[#ffd24d] font-bold mr-1">{r.rank}.</span>
-                      <span className="text-[#ff4f4f] font-bold hx-stroke">{r.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => onInspectPlayer?.(r.id)}
+                        className="text-[#ff4f4f] font-bold hx-stroke hover:underline"
+                        title="点击查看资料/加好友/私聊"
+                      >
+                        {r.name}
+                      </button>
                       {r.rebirth > 0 && (
                         <span className="ml-1 px-1 py-0.5 text-[10px] bg-[#9b5b08] border border-[#ffe678] text-[#fff8cc]">
                           {r.rebirth}转
@@ -2288,7 +2671,7 @@ export function SubPanels({
                         : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
                     }`}
                   >
-                    🎲 猜大小/豹子 (1分/期)
+                    🎲 猜大小/豹子 ({Math.round((casinoState?.dice.intervalSec ?? 180) / 60)}分/期)
                   </button>
                   <button
                     type="button"
@@ -2299,7 +2682,7 @@ export function SubPanels({
                         : 'bg-[#5c2569] border-[#a574b0] text-[#f3e3f7]'
                     }`}
                   >
-                    🔥 赤壁押注 (3分/期)
+                    🔥 赤壁押注 ({Math.round((casinoState?.chibi.intervalSec ?? 300) / 60)}分/期)
                   </button>
                 </div>
 
@@ -2429,7 +2812,7 @@ export function SubPanels({
                 {casinoTab === 'dice' && (
                   <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
                     <div className="text-[11px] text-[#f2dcf7]">
-                      每分钟整点开盅：大(11~18)/小(3~10)/单/双 赔率{' '}
+                      每 {Math.round((casinoState?.dice.intervalSec ?? 180) / 60)} 分钟定时开盅：大(11~18)/小(3~10)/单/双 赔率{' '}
                       <b className="text-[#ffe46e]">1:1</b>（开豹子通吃非豹子注），押中
                       <b className="text-[#ff8cc8]">豹子</b>狂赢{' '}
                       <b className="text-[#ffcf54]">1:15</b>！支持同期多笔组合下注。
@@ -2468,7 +2851,7 @@ export function SubPanels({
                 {casinoTab === 'chibi' && (
                   <div className="p-2.5 bg-[#2a082f] border-2 border-[#e0b84e] space-y-2">
                     <div className="text-[11px] text-[#f2dcf7]">
-                      每 3 分钟定时开战：选定阵营下注，倒计时归零全服同步开盘派奖！
+                      每 {Math.round((casinoState?.chibi.intervalSec ?? 300) / 60)} 分钟定时开战：选定阵营下注，倒计时归零全服同步开盘派奖！
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {(
@@ -2582,9 +2965,9 @@ export function SubPanels({
                   </div>
                 )}
 
-                {/* History / My Bets Sub-tabs */}
+                {/* History / My Bets / Winners Sub-tabs */}
                 <div className="space-y-1.5">
-                  <div className="grid grid-cols-2 gap-1">
+                  <div className="grid grid-cols-3 gap-1">
                     <button
                       type="button"
                       onClick={() => setCasinoRecordTab('history')}
@@ -2594,7 +2977,7 @@ export function SubPanels({
                           : 'bg-[#2a0a31] border-[#734a7d] text-[#d6badc]'
                       }`}
                     >
-                      📜 近 20 期开奖记录
+                      📜 开奖记录
                     </button>
                     <button
                       type="button"
@@ -2605,7 +2988,18 @@ export function SubPanels({
                           : 'bg-[#2a0a31] border-[#734a7d] text-[#d6badc]'
                       }`}
                     >
-                      🧾 我的注单 ({gameState?.myRecentBets.length ?? 0})
+                      🧾 注单({gameState?.myRecentBets.length ?? 0})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCasinoRecordTab('winners')}
+                      className={`py-1 text-[11px] font-bold border ${
+                        casinoRecordTab === 'winners'
+                          ? 'bg-[#7d4916] border-[#ffdf75] text-[#fff6cc]'
+                          : 'bg-[#2a0a31] border-[#734a7d] text-[#d6badc]'
+                      }`}
+                    >
+                      🏆 大户榜
                     </button>
                   </div>
 
@@ -2724,10 +3118,362 @@ export function SubPanels({
                       )}
                     </div>
                   )}
+
+                  {casinoRecordTab === 'winners' && gameState && (
+                    <div className="space-y-2 border border-[#7c5087] bg-[#18051d]/90 p-2 text-[11px]">
+                      <div>
+                        <div className="font-bold text-[#ffe478] mb-1">
+                          🎊 最近中奖大户榜
+                        </div>
+                        {gameState.lastRoundTopWinners.length === 0 ? (
+                          <div className="text-[#b79bbe]">近期尚无中奖记录，快来夺得头彩！</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {gameState.lastRoundTopWinners.map((w, idx) => (
+                              <div
+                                key={`${w.characterId}-${idx}`}
+                                className="flex items-center justify-between border-b border-white/10 pb-0.5"
+                              >
+                                <span>
+                                  <span className="text-[#ffd875] mr-1">第{w.roundNo}期</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => onInspectPlayer?.(w.characterId)}
+                                    className="font-bold text-white hover:underline"
+                                  >
+                                    {w.characterName}
+                                  </button>
+                                  <span className="text-[#cbb0d4] ml-1">
+                                    押[{choiceLabels[w.choice] || w.choice}]
+                                  </span>
+                                </span>
+                                <span className="text-[#7dff92] font-bold">
+                                  +{w.payout}
+                                  {w.currency === 'gold' ? '金' : '银'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-1 border-t border-white/15">
+                        <div className="font-bold text-[#ffcf54] mb-1">
+                          👑 今日赌神榜（本服当日累计派彩）
+                        </div>
+                        {gameState.todayLeaderboard.length === 0 ? (
+                          <div className="text-[#b79bbe]">今日暂无人上榜，虚位以待！</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {gameState.todayLeaderboard.map((row) => (
+                              <div
+                                key={row.characterId}
+                                className="flex items-center justify-between"
+                              >
+                                <span>
+                                  <span className="text-[#ffd24d] font-bold mr-1">
+                                    {row.rank}.
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => onInspectPlayer?.(row.characterId)}
+                                    className="font-bold text-white hover:underline"
+                                  >
+                                    {row.characterName}
+                                  </button>
+                                  <span className="text-[#bda4c4] ml-1">({row.winCount}次命中)</span>
+                                </span>
+                                <span className="text-[#ffe27a] font-bold">
+                                  {[
+                                    row.totalSilverWon > 0 ? `${row.totalSilverWon}银` : '',
+                                    row.totalGoldWon > 0 ? `${row.totalGoldWon}金` : '',
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' + ')}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })()}
+
+          {/* FRIENDS PANEL (4.7 江湖好友) */}
+          {panel === 'friends' && (
+            <div className="space-y-2.5 text-xs">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!friendNameInput.trim()) return;
+                  setBusy(true);
+                  try {
+                    const res = await api.addFriend(realmId, {
+                      targetName: friendNameInput.trim(),
+                    });
+                    setFriends(res.friends);
+                    onUpdateCharacter(res.character);
+                    setFriendNameInput('');
+                    onNotify(res.message);
+                  } catch (err) {
+                    onNotify(err instanceof Error ? err.message : '添加好友失败');
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                className="flex gap-1.5"
+              >
+                <input
+                  type="text"
+                  maxLength={12}
+                  value={friendNameInput}
+                  onChange={(e) => setFriendNameInput(e.target.value)}
+                  placeholder="输入玩家名号加为好友..."
+                  className="flex-1 px-2 py-1.5 bg-[#120416] border border-[#9e7430] text-white"
+                />
+                <button type="submit" disabled={busy} className="hx-btn-gold px-3 py-1">
+                  加好友
+                </button>
+              </form>
+
+              <div className="space-y-1.5">
+                {friends.length === 0 ? (
+                  <div className="text-center text-[#d2bad8] py-6">
+                    暂无好友，点击同图在线玩家或输入名号即可结交江湖豪杰！
+                  </div>
+                ) : (
+                  friends.map((f) => (
+                    <div
+                      key={f.characterId}
+                      className="p-2 bg-[#26072d]/90 border border-[#9d6fa8] flex items-center justify-between gap-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => onInspectPlayer?.(f.characterId)}
+                        className="flex items-center gap-2 min-w-0 text-left"
+                      >
+                        <AssetImg
+                          path={`portraits/${f.portrait}`}
+                          alt={f.name}
+                          className="w-9 h-9 pixelated border border-[#d6ab48] shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-bold text-[#ffe678] truncate">
+                            {f.name}{' '}
+                            <span
+                              className={`text-[10px] px-1 border ${
+                                f.online
+                                  ? 'bg-[#174d24] border-[#7dff92] text-[#d6ffe0]'
+                                  : 'bg-[#2e2033] border-[#7d6885] text-[#b8a5bf]'
+                              }`}
+                            >
+                              {f.online ? '在线' : '离线'}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-[#e6d0ed]">
+                            {ROLE_CLASS_META[f.roleClass].label} · Lv.{f.level}
+                            {f.rebirth > 0 ? ` [${f.rebirth}转]` : ''} · {f.mapName}
+                          </div>
+                        </div>
+                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => onStartWhisper?.(f.name)}
+                          className="px-2 py-0.5 text-[11px] bg-[#6e247c] border border-[#e396f0] text-[#ffe6ff] font-bold"
+                        >
+                          私聊
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={async () => {
+                            setBusy(true);
+                            try {
+                              const res = await api.removeFriend(realmId, f.characterId);
+                              setFriends(res.friends);
+                              onUpdateCharacter(res.character);
+                              onNotify(res.message);
+                            } catch (err) {
+                              onNotify(err instanceof Error ? err.message : '移除失败');
+                            } finally {
+                              setBusy(false);
+                            }
+                          }}
+                          className="px-1.5 py-0.5 text-[10.5px] bg-[#4a1a1f] border border-[#b8666e] text-[#ffd4d8]"
+                        >
+                          删
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* PLAYER INSPECT PANEL (4.7 查看侠士资料/装备/副将/加好友/私聊/切磋) */}
+          {panel === 'inspect' && (
+            <div className="space-y-2.5 text-xs">
+              {!inspectedPlayer ? (
+                <div className="text-center text-[#d2bad8] py-8">正在读取侠士资料...</div>
+              ) : (
+                <>
+                  <div className="p-2.5 bg-[#230629]/95 border-2 border-[#e0b84e] flex items-center gap-3">
+                    <AssetImg
+                      path={`portraits/${inspectedPlayer.portrait}`}
+                      alt={inspectedPlayer.name}
+                      className="w-12 h-12 pixelated border-2 border-[#e0b84e] shrink-0"
+                    />
+                    <div className="flex-1 min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-black text-[#ffe478]">
+                          {inspectedPlayer.rebirth > 0 ? `[${inspectedPlayer.rebirth}转]` : ''}
+                          {inspectedPlayer.name}
+                        </span>
+                        <span
+                          className={`text-[10px] px-1 border ${
+                            inspectedPlayer.online
+                              ? 'bg-[#174d24] border-[#7dff92] text-[#d6ffe0]'
+                              : 'bg-[#2e2033] border-[#7d6885] text-[#b8a5bf]'
+                          }`}
+                        >
+                          {inspectedPlayer.online ? '在线' : '离线'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#e8d2ee]">
+                        {ROLE_CLASS_META[inspectedPlayer.roleClass].label} · Lv.{inspectedPlayer.level}{' '}
+                        · 位于 {inspectedPlayer.mapName}
+                      </div>
+                      <div className="text-[11px] text-[#9be8ff]">
+                        血{inspectedPlayer.maxHp} 攻{inspectedPlayer.atk} 防{inspectedPlayer.def} 速
+                        {inspectedPlayer.spd} · 塔{inspectedPlayer.towerFloor}层 · 擂台
+                        {inspectedPlayer.arenaWins}胜{inspectedPlayer.arenaLosses}负
+                      </div>
+                    </div>
+                  </div>
+
+                  {inspectedPlayer.id !== character.id && (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onStartWhisper?.(inspectedPlayer.name)}
+                        className="py-1.5 bg-[#6e247c] border border-[#e396f0] text-[#ffe6ff] font-bold"
+                      >
+                        💬 发起私聊
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            if (inspectedPlayer.isFriend) {
+                              const res = await api.removeFriend(realmId, inspectedPlayer.id);
+                              onUpdateCharacter(res.character);
+                              setInspectedPlayer({ ...inspectedPlayer, isFriend: false });
+                              onNotify(res.message);
+                            } else {
+                              const res = await api.addFriend(realmId, {
+                                targetCharacterId: inspectedPlayer.id,
+                              });
+                              onUpdateCharacter(res.character);
+                              setInspectedPlayer({ ...inspectedPlayer, isFriend: true });
+                              onNotify(res.message);
+                            }
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '操作失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="hx-btn-gold py-1.5 text-xs"
+                      >
+                        {inspectedPlayer.isFriend ? '✓ 删好友' : '+ 加好友'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={async () => {
+                          setBusy(true);
+                          try {
+                            const res = await api.challengeArena(realmId, inspectedPlayer.id);
+                            onEnterBattle?.(res.battle);
+                          } catch (err) {
+                            onNotify(err instanceof Error ? err.message : '发起切磋失败');
+                          } finally {
+                            setBusy(false);
+                          }
+                        }}
+                        className="hx-btn-red py-1.5 text-xs"
+                      >
+                        ⚔ 镜像切磋
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Equipped Gear */}
+                  <div className="p-2 bg-[#230629]/90 border border-[#9d6fa8] space-y-1">
+                    <div className="font-bold text-[#ffea84]">
+                      穿戴装备 ({inspectedPlayer.equippedItems.length}/5)
+                    </div>
+                    {inspectedPlayer.setBonuses.length > 0 && (
+                      <div className="text-[10.5px] text-[#7dff92]">
+                        ✨ {inspectedPlayer.setBonuses.join('；')}
+                      </div>
+                    )}
+                    {inspectedPlayer.equippedItems.length === 0 ? (
+                      <div className="text-[#b8a2bf]">暂未穿戴装备</div>
+                    ) : (
+                      inspectedPlayer.equippedItems.map((eq) => (
+                        <div key={eq.id} className="flex items-center justify-between text-[11px]">
+                          <span className={`font-bold ${QUALITY_COLOR[eq.quality]}`}>
+                            [{EQUIPMENT_SLOT_LABELS[eq.slot]}] {eq.name}
+                          </span>
+                          <span className="text-[#e0c8e6] truncate ml-2">
+                            {formatEquipStats(eq)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Active Generals */}
+                  <div className="p-2 bg-[#230629]/90 border border-[#9d6fa8] space-y-1.5">
+                    <div className="font-bold text-[#ffea84]">
+                      出战副将 ({inspectedPlayer.activeGenerals.length}/3)
+                    </div>
+                    {inspectedPlayer.activeGenerals.length === 0 ? (
+                      <div className="text-[#b8a2bf]">暂无出战副将</div>
+                    ) : (
+                      inspectedPlayer.activeGenerals.map((g) => (
+                        <div key={g.id} className="flex items-center gap-2 text-[11px]">
+                          <AssetImg
+                            path={`portraits/${g.avatarKey}`}
+                            alt={g.name}
+                            className="w-8 h-8 pixelated border border-[#d6ab48]"
+                          />
+                          <div>
+                            <div className={`font-bold ${QUALITY_COLOR[g.rarity]}`}>
+                              {g.name} Lv.{g.level}
+                              {g.rebirth > 0 ? ` [${g.rebirth}转]` : ''} · 成长{g.growth.toFixed(2)}
+                            </div>
+                            <div className="text-[#dfcae6]">
+                              血{g.maxHp} · 攻{g.atk} · 速{g.spd}
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* BANK (许昌钱庄：存取与金银兑换) */}
           {panel === 'bank' && (() => {
