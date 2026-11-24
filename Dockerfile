@@ -1,5 +1,8 @@
 FROM node:24-slim AS builder
 WORKDIR /app
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
+ENV npm_config_registry=${NPM_REGISTRY}
 
 RUN corepack enable && corepack prepare pnpm@11.5.2 --activate
 
@@ -19,6 +22,9 @@ RUN pnpm build
 
 FROM node:24-slim AS runner
 WORKDIR /app
+ARG NPM_REGISTRY=https://registry.npmjs.org
+ENV COREPACK_NPM_REGISTRY=${NPM_REGISTRY}
+ENV npm_config_registry=${NPM_REGISTRY}
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HXSG_DATA_DIR=/data

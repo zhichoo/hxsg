@@ -3,6 +3,8 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile
+      args:
+        NPM_REGISTRY: https://registry.npmmirror.com
     image: hxsg-classic:latest
     container_name: hxsg-prod
     restart: unless-stopped
@@ -41,6 +43,7 @@ services:
 
   hxsg-sandbox:
     image: hxsg-classic:latest
+    pull_policy: never
     container_name: hxsg-sandbox
     restart: unless-stopped
     depends_on:
@@ -79,7 +82,7 @@ services:
           memory: 512M
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: mirror.ccs.tencentyun.com/cloudflare/cloudflared:latest
     container_name: hxsg-cloudflared
     restart: unless-stopped
     depends_on:
