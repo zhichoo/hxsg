@@ -168,19 +168,19 @@ const STATUS_BADGE: Record<BattleStatusKind, { label: string; bg: string }> = {
 function getUnitCoords(u: BattleUnit, w: number, h: number): { x: number; y: number } {
   if (u.side === 'enemy') {
     const enemySlots = [
-      { x: w * 0.13, y: h * 0.42 },
-      { x: w * 0.27, y: h * 0.56 },
-      { x: w * 0.13, y: h * 0.72 },
-      { x: w * 0.27, y: h * 0.84 },
-      { x: w * 0.19, y: h * 0.58 },
+      { x: w * 0.14, y: h * 0.44 },
+      { x: w * 0.27, y: h * 0.58 },
+      { x: w * 0.14, y: h * 0.73 },
+      { x: w * 0.27, y: h * 0.86 },
+      { x: w * 0.2, y: h * 0.58 },
     ];
     return enemySlots[u.position % enemySlots.length];
   }
   const playerSlots = [
-    { x: w * 0.85, y: h * 0.56 },
-    { x: w * 0.73, y: h * 0.42 },
-    { x: w * 0.73, y: h * 0.72 },
-    { x: w * 0.85, y: h * 0.84 },
+    { x: w * 0.86, y: h * 0.58 },
+    { x: w * 0.73, y: h * 0.44 },
+    { x: w * 0.73, y: h * 0.73 },
+    { x: w * 0.86, y: h * 0.86 },
   ];
   return playerSlots[u.position % playerSlots.length];
 }
@@ -702,8 +702,10 @@ export function BattleStage({
       if (bush1) ctx.drawImage(bush1, Math.round(w * 0.54), Math.round(topH - 12), 31, 27);
       if (bush2) ctx.drawImage(bush2, Math.round(w * 0.68), Math.round(h * 0.72), 29, 20);
 
-      const physScale = dpr >= 2 ? Math.max(2, Math.round(1.4 * dpr)) : 1;
+      const desiredScale = h < 270 ? 1.5 : 2;
+      const physScale = Math.max(2, Math.round(desiredScale * dpr));
       const spriteScale = physScale / dpr;
+      const fxZoom = spriteScale / 1.5;
       const arrowImg = getImg('f_jt.png');
       const deadImg = getImg('dead_1.png');
 
@@ -758,7 +760,15 @@ export function BattleStage({
         // Ground shadow
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
         ctx.beginPath();
-        ctx.ellipse(ux, uy + 2, 16, 5, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          ux,
+          uy + 2,
+          Math.round(11 * spriteScale),
+          Math.round(3.5 * spriteScale),
+          0,
+          0,
+          Math.PI * 2,
+        );
         ctx.fill();
 
         // Target / active-unit ground ring
@@ -766,13 +776,29 @@ export function BattleStage({
           ctx.strokeStyle = '#fff04d';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.ellipse(ux, uy + 2, 20, 7, 0, 0, Math.PI * 2);
+          ctx.ellipse(
+            ux,
+            uy + 2,
+            Math.round(13.5 * spriteScale),
+            Math.round(4.8 * spriteScale),
+            0,
+            0,
+            Math.PI * 2,
+          );
           ctx.stroke();
         } else if (battle.status === 'ongoing' && activeUnit && u.uid === activeUnit.uid) {
           ctx.strokeStyle = '#5cf2ff';
           ctx.lineWidth = 2.5;
           ctx.beginPath();
-          ctx.ellipse(ux, uy + 2, 21, 7.5, 0, 0, Math.PI * 2);
+          ctx.ellipse(
+            ux,
+            uy + 2,
+            Math.round(14 * spriteScale),
+            Math.round(5 * spriteScale),
+            0,
+            0,
+            Math.PI * 2,
+          );
           ctx.stroke();
         }
 
@@ -828,8 +854,8 @@ export function BattleStage({
         ctx.restore();
 
         // HP & MP bars
-        const charTop = uy - Math.round(39 * spriteScale);
-        const barW = 46;
+        const charTop = uy - Math.round(38 * spriteScale);
+        const barW = 52;
         const bx = Math.round(ux - barW / 2);
         const by = charTop - 13;
         ctx.fillStyle = '#ffffff';
@@ -844,43 +870,43 @@ export function BattleStage({
         ctx.fillRect(bx, by + 5, Math.round(barW * Math.max(0, u.mp / Math.max(1, u.maxMp))), 4);
 
         // Nameplate
-        ctx.font = 'bold 11px "PingFang SC", "Microsoft YaHei", sans-serif';
+        ctx.font = 'bold 11.5px "PingFang SC", "Microsoft YaHei", sans-serif';
         ctx.textAlign = 'center';
         const textW = ctx.measureText(u.name).width;
         ctx.fillStyle = 'rgba(0, 0, 0, 0.68)';
-        ctx.fillRect(Math.round(ux - textW / 2 - 4), uy + 4, Math.round(textW + 8), 15);
+        ctx.fillRect(Math.round(ux - textW / 2 - 4), uy + 4, Math.round(textW + 8), 16);
         ctx.fillStyle = u.side === 'player' ? '#fff394' : '#ffffff';
-        ctx.fillText(u.name, ux, uy + 15);
+        ctx.fillText(u.name, ux, uy + 16);
 
         // Official pixel status glyphs from f_stat.png (封/围/攻/乱/毒/速) above HP bar
         if (u.statuses && u.statuses.length > 0) {
           const statImg = getImg('f_stat.png');
           u.statuses.slice(0, 4).forEach((st, idx) => {
             const sx = bx + idx * 16;
-            const sy = by - 18;
+            const sy = by - 20;
             const rect = STAT_SPRITE_RECT[st.kind];
             if (statImg && rect) {
-              ctx.drawImage(statImg, rect[0], rect[1], rect[2], rect[3], sx, sy, 14, 17);
+              ctx.drawImage(statImg, rect[0], rect[1], rect[2], rect[3], sx, sy, 15, 19);
             } else {
               const meta = STATUS_BADGE[st.kind] ?? { label: '态', bg: '#555' };
               ctx.fillStyle = meta.bg;
-              ctx.fillRect(sx, sy + 2, 14, 14);
+              ctx.fillRect(sx, sy + 2, 15, 15);
               ctx.strokeStyle = '#ffe97d';
               ctx.lineWidth = 1;
-              ctx.strokeRect(sx, sy + 2, 14, 14);
+              ctx.strokeRect(sx, sy + 2, 15, 15);
               ctx.fillStyle = '#ffffff';
               ctx.font = 'bold 9.5px "PingFang SC", "Microsoft YaHei", sans-serif';
-              ctx.fillText(meta.label, sx + 7, sy + 12.5);
+              ctx.fillText(meta.label, sx + 7.5, sy + 13);
             }
           });
         }
 
         // Red action pointer arrow next to active unit
         if (battle.status === 'ongoing' && activeUnit && u.uid === activeUnit.uid) {
-          const px = ux - Math.round(28 * spriteScale) + Math.sin(now / 180) * 2;
+          const px = ux - Math.round(23 * spriteScale) + Math.sin(now / 180) * 2;
           const py = uy - Math.round(24 * spriteScale);
           if (arrowImg) {
-            ctx.drawImage(arrowImg, px, py, 16, 16);
+            ctx.drawImage(arrowImg, px, py, 18, 18);
           }
         }
       }
@@ -917,18 +943,18 @@ export function BattleStage({
         if (fx.effect === 'lei') {
           // Official 3-frame thunderbolt f_sd.png striking down onto the target
           const sd = getImg('f_sd.png');
-          drawSheetFrame(sd, SPRITE_FRAMES.thunder, t, pos.x, pos.y + 4, 1.5);
+          drawSheetFrame(sd, SPRITE_FRAMES.thunder, t, pos.x, pos.y + 4, 1.55 * fxZoom);
         } else if (fx.effect === 'fire') {
           // Official 3-frame roaring flame fire.png
           const fire = getImg('fire.png');
-          drawSheetFrame(fire, SPRITE_FRAMES.fire, (t * 2) % 1, pos.x, pos.y + 4, 1.55);
+          drawSheetFrame(fire, SPRITE_FRAMES.fire, (t * 2) % 1, pos.x, pos.y + 4, 1.6 * fxZoom);
         } else if (fx.effect === 'fg') {
           // 排山倒海: official ice-blue surge pi_fl.png + clean blue starburst fg.png
           const pi = getImg('pi_fl.png');
           const fg = getImg('fg.png');
-          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 4, 1.7);
+          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 4, 1.75 * fxZoom);
           if (fg && t < 0.65) {
-            const sc = 0.65 + Math.sin((t / 0.65) * Math.PI) * 0.45;
+            const sc = (0.68 + Math.sin((t / 0.65) * Math.PI) * 0.45) * fxZoom;
             drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 4, sc);
           }
         } else if (fx.effect === 'slash') {
@@ -936,26 +962,33 @@ export function BattleStage({
           const fg = getImg('fg.png');
           const blood = getImg('blood.png');
           if (fg && t < 0.75) {
-            const sc = 0.55 + Math.sin((t / 0.75) * Math.PI) * 0.35;
+            const sc = (0.58 + Math.sin((t / 0.75) * Math.PI) * 0.35) * fxZoom;
             drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 2, sc);
           }
           if (blood && t >= 0.15) {
-            drawSheetFrame(blood, SPRITE_FRAMES.blood, (t - 0.15) / 0.85, pos.x, pos.y - 8, 1.5);
+            drawSheetFrame(
+              blood,
+              SPRITE_FRAMES.blood,
+              (t - 0.15) / 0.85,
+              pos.x,
+              pos.y - 10 * fxZoom,
+              1.55 * fxZoom,
+            );
           }
         } else if (fx.effect === 'heal' || fx.effect === 'buff_atk') {
           // 妙手回春 / 吃药 / 魔神附体: official 4-frame golden light pillar fg2.png
           const fg2 = getImg('fg2.png');
-          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.9);
+          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.95 * fxZoom);
         } else if (fx.effect === 'buff_spd') {
           // 疾风咒: official 3-frame blue wind-energy surge pi_fl.png
           const pi = getImg('pi_fl.png');
-          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 2, 1.65);
+          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 2, 1.7 * fxZoom);
         } else if (fx.effect === 'revive') {
           // 还魂丹 / 招将上阵: official 4-frame spirit flame dead_fl.png + golden light fg2.png
           const dfl = getImg('dead_fl.png');
           const fg2 = getImg('fg2.png');
-          drawSheetFrame(dfl, SPRITE_FRAMES.spiritFlame, t, pos.x, pos.y + 4, 1.55);
-          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.6);
+          drawSheetFrame(dfl, SPRITE_FRAMES.spiritFlame, t, pos.x, pos.y + 4, 1.6 * fxZoom);
+          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.65 * fxZoom);
         } else if (
           fx.effect === 'chaos' ||
           fx.effect === 'seal' ||
@@ -964,7 +997,7 @@ export function BattleStage({
         ) {
           // 离间计 / 定身计 / 画地为牢 / 五毒攻心: official 4-frame purple magic aura fg3.png
           const fg3 = getImg('fg3.png');
-          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura, t, pos.x, pos.y + 4, 1.6);
+          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura, t, pos.x, pos.y + 4, 1.65 * fxZoom);
         }
         ctx.restore();
       }
@@ -1029,10 +1062,10 @@ export function BattleStage({
     const { w, h } = sizeRef.current;
 
     let closest: BattleUnit | null = null;
-    let bestDist = 42;
+    let bestDist = 56;
     for (const u of aliveEnemies) {
       const pos = getUnitCoords(u, w, h);
-      const d = Math.hypot(lx - pos.x, ly - (pos.y - 24));
+      const d = Math.hypot(lx - pos.x, ly - (pos.y - 34));
       if (d < bestDist) {
         bestDist = d;
         closest = u;
@@ -1074,11 +1107,11 @@ export function BattleStage({
             className="w-full h-full block cursor-crosshair"
           />
 
-          {/* Classic Staggered Golden Diamond Command Buttons */}
+          {/* Classic 6 Staggered Golden Diamond Command Buttons (3x2) */}
           {battle.status === 'ongoing' && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="pointer-events-auto flex items-center">
-                <div className="flex flex-col -space-y-1">
+              <div className="pointer-events-auto flex items-start">
+                <div className="flex flex-col -space-y-0.5">
                   <button
                     type="button"
                     disabled={busy}
@@ -1112,21 +1145,6 @@ export function BattleStage({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => {
-                      if (isCommandingHero) {
-                        setSubMenu((m) => (m === 'summon' ? 'none' : 'summon'));
-                      } else {
-                        stepBack();
-                      }
-                    }}
-                    className={`hx-diamond-btn ${subMenu === 'summon' ? 'active' : ''}`}
-                    title={isCommandingHero ? '召唤营中备用副将替补上阵' : '返回重选上一位单位指令'}
-                  >
-                    <span>{isCommandingHero ? '招将' : '重选'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
                     onClick={() => void dispatchCommand({ action: 'defend' })}
                     className="hx-diamond-btn"
                     title="本回合防御减伤 50% (快捷键 7)"
@@ -1134,7 +1152,7 @@ export function BattleStage({
                     <span>防御</span>
                   </button>
                 </div>
-                <div className="flex flex-col -space-y-1 -ml-2">
+                <div className="flex flex-col -space-y-0.5 -ml-2 mt-5">
                   <button
                     type="button"
                     disabled={busy}
@@ -1156,15 +1174,6 @@ export function BattleStage({
                   >
                     <span>物品</span>
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setSubMenu((m) => (m === 'protect' ? 'none' : 'protect'))}
-                    className={`hx-diamond-btn ${subMenu === 'protect' ? 'active' : ''}`}
-                    title="保护指定友军分担伤害 (快捷键 5)"
-                  >
-                    <span>保护</span>
-                  </button>
                   {isCommandingHero ? (
                     <button
                       type="button"
@@ -1179,15 +1188,43 @@ export function BattleStage({
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={toggleAutoGenerals}
+                      onClick={stepBack}
                       className="hx-diamond-btn"
-                      title="一键切回副将自动出手"
+                      title="返回重选上一位单位指令"
                     >
-                      <span>全托管</span>
+                      <span>重选</span>
                     </button>
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Subtle Secondary Tactical Pills (保护 / 招将) tucked at bottom-center out of the way */}
+          {battle.status === 'ongoing' && subMenu === 'none' && (
+            <div className="pointer-events-none absolute left-0 right-0 bottom-1.5 flex justify-center gap-1.5 z-10">
+              {aliveAllies.length > 1 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setSubMenu('protect')}
+                  className="pointer-events-auto px-2 py-0.5 text-[10.5px] font-bold bg-[#1c2b3d]/85 hover:bg-[#27405c] border border-[#7ec8ff]/80 text-[#dff4ff] shadow"
+                  title="保护指定友军分担伤害 (快捷键 5)"
+                >
+                  🛡 保护
+                </button>
+              )}
+              {isCommandingHero && benchGenerals.length > 0 && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setSubMenu('summon')}
+                  className="pointer-events-auto px-2 py-0.5 text-[10.5px] font-bold bg-[#381442]/85 hover:bg-[#521e61] border border-[#e0b84e]/85 text-[#ffe999] shadow"
+                  title="召唤营中备用副将替补上阵"
+                >
+                  🚩 招将
+                </button>
+              )}
             </div>
           )}
 

@@ -71,8 +71,8 @@ body,
 
 /* Classic Version A battle diamond button */
 .hx-diamond-btn {
-  width: 50px;
-  height: 50px;
+  width: 44px;
+  height: 44px;
   position: relative;
   display: flex;
   align-items: center;
@@ -83,7 +83,7 @@ body,
 .hx-diamond-btn::before {
   content: "";
   position: absolute;
-  inset: 7px;
+  inset: 6px;
   transform: rotate(45deg);
   background: linear-gradient(135deg, #fce26a 0%, #df9b11 52%, #a65405 100%);
   border: 2px solid #591c04;
@@ -99,7 +99,7 @@ body,
 .hx-diamond-btn > span {
   position: relative;
   z-index: 1;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
   line-height: 1;
   color: #ffffff;

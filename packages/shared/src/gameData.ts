@@ -11,11 +11,10 @@ export const REALMS: ServerRealm[] = [
   {
     id: 'dingjunshan',
     name: '定军山',
-    tag: '双倍经验',
-    desc: '经典怀旧一区 · 双倍经验 · 1:1 复古三国世界',
+    tag: '推荐',
+    desc: '经典怀旧一区 · 1:1 复古三国世界',
     bgImg: 'f_bg2_5.png',
     onlineBase: 1,
-    expMultiplier: 2,
   },
   {
     id: 'nanyangguan',

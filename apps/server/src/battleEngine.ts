@@ -1164,6 +1164,27 @@ export function performBattleAction(
               });
               continue;
             }
+            if (chosenSkill.kind === 'buff' && chosenSkill.buffKind) {
+              const buffKind = chosenSkill.buffKind;
+              const bTurns = chosenSkill.buffTurns ?? 3;
+              const bPct = chosenSkill.buffPct ?? 26;
+              const buffTargets = alivePlayers.slice(0, 3);
+              const targetResults = buffTargets.map((ally) => {
+                applyStatus(ally, buffKind, bTurns, bPct);
+                return { uid: ally.uid, name: ally.name, damage: 0, appliedStatus: buffKind };
+              });
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'skill',
+                skillId: chosenSkill.id,
+                skillName: chosenSkill.name,
+                effect: chosenSkill.effect,
+                targets: targetResults,
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，${buffTargets.map((a) => a.name).join('、')}${buffKind === 'spd_up' ? `速度提升 ${bPct}%` : `攻击提升 ${bPct}%`}！`,
+              });
+              continue;
+            }
             const primary = aliveEnemies.find((e) => e.uid === gCmd.targetUid) ?? aliveEnemies[0];
             if (chosenSkill.kind === 'control' && chosenSkill.controlKind) {
               const kind = chosenSkill.controlKind;
@@ -1190,6 +1211,72 @@ export function performBattleAction(
                 effect: chosenSkill.effect,
                 targets: targetResults,
                 message: `副将 ${actor.name} 施展【${chosenSkill.name}】控场！`,
+              });
+              continue;
+            }
+            if (chosenSkill.kind === 'poison') {
+              const pTurns = chosenSkill.debuffTurns ?? 3;
+              const targets = [primary, ...aliveEnemies.filter((e) => e.uid !== primary.uid)].slice(0, 3);
+              const targetResults = targets.map((t) => {
+                const { damage, crit } = calcDamage(actor.atk, t.defending, chosenSkill.power, {
+                  resistPct: t.resist?.magic,
+                  targetTrapped: hasStatus(t, 'trap'),
+                });
+                t.hp = Math.max(0, t.hp - damage);
+                if (t.hp === 0) t.alive = false;
+                let poisoned = false;
+                if (t.alive) {
+                  applyStatus(t, 'poison', pTurns, Math.round(actor.atk * 0.42));
+                  poisoned = true;
+                }
+                return {
+                  uid: t.uid,
+                  name: t.name,
+                  damage,
+                  crit,
+                  killed: !t.alive,
+                  appliedStatus: poisoned ? ('poison' as BattleStatusKind) : undefined,
+                };
+              });
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'skill',
+                skillId: chosenSkill.id,
+                skillName: chosenSkill.name,
+                effect: chosenSkill.effect,
+                targets: targetResults,
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，毒瘴席卷敌阵并施加剧毒！`,
+              });
+              continue;
+            }
+            if (chosenSkill.kind === 'debuff') {
+              const dTurns = chosenSkill.debuffTurns ?? 2;
+              const { damage, crit } = calcDamage(actor.atk, primary.defending, chosenSkill.power, {
+                resistPct: primary.resist?.phys,
+                targetTrapped: hasStatus(primary, 'trap'),
+              });
+              primary.hp = Math.max(0, primary.hp - damage);
+              if (primary.hp === 0) primary.alive = false;
+              if (primary.alive) applyStatus(primary, 'def_down', dTurns);
+              logs.push({
+                actorUid: actor.uid,
+                actorName: actor.name,
+                action: 'skill',
+                skillId: chosenSkill.id,
+                skillName: chosenSkill.name,
+                effect: 'slash',
+                targets: [
+                  {
+                    uid: primary.uid,
+                    name: primary.name,
+                    damage,
+                    crit,
+                    killed: !primary.alive,
+                    appliedStatus: primary.alive ? 'def_down' : undefined,
+                  },
+                ],
+                message: `副将 ${actor.name} 施展【${chosenSkill.name}】，重创 ${primary.name} ${damage} 点并击碎护甲！`,
               });
               continue;
             }
@@ -1289,6 +1376,89 @@ export function performBattleAction(
           : undefined;
       if (sigSkill) {
         actor.mp -= sigSkill.mpCost;
+        if (sigSkill.kind === 'buff' && sigSkill.buffKind) {
+          const buffKind = sigSkill.buffKind;
+          const bTurns = sigSkill.buffTurns ?? 3;
+          const bPct = sigSkill.buffPct ?? 26;
+          const buffTargets = alivePlayers.slice(0, 3);
+          const targetResults = buffTargets.map((ally) => {
+            applyStatus(ally, buffKind, bTurns, bPct);
+            return { uid: ally.uid, name: ally.name, damage: 0, appliedStatus: buffKind };
+          });
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'skill',
+            skillId: sigSkill.id,
+            skillName: sigSkill.name,
+            effect: sigSkill.effect,
+            targets: targetResults,
+            message: `副将 ${actor.name} 施展【${sigSkill.name}】，为我方施加增益！`,
+          });
+          continue;
+        }
+        if (sigSkill.kind === 'poison') {
+          const pTurns = sigSkill.debuffTurns ?? 3;
+          const targets = aliveEnemies.slice(0, 3);
+          const targetResults = targets.map((t) => {
+            const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+              resistPct: t.resist?.magic,
+              targetTrapped: hasStatus(t, 'trap'),
+            });
+            t.hp = Math.max(0, t.hp - damage);
+            if (t.hp === 0) t.alive = false;
+            if (t.alive) applyStatus(t, 'poison', pTurns, Math.round(actor.atk * 0.42));
+            return {
+              uid: t.uid,
+              name: t.name,
+              damage,
+              crit,
+              killed: !t.alive,
+              appliedStatus: t.alive ? ('poison' as BattleStatusKind) : undefined,
+            };
+          });
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'skill',
+            skillId: sigSkill.id,
+            skillName: sigSkill.name,
+            effect: sigSkill.effect,
+            targets: targetResults,
+            message: `副将 ${actor.name} 施展【${sigSkill.name}】，毒瘴席卷敌阵！`,
+          });
+          continue;
+        }
+        if (sigSkill.kind === 'debuff') {
+          const t = aliveEnemies[Math.floor(Math.random() * aliveEnemies.length)];
+          const { damage, crit } = calcDamage(actor.atk, t.defending, sigSkill.power, {
+            resistPct: t.resist?.phys,
+            targetTrapped: hasStatus(t, 'trap'),
+          });
+          t.hp = Math.max(0, t.hp - damage);
+          if (t.hp === 0) t.alive = false;
+          if (t.alive) applyStatus(t, 'def_down', sigSkill.debuffTurns ?? 2);
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'skill',
+            skillId: sigSkill.id,
+            skillName: sigSkill.name,
+            effect: 'slash',
+            targets: [
+              {
+                uid: t.uid,
+                name: t.name,
+                damage,
+                crit,
+                killed: !t.alive,
+                appliedStatus: t.alive ? 'def_down' : undefined,
+              },
+            ],
+            message: `副将 ${actor.name} 施展【${sigSkill.name}】，击碎 ${t.name} 护甲！`,
+          });
+          continue;
+        }
         if (sigSkill.kind === 'control' && sigSkill.controlKind) {
           const kind = sigSkill.controlKind;
           const targets = aliveEnemies.slice(0, 2);
