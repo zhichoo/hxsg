@@ -48,7 +48,19 @@ interface FloatingNum {
 
 interface ActiveFx {
   uid: string;
-  effect: 'lei' | 'fire' | 'fg' | 'slash' | 'heal' | 'chaos' | 'seal' | 'trap' | 'poison' | 'buff_atk' | 'buff_spd' | 'revive';
+  effect:
+    | 'lei'
+    | 'fire'
+    | 'fg'
+    | 'slash'
+    | 'heal'
+    | 'chaos'
+    | 'seal'
+    | 'trap'
+    | 'poison'
+    | 'buff_atk'
+    | 'buff_spd'
+    | 'revive';
   startedAt: number;
   duration: number;
 }
@@ -61,23 +73,87 @@ interface SkillCallout {
   duration: number;
 }
 
-interface ScreenFlash {
-  color: string;
-  startedAt: number;
-  duration: number;
-}
-
 const FX_PRELOAD_LIST = [
   'f_sd.png',
-  'lei.png',
   'fire.png',
   'fg.png',
   'fg2.png',
   'fg3.png',
-  'blood.png',
+  'pi_fl.png',
   'dead_fl.png',
+  'blood.png',
+  'smoke.png',
+  'f_stat.png',
   'dead_1.png',
 ];
+
+type SpriteFrame = readonly [number, number, number, number];
+
+// Exact pixel-verified frame rectangles from official HXSG PNG sprite sheets
+const SPRITE_FRAMES = {
+  // 3-frame vertical thunderbolt (f_sd.png 96x71)
+  thunder: [
+    [0, 0, 36, 71],
+    [36, 0, 33, 71],
+    [69, 0, 27, 71],
+  ] as readonly SpriteFrame[],
+  // 3-frame pixel flame (fire.png 66x44)
+  fire: [
+    [0, 0, 25, 44],
+    [25, 0, 20, 44],
+    [45, 0, 21, 44],
+  ] as readonly SpriteFrame[],
+  // Clean right-side blue starburst hit spark (fg.png 92x68 -> x=27..92)
+  starburst: [[27, 0, 65, 68]] as readonly SpriteFrame[],
+  // 4-frame golden light pillar for heal / buff (fg2.png 104x28)
+  goldLight: [
+    [0, 0, 26, 28],
+    [26, 0, 26, 28],
+    [52, 0, 26, 28],
+    [78, 0, 26, 28],
+  ] as readonly SpriteFrame[],
+  // 4-frame purple magic aura for control / poison (fg3.png 166x33)
+  purpleAura: [
+    [0, 0, 40, 33],
+    [40, 0, 38, 33],
+    [78, 0, 47, 33],
+    [125, 0, 41, 33],
+  ] as readonly SpriteFrame[],
+  // 3-frame ice-blue energy wave for 排山倒海 / 疾风咒 / 破甲 (pi_fl.png 86x35)
+  blueWave: [
+    [0, 0, 30, 35],
+    [30, 0, 32, 35],
+    [62, 0, 24, 35],
+  ] as readonly SpriteFrame[],
+  // 4-frame luminous spirit flame for revive / summon (dead_fl.png 111x43)
+  spiritFlame: [
+    [0, 0, 31, 43],
+    [31, 0, 30, 43],
+    [61, 0, 32, 43],
+    [93, 0, 18, 43],
+  ] as readonly SpriteFrame[],
+  // 2-frame red hit blood splash (blood.png 38x22)
+  blood: [
+    [0, 0, 22, 22],
+    [22, 0, 16, 22],
+  ] as readonly SpriteFrame[],
+  // 3-frame dash dust puff (smoke.png 60x12)
+  smoke: [
+    [0, 0, 20, 12],
+    [21, 0, 19, 12],
+    [40, 0, 20, 12],
+  ] as readonly SpriteFrame[],
+};
+
+// Official status glyphs in f_stat.png (118x19): 封 围 攻 乱 毒 速 隐 固
+const STAT_SPRITE_RECT: Partial<Record<BattleStatusKind, SpriteFrame>> = {
+  seal: [0, 0, 15, 19],
+  trap: [15, 0, 15, 19],
+  atk_up: [30, 0, 15, 19],
+  chaos: [45, 0, 15, 19],
+  poison: [60, 0, 15, 19],
+  spd_up: [75, 0, 14, 19],
+};
 
 const STATUS_BADGE: Record<BattleStatusKind, { label: string; bg: string }> = {
   chaos: { label: '乱', bg: '#9e198b' },
@@ -140,7 +216,7 @@ export function BattleStage({
   const fxRef = useRef<ActiveFx[]>([]);
   const floatsRef = useRef<FloatingNum[]>([]);
   const calloutsRef = useRef<SkillCallout[]>([]);
-  const flashRef = useRef<ScreenFlash | null>(null);
+  const hurtRef = useRef<Map<string, number>>(new Map());
   const lungeRef = useRef<Map<string, number>>(new Map());
   const imgCacheRef = useRef<Map<string, HTMLImageElement | null>>(new Map());
   const timeoutFiredRoundRef = useRef<number>(0);
@@ -237,60 +313,54 @@ export function BattleStage({
     }
   }, [aliveEnemies, selectedTargetUid]);
 
-  // Trigger dramatic skill VFX, caster skill banners, screen flashes & floating numbers from round logs
+  // Trigger authentic sequential pixel VFX, hit shake, caster skill banners & floating numbers
   useEffect(() => {
     if (!battle.lastLogs.length) return;
     const now = performance.now();
     battle.lastLogs.forEach((log: BattleActionLog, idx: number) => {
-      const delay = idx * 300;
+      const delay = idx * 380;
       lungeRef.current.set(log.actorUid, now + delay);
 
       if (log.skillName) {
         const callColor =
           log.effect === 'lei'
-            ? '#7ef2ff'
+            ? '#8cefff'
             : log.effect === 'fire'
-              ? '#ff9d54'
+              ? '#ffae5c'
               : log.effect === 'heal'
-                ? '#7dff9a'
-                : log.effect === 'chaos'
-                  ? '#ff85f5'
-                  : log.effect === 'seal'
-                    ? '#75d6ff'
-                    : '#ffe86b';
+                ? '#8cff9e'
+                : log.effect === 'chaos' || log.effect === 'seal' || log.effect === 'trap'
+                  ? '#f39eff'
+                  : '#ffe875';
         calloutsRef.current.push({
           uid: log.actorUid,
           label: `【${log.skillName}】`,
           color: callColor,
           startedAt: now + delay,
-          duration: 950,
+          duration: 780,
         });
-        if (log.effect === 'lei') {
-          flashRef.current = { color: 'rgba(170, 235, 255, 0.34)', startedAt: now + delay, duration: 240 };
-        } else if (log.effect === 'fire' && log.skillId !== 'wudu') {
-          flashRef.current = { color: 'rgba(255, 110, 35, 0.24)', startedAt: now + delay, duration: 240 };
-        } else if (log.effect === 'fg') {
-          flashRef.current = { color: 'rgba(255, 224, 90, 0.22)', startedAt: now + delay, duration: 220 };
-        }
       } else if (log.action === 'summon') {
         calloutsRef.current.push({
           uid: log.actorUid,
           label: '【招将上阵】',
-          color: '#ffe86b',
+          color: '#ffe875',
           startedAt: now + delay,
-          duration: 900,
+          duration: 780,
         });
       } else if (log.action === 'protect') {
         calloutsRef.current.push({
           uid: log.actorUid,
-          label: '【挺身护卫】',
-          color: '#88e2ff',
+          label: '【护卫】',
+          color: '#8ce6ff',
           startedAt: now + delay,
-          duration: 850,
+          duration: 700,
         });
       }
 
       for (const t of log.targets) {
+        if (t.damage > 0) {
+          hurtRef.current.set(t.uid, now + delay + 90);
+        }
         let fxType: ActiveFx['effect'] | null = log.effect ?? null;
         if (t.revived) fxType = 'revive';
         else if (t.appliedStatus === 'poison' || log.skillId === 'wudu') fxType = 'poison';
@@ -300,24 +370,24 @@ export function BattleStage({
           fxRef.current.push({
             uid: t.uid,
             effect: fxType,
-            startedAt: now + delay,
-            duration: fxType === 'slash' ? 560 : 820,
+            startedAt: now + delay + 60,
+            duration: fxType === 'slash' ? 380 : 540,
           });
         }
 
         if (t.revived) {
           floatsRef.current.push({
             uid: t.uid,
-            text: t.heal ? `复活 +${t.heal}` : '披挂上阵!',
+            text: t.heal ? `复活 +${t.heal}` : '上阵!',
             color: '#ffe966',
-            createdAt: now + delay,
+            createdAt: now + delay + 80,
           });
         } else if (t.heal && t.heal > 0) {
           floatsRef.current.push({
             uid: t.uid,
             text: `+${t.heal}`,
             color: '#76ff88',
-            createdAt: now + delay,
+            createdAt: now + delay + 80,
           });
         } else if (t.appliedStatus) {
           const stMap: Record<BattleStatusKind, { text: string; color: string }> = {
@@ -325,24 +395,24 @@ export function BattleStage({
             seal: { text: '封印!', color: '#7ce2ff' },
             trap: { text: '围困!', color: '#ffd26b' },
             poison: { text: '中毒!', color: '#7dff7a' },
-            atk_up: { text: '攻↑!', color: '#ff8a5c' },
-            spd_up: { text: '速↑!', color: '#70f3ff' },
+            atk_up: { text: '攻↑', color: '#ff8a5c' },
+            spd_up: { text: '速↑', color: '#70f3ff' },
             def_down: { text: '破甲!', color: '#ffb35c' },
           };
           const stInfo = stMap[t.appliedStatus];
           if (t.damage > 0) {
             floatsRef.current.push({
               uid: t.uid,
-              text: `${t.crit ? '暴击 ' : ''}-${t.damage} ${stInfo.text}`,
+              text: `${t.crit ? '暴 ' : ''}-${t.damage} ${stInfo.text}`,
               color: '#ffea4f',
-              createdAt: now + delay,
+              createdAt: now + delay + 80,
             });
           } else {
             floatsRef.current.push({
               uid: t.uid,
               text: stInfo.text,
               color: stInfo.color,
-              createdAt: now + delay,
+              createdAt: now + delay + 80,
             });
           }
         } else if (t.resisted) {
@@ -350,21 +420,21 @@ export function BattleStage({
             uid: t.uid,
             text: '抵抗',
             color: '#d9e3ff',
-            createdAt: now + delay,
+            createdAt: now + delay + 80,
           });
         } else if (t.captured) {
           floatsRef.current.push({
             uid: t.uid,
             text: '招降成功!',
             color: '#ffe863',
-            createdAt: now + delay,
+            createdAt: now + delay + 80,
           });
         } else if (t.damage > 0) {
           floatsRef.current.push({
             uid: t.uid,
             text: `${t.crit ? '暴击 ' : ''}-${t.damage}`,
             color: t.crit ? '#ffea4f' : '#ff4b4b',
-            createdAt: now + delay,
+            createdAt: now + delay + 80,
           });
         }
       }
@@ -660,14 +730,30 @@ export function BattleStage({
 
         const lungeAt = lungeRef.current.get(u.uid) ?? 0;
         const lungeElapsed = now - lungeAt;
-        const isAttacking = lungeElapsed >= 0 && lungeElapsed < 360;
+        const isAttacking = lungeElapsed >= 0 && lungeElapsed < 340;
         const lungeShift = isAttacking
-          ? Math.sin((lungeElapsed / 360) * Math.PI) * (u.side === 'player' ? -30 : 30)
+          ? Math.sin((lungeElapsed / 340) * Math.PI) * (u.side === 'player' ? -30 : 30)
           : 0;
 
+        const hurtAt = hurtRef.current.get(u.uid) ?? 0;
+        const hurtElapsed = now - hurtAt;
+        const isHurt = hurtElapsed >= 0 && hurtElapsed < 220;
+        const hurtShake = isHurt ? Math.sin(hurtElapsed * 0.16) * 4 : 0;
+
         const bob = Math.sin(now / 280 + pos.x) > 0 ? 1 : 0;
-        const ux = Math.round(pos.x + lungeShift);
+        const ux = Math.round(pos.x + lungeShift + hurtShake);
         const uy = Math.round(pos.y);
+
+        // Dash dust puff at feet when lunging forward
+        if (isAttacking && lungeElapsed < 220) {
+          const smoke = getImg('smoke.png');
+          if (smoke) {
+            const sIdx = Math.min(2, Math.floor((lungeElapsed / 220) * 3));
+            const [sx, sy, sw, sh] = SPRITE_FRAMES.smoke[sIdx];
+            const dustX = u.side === 'player' ? pos.x + 8 : pos.x - 28;
+            ctx.drawImage(smoke, sx, sy, sw, sh, Math.round(dustX), Math.round(uy - 10), Math.round(sw * 1.2), Math.round(sh * 1.2));
+          }
+        }
 
         // Ground shadow
         ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -766,20 +852,26 @@ export function BattleStage({
         ctx.fillStyle = u.side === 'player' ? '#fff394' : '#ffffff';
         ctx.fillText(u.name, ux, uy + 15);
 
-        // All 7 classic status badges above HP bar
+        // Official pixel status glyphs from f_stat.png (封/围/攻/乱/毒/速) above HP bar
         if (u.statuses && u.statuses.length > 0) {
+          const statImg = getImg('f_stat.png');
           u.statuses.slice(0, 4).forEach((st, idx) => {
-            const meta = STATUS_BADGE[st.kind] ?? { label: '态', bg: '#555' };
             const sx = bx + idx * 16;
-            const sy = by - 16;
-            ctx.fillStyle = meta.bg;
-            ctx.fillRect(sx, sy, 14, 14);
-            ctx.strokeStyle = '#ffe97d';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(sx, sy, 14, 14);
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 9.5px "PingFang SC", "Microsoft YaHei", sans-serif';
-            ctx.fillText(meta.label, sx + 7, sy + 10.5);
+            const sy = by - 18;
+            const rect = STAT_SPRITE_RECT[st.kind];
+            if (statImg && rect) {
+              ctx.drawImage(statImg, rect[0], rect[1], rect[2], rect[3], sx, sy, 14, 17);
+            } else {
+              const meta = STATUS_BADGE[st.kind] ?? { label: '态', bg: '#555' };
+              ctx.fillStyle = meta.bg;
+              ctx.fillRect(sx, sy + 2, 14, 14);
+              ctx.strokeStyle = '#ffe97d';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(sx, sy + 2, 14, 14);
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 9.5px "PingFang SC", "Microsoft YaHei", sans-serif';
+              ctx.fillText(meta.label, sx + 7, sy + 12.5);
+            }
           });
         }
 
@@ -793,7 +885,23 @@ export function BattleStage({
         }
       }
 
-      // 3. Dramatic Full-Spectrum Skill VFX
+      // 3. Authentic Official Pixel-Sprite Skill VFX (zero crude canvas shapes!)
+      const drawSheetFrame = (
+        img: HTMLImageElement | null,
+        frames: readonly SpriteFrame[],
+        t: number,
+        cx: number,
+        bottomY: number,
+        scale: number,
+      ) => {
+        if (!img || frames.length === 0) return;
+        const idx = Math.min(frames.length - 1, Math.floor(t * frames.length));
+        const [sx, sy, sw, sh] = frames[idx];
+        const dw = Math.round(sw * scale);
+        const dh = Math.round(sh * scale);
+        ctx.drawImage(img, sx, sy, sw, sh, Math.round(cx - dw / 2), Math.round(bottomY - dh), dw, dh);
+      };
+
       fxRef.current = fxRef.current.filter((f) => now - f.startedAt < f.duration);
       for (const fx of fxRef.current) {
         const elapsed = now - fx.startedAt;
@@ -804,205 +912,61 @@ export function BattleStage({
         const pos = getUnitCoords(unit, w, h);
 
         ctx.save();
-        if (fx.effect === 'lei') {
-          // Jagged sky lightning bolt + official f_sd.png 3-frame thunder + lei.png sparks
-          ctx.globalAlpha = 1 - t * 0.55;
-          ctx.strokeStyle = t < 0.35 ? '#ffffff' : '#6cecff';
-          ctx.lineWidth = 4 - t * 2;
-          ctx.shadowColor = '#3ce0ff';
-          ctx.shadowBlur = 12;
-          ctx.beginPath();
-          ctx.moveTo(pos.x + (Math.sin(elapsed * 0.08) * 6), 0);
-          ctx.lineTo(pos.x - 10, pos.y * 0.35);
-          ctx.lineTo(pos.x + 12, pos.y * 0.62);
-          ctx.lineTo(pos.x, pos.y - 16);
-          ctx.stroke();
+        ctx.globalAlpha = t > 0.78 ? 1 - (t - 0.78) / 0.22 : 1;
 
+        if (fx.effect === 'lei') {
+          // Official 3-frame thunderbolt f_sd.png striking down onto the target
           const sd = getImg('f_sd.png');
-          if (sd) {
-            const frame = Math.min(2, Math.floor(t * 3));
-            const fw = Math.floor(sd.width / 3);
-            ctx.drawImage(sd, frame * fw, 0, fw, sd.height, pos.x - 28, pos.y - 115, 56, 118);
-          }
-          const lei = getImg('lei.png');
-          if (lei) {
-            ctx.drawImage(lei, pos.x - 24 - t * 10, pos.y - 26, 22, 14);
-            ctx.drawImage(lei, pos.x + 4 + t * 10, pos.y - 22, 22, 14);
-          }
+          drawSheetFrame(sd, SPRITE_FRAMES.thunder, t, pos.x, pos.y + 4, 1.5);
         } else if (fx.effect === 'fire') {
-          // Animated 3-frame fire.png flame pillar + rising glowing embers
+          // Official 3-frame roaring flame fire.png
           const fire = getImg('fire.png');
-          const scale = 1.15 + Math.sin(t * Math.PI) * 0.45;
-          ctx.globalAlpha = 1 - t * 0.4;
-          if (fire) {
-            const frame = Math.min(2, Math.floor(t * 6) % 3);
-            const fw = Math.floor(fire.width / 3);
-            const dw = 44 * scale;
-            const dh = 62 * scale;
-            ctx.drawImage(fire, frame * fw, 0, fw, fire.height, pos.x - dw / 2, pos.y - dh + 6, dw, dh);
-          }
-          for (let i = 0; i < 6; i++) {
-            const ang = (i / 6) * Math.PI * 2 + t * 4;
-            const ex = pos.x + Math.cos(ang) * (12 + t * 18);
-            const ey = pos.y - 14 - t * 48 - (i % 3) * 8;
-            ctx.fillStyle = i % 2 === 0 ? '#ffe966' : '#ff551a';
-            ctx.fillRect(ex - 2, ey - 2, 4, 4);
-          }
-        } else if (fx.effect === 'poison') {
-          // Classic 文人 五毒攻心 toxic green-purple cloud + rising venom bubbles
-          ctx.globalAlpha = (1 - t * 0.45) * 0.85;
-          const grad = ctx.createRadialGradient(pos.x, pos.y - 24, 4, pos.x, pos.y - 24, 34 + t * 14);
-          grad.addColorStop(0, 'rgba(130, 255, 95, 0.85)');
-          grad.addColorStop(0.55, 'rgba(35, 165, 55, 0.55)');
-          grad.addColorStop(1, 'rgba(70, 15, 110, 0)');
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(pos.x, pos.y - 24, 34 + t * 14, 0, Math.PI * 2);
-          ctx.fill();
-          for (let i = 0; i < 6; i++) {
-            const bx = pos.x + Math.sin(i * 1.9 + t * 5) * 20;
-            const by = pos.y - 8 - t * 46 - (i % 3) * 6;
-            ctx.strokeStyle = '#9dff73';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.arc(bx, by, 3 + (i % 3), 0, Math.PI * 2);
-            ctx.stroke();
-          }
+          drawSheetFrame(fire, SPRITE_FRAMES.fire, (t * 2) % 1, pos.x, pos.y + 4, 1.55);
         } else if (fx.effect === 'fg') {
-          // 排山倒海: golden shockwave ring + fg.png + fg3.png sweeping blast
-          ctx.globalAlpha = 1 - t * 0.45;
+          // 排山倒海: official ice-blue surge pi_fl.png + clean blue starburst fg.png
+          const pi = getImg('pi_fl.png');
           const fg = getImg('fg.png');
-          const fg3 = getImg('fg3.png');
-          const r = 14 + t * 38;
-          ctx.strokeStyle = '#ffe56b';
-          ctx.lineWidth = 3;
-          ctx.beginPath();
-          ctx.ellipse(pos.x, pos.y - 16, r, r * 0.45, 0, 0, Math.PI * 2);
-          ctx.stroke();
-          if (fg) {
-            const sc = 0.85 + Math.sin(t * Math.PI) * 0.45;
-            ctx.drawImage(fg, pos.x - 36 * sc, pos.y - 68 * sc, 72 * sc, 56 * sc);
-          }
-          if (fg3) {
-            ctx.drawImage(fg3, pos.x - 42, pos.y - 40, 84, 22);
+          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 4, 1.7);
+          if (fg && t < 0.65) {
+            const sc = 0.65 + Math.sin((t / 0.65) * Math.PI) * 0.45;
+            drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 4, sc);
           }
         } else if (fx.effect === 'slash') {
-          // Sharp animated dual crescent blade slash + fg2.png + blood.png hit flash
-          ctx.globalAlpha = 1 - t * 0.45;
-          const fg2 = getImg('fg2.png');
+          // Physical attack / 连环突刺 / 破甲重击: cropped blue starburst fg.png + 2-frame blood.png
+          const fg = getImg('fg.png');
           const blood = getImg('blood.png');
-          if (fg2) {
-            const frame = Math.min(3, Math.floor(t * 4));
-            const fw = Math.floor(fg2.width / 4);
-            ctx.drawImage(fg2, frame * fw, 0, fw, fg2.height, pos.x - 26, pos.y - 48, 52, 42);
+          if (fg && t < 0.75) {
+            const sc = 0.55 + Math.sin((t / 0.75) * Math.PI) * 0.35;
+            drawSheetFrame(fg, SPRITE_FRAMES.starburst, 0, pos.x, pos.y + 2, sc);
           }
-          const prog = Math.min(1, t * 2.2);
-          ctx.strokeStyle = '#fff9c4';
-          ctx.lineWidth = 4;
-          ctx.shadowColor = '#ffae00';
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.moveTo(pos.x - 22, pos.y - 48);
-          ctx.lineTo(pos.x - 22 + 44 * prog, pos.y - 48 + 38 * prog);
-          ctx.stroke();
-          ctx.strokeStyle = '#ff6b3d';
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.moveTo(pos.x + 20, pos.y - 46);
-          ctx.lineTo(pos.x + 20 - 40 * prog, pos.y - 46 + 34 * prog);
-          ctx.stroke();
-          if (blood && t > 0.2) {
-            ctx.drawImage(blood, pos.x - 16, pos.y - 34, 32, 18);
+          if (blood && t >= 0.15) {
+            drawSheetFrame(blood, SPRITE_FRAMES.blood, (t - 0.15) / 0.85, pos.x, pos.y - 8, 1.5);
           }
-        } else if (fx.effect === 'heal' || fx.effect === 'revive') {
-          // Radiant green/gold healing beam + rising sparkle crosses
-          const isRev = fx.effect === 'revive';
-          ctx.globalAlpha = (1 - t * 0.4) * 0.85;
-          const grad = ctx.createLinearGradient(pos.x, pos.y - 75, pos.x, pos.y + 4);
-          grad.addColorStop(0, isRev ? 'rgba(255, 240, 110, 0)' : 'rgba(110, 255, 145, 0)');
-          grad.addColorStop(0.5, isRev ? 'rgba(255, 224, 90, 0.55)' : 'rgba(95, 255, 135, 0.5)');
-          grad.addColorStop(1, isRev ? 'rgba(255, 246, 170, 0.85)' : 'rgba(160, 255, 185, 0.8)');
-          ctx.fillStyle = grad;
-          ctx.fillRect(pos.x - 22, pos.y - 75, 44, 79);
-          for (let i = 0; i < 6; i++) {
-            const sx = pos.x + Math.sin(i * 2.1 + t * 4) * 18;
-            const sy = pos.y - 6 - t * 58 - (i % 3) * 8;
-            ctx.strokeStyle = isRev ? '#fff59d' : '#a8ffb8';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(sx - 4, sy);
-            ctx.lineTo(sx + 4, sy);
-            ctx.moveTo(sx, sy - 4);
-            ctx.lineTo(sx, sy + 4);
-            ctx.stroke();
-          }
-        } else if (fx.effect === 'buff_atk' || fx.effect === 'buff_spd') {
-          // 魔神附体 (red-gold rising flames) / 疾风咒 (cyan spinning wind rings)
-          const isAtk = fx.effect === 'buff_atk';
-          ctx.globalAlpha = 1 - t * 0.4;
-          for (let i = 0; i < 3; i++) {
-            const ringY = pos.y - 8 - ((t * 56 + i * 18) % 56);
-            ctx.strokeStyle = isAtk ? '#ff7438' : '#5ef2ff';
-            ctx.lineWidth = 2.5;
-            ctx.beginPath();
-            ctx.ellipse(pos.x, ringY, 24 - i * 2, 8, 0, 0, Math.PI * 2);
-            ctx.stroke();
-          }
-        } else if (fx.effect === 'chaos') {
-          // 离间计: magenta swirling confusion rings above head
-          ctx.globalAlpha = 1 - t * 0.35;
-          ctx.strokeStyle = '#ff6ef0';
-          ctx.lineWidth = 2.5;
-          for (let i = 0; i < 2; i++) {
-            const ang = t * Math.PI * 4 + i * Math.PI;
-            ctx.beginPath();
-            ctx.arc(pos.x, pos.y - 38, 16 + i * 8, ang, ang + Math.PI * 1.3);
-            ctx.stroke();
-          }
-        } else if (fx.effect === 'seal') {
-          // 定身计: glowing cyan talisman cross-chains locking the target
-          ctx.globalAlpha = 1 - t * 0.35;
-          ctx.strokeStyle = '#6ce2ff';
-          ctx.lineWidth = 3;
-          ctx.shadowColor = '#1ebcff';
-          ctx.shadowBlur = 8;
-          ctx.strokeRect(pos.x - 20, pos.y - 54, 40, 50);
-          ctx.beginPath();
-          ctx.moveTo(pos.x - 20, pos.y - 54);
-          ctx.lineTo(pos.x + 20, pos.y - 4);
-          ctx.moveTo(pos.x + 20, pos.y - 54);
-          ctx.lineTo(pos.x - 20, pos.y - 4);
-          ctx.stroke();
-        } else if (fx.effect === 'trap') {
-          // 画地为牢: golden energy cage bars slamming down
-          ctx.globalAlpha = 1 - t * 0.35;
-          const drop = Math.min(1, t * 2.5);
-          const topY = pos.y - 56 * drop;
-          ctx.strokeStyle = '#ffd54f';
-          ctx.lineWidth = 2.5;
-          for (let i = -2; i <= 2; i++) {
-            ctx.beginPath();
-            ctx.moveTo(pos.x + i * 9, topY);
-            ctx.lineTo(pos.x + i * 9, pos.y + 2);
-            ctx.stroke();
-          }
-          ctx.strokeRect(pos.x - 20, topY, 40, pos.y + 2 - topY);
+        } else if (fx.effect === 'heal' || fx.effect === 'buff_atk') {
+          // 妙手回春 / 吃药 / 魔神附体: official 4-frame golden light pillar fg2.png
+          const fg2 = getImg('fg2.png');
+          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.9);
+        } else if (fx.effect === 'buff_spd') {
+          // 疾风咒: official 3-frame blue wind-energy surge pi_fl.png
+          const pi = getImg('pi_fl.png');
+          drawSheetFrame(pi, SPRITE_FRAMES.blueWave, t, pos.x, pos.y + 2, 1.65);
+        } else if (fx.effect === 'revive') {
+          // 还魂丹 / 招将上阵: official 4-frame spirit flame dead_fl.png + golden light fg2.png
+          const dfl = getImg('dead_fl.png');
+          const fg2 = getImg('fg2.png');
+          drawSheetFrame(dfl, SPRITE_FRAMES.spiritFlame, t, pos.x, pos.y + 4, 1.55);
+          drawSheetFrame(fg2, SPRITE_FRAMES.goldLight, t, pos.x, pos.y + 2, 1.6);
+        } else if (
+          fx.effect === 'chaos' ||
+          fx.effect === 'seal' ||
+          fx.effect === 'trap' ||
+          fx.effect === 'poison'
+        ) {
+          // 离间计 / 定身计 / 画地为牢 / 五毒攻心: official 4-frame purple magic aura fg3.png
+          const fg3 = getImg('fg3.png');
+          drawSheetFrame(fg3, SPRITE_FRAMES.purpleAura, t, pos.x, pos.y + 4, 1.6);
         }
         ctx.restore();
-      }
-
-      // 3.5 Screen flash overlay on heavy elemental spells
-      if (flashRef.current) {
-        const fel = now - flashRef.current.startedAt;
-        if (fel >= flashRef.current.duration) {
-          flashRef.current = null;
-        } else if (fel >= 0) {
-          ctx.save();
-          ctx.globalAlpha = 1 - fel / flashRef.current.duration;
-          ctx.fillStyle = flashRef.current.color;
-          ctx.fillRect(0, 0, w, h);
-          ctx.restore();
-        }
       }
 
       // 3.8 Floating Skill Name Callouts above caster
