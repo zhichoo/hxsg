@@ -138,6 +138,8 @@ export interface PaohuanStateView {
   rewardExp: number;
   rewardSilver: number;
   bonusHint?: string;
+  dailyGoldRoundsUsed?: number;
+  dailyGoldRoundsMax?: number;
 }
 
 export interface CharacterQuestState {
@@ -443,6 +445,7 @@ export interface InventoryItemView {
   reviveHpPct?: number;
   loyaltyRestore?: number;
   priceSilver: number;
+  priceGold?: number;
 }
 
 export interface MapNpc {

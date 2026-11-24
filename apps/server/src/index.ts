@@ -377,7 +377,8 @@ app.post('/api/facility/inn', async (req) => {
   const body = req.body as { realmId?: string };
   const current = getCharacterByAccountAndRealm(auth.accountId, body.realmId || 'dingjunshan');
   if (!current) throw new Error('尚未创建角色');
-  return { character: restAtInn(current.id) };
+  const res = restAtInn(current.id);
+  return { character: res.character, message: res.message };
 });
 
 app.post('/api/facility/shop/buy', async (req) => {

@@ -106,6 +106,8 @@ interface CharacterRow {
   escort_origin_map_id?: string | null;
   escort_target_map_id?: string | null;
   world_boss_date?: string | null;
+  paohuan_gold_date?: string | null;
+  paohuan_gold_rounds?: number;
   rebirth?: number;
 }
 
@@ -417,6 +419,7 @@ function hydrateCharacter(row: CharacterRow): CharacterView {
         reviveHpPct: tpl.reviveHpPct,
         loyaltyRestore: tpl.loyaltyRestore,
         priceSilver: tpl.priceSilver,
+        priceGold: tpl.priceGold,
       };
     })
     .filter(Boolean) as InventoryItemView[];
@@ -645,6 +648,14 @@ function hydrateQuestState(characterId: number, level: number): CharacterQuestSt
       : phRow.status
     : 'idle';
 
+  const today = getTodayDateStr();
+  const goldRow = db
+    .prepare('SELECT paohuan_gold_date, paohuan_gold_rounds FROM characters WHERE id = ?')
+    .get(characterId) as { paohuan_gold_date?: string | null; paohuan_gold_rounds?: number } | undefined;
+  const dailyGoldRoundsUsed =
+    goldRow?.paohuan_gold_date === today ? Math.max(0, goldRow.paohuan_gold_rounds ?? 0) : 0;
+  const dailyGoldRoundsMax = 3;
+
   const paohuan: PaohuanStateView = {
     ring,
     completedRounds: phRow?.completed_rounds ?? 0,
@@ -658,7 +669,12 @@ function hydrateQuestState(characterId: number, level: number): CharacterQuestSt
     progress: phRow?.progress ?? 0,
     rewardExp: reward.exp,
     rewardSilver: reward.silver,
-    bonusHint: reward.bonusHint,
+    bonusHint:
+      ring === 10 && dailyGoldRoundsUsed >= dailyGoldRoundsMax
+        ? '第 10 环大满贯：必得稀有道具与精良/极品装备（今日 3 轮跑环金砖已领满）！'
+        : reward.bonusHint,
+    dailyGoldRoundsUsed,
+    dailyGoldRoundsMax,
   };
 
   return {
@@ -1174,11 +1190,19 @@ export function claimPaohuan(characterId: number): { character: CharacterView; m
   if (ring >= 10) {
     nextRing = 1;
     nextRounds += 1;
-    db.prepare('UPDATE characters SET gold = gold + 25, updated_at = ? WHERE id = ?').run(
-      Date.now(),
-      characterId,
-    );
-    parts.push('金砖+25');
+    const today = getTodayDateStr();
+    const usedToday = ph.dailyGoldRoundsUsed ?? 0;
+    const maxToday = ph.dailyGoldRoundsMax ?? 3;
+    if (usedToday < maxToday) {
+      db.prepare(
+        `UPDATE characters
+         SET gold = gold + 25, paohuan_gold_date = ?, paohuan_gold_rounds = ?, updated_at = ?
+         WHERE id = ?`,
+      ).run(today, usedToday + 1, Date.now(), characterId);
+      parts.push(`金砖+25（今日第 ${usedToday + 1}/${maxToday} 轮）`);
+    } else {
+      parts.push(`今日跑环金砖已领满 ${maxToday} 轮`);
+    }
     const r = Math.random();
     const rareItem = r < 0.4 ? 'jiangling' : r < 0.75 ? 'xisuidan' : 'baotu';
     addItem(characterId, rareItem, 1);
@@ -1358,16 +1382,27 @@ export function recordQuestMapVisit(characterId: number, mapId: string): void {
   }
 }
 
-export function restAtInn(characterId: number): CharacterView {
+export function restAtInn(
+  characterId: number,
+  free = false,
+): { character: CharacterView; fee: number; message: string } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
+  const baseFee = free || ch.level <= 10 ? 0 : ch.level * 8;
+  const actualFee = Math.min(ch.silver, baseFee);
   db.prepare(
-    'UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?',
-  ).run(ch.maxHp, ch.maxMp, ch.maxHp, ch.maxMp, Date.now(), characterId);
+    'UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, silver = silver - ?, updated_at = ? WHERE id = ?',
+  ).run(ch.maxHp, ch.maxMp, ch.maxHp, ch.maxMp, actualFee, Date.now(), characterId);
   db.prepare('UPDATE generals SET hp = max_hp, mp = max_mp WHERE character_id = ?').run(
     characterId,
   );
-  return getCharacterById(characterId)!;
+  const message =
+    baseFee === 0
+      ? '新手 10 级内免费在客栈歇息，主角与副将气血精力已全部回满！'
+      : actualFee < baseFee
+        ? `掌柜见你囊中羞涩只收了 ${actualFee} 两店钱，主角与副将气血精力已回满！`
+        : `花费 ${actualFee} 银两在客栈美美歇息了一番，主角与副将气血精力已全部回满！`;
+  return { character: getCharacterById(characterId)!, fee: actualFee, message };
 }
 
 export function grantEquipmentToCharacter(
@@ -1788,16 +1823,26 @@ export function buyShopItem(characterId: number, itemId: string, quantity: numbe
   const tpl = ITEMS[itemId];
   if (!tpl) throw new Error('商品不存在');
   const qty = Math.max(1, Math.min(99, Math.floor(quantity)));
-  const cost = tpl.priceSilver * qty;
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
-  if (ch.silver < cost) throw new Error('银两不足');
 
-  db.prepare('UPDATE characters SET silver = silver - ?, updated_at = ? WHERE id = ?').run(
-    cost,
-    Date.now(),
-    characterId,
-  );
+  if (tpl.priceGold && tpl.priceGold > 0) {
+    const goldCost = tpl.priceGold * qty;
+    if (ch.gold < goldCost) throw new Error(`金砖不足，需要 ${goldCost} 金砖`);
+    db.prepare('UPDATE characters SET gold = gold - ?, updated_at = ? WHERE id = ?').run(
+      goldCost,
+      Date.now(),
+      characterId,
+    );
+  } else {
+    const cost = tpl.priceSilver * qty;
+    if (ch.silver < cost) throw new Error(`银两不足，需要 ${cost} 银两`);
+    db.prepare('UPDATE characters SET silver = silver - ?, updated_at = ? WHERE id = ?').run(
+      cost,
+      Date.now(),
+      characterId,
+    );
+  }
   addItem(characterId, itemId, qty);
   return getCharacterById(characterId)!;
 }
@@ -2385,7 +2430,7 @@ export function gmGrant(
     applyExpAndSilver(characterId, opts.exp, 0);
   }
   if (opts.fullHeal) {
-    restAtInn(characterId);
+    restAtInn(characterId, true);
   }
   if (opts.grantGeneralId && GENERAL_TEMPLATES[opts.grantGeneralId]) {
     grantGeneralToCharacter(characterId, opts.grantGeneralId, ch.level);
@@ -3322,7 +3367,7 @@ export function bankTransfer(
     }
     if (action === 'gold_to_silver') {
       if (ch.gold < amount) throw new Error('随身金砖不足');
-      const silverGain = amount * 100;
+      const silverGain = amount * 500;
       db.prepare(
         'UPDATE characters SET gold = gold - ?, silver = silver + ?, updated_at = ? WHERE id = ?',
       ).run(amount, silverGain, now, characterId);
@@ -3331,7 +3376,7 @@ export function bankTransfer(
         message: `兑换成功！${amount} 金砖 → ${silverGain} 银两`,
       };
     }
-    const silverCost = amount * 105;
+    const silverCost = amount * 550;
     if (ch.silver < silverCost) throw new Error(`银两不足，兑换 ${amount} 金砖需 ${silverCost} 银两`);
     db.prepare(
       'UPDATE characters SET silver = silver - ?, gold = gold + ?, updated_at = ? WHERE id = ?',

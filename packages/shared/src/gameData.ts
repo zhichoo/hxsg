@@ -311,6 +311,7 @@ export interface ItemTemplate {
   reviveHpPct?: number;
   loyaltyRestore?: number;
   priceSilver: number;
+  priceGold?: number;
 }
 
 export const ITEMS: Record<string, ItemTemplate> = {
@@ -367,21 +368,23 @@ export const ITEMS: Record<string, ItemTemplate> = {
     name: '玄铁矿',
     desc: '铁匠铺打造随机高属性装备必备矿石，战斗、挖宝或杂货可获。',
     type: 'material',
-    priceSilver: 320,
+    priceSilver: 400,
   },
   jinglianshi: {
     itemId: 'jinglianshi',
     name: '精炼石',
-    desc: '铁匠铺重铸装备品质与随机属性波动的核心灵石。',
+    desc: '铁匠铺重铸装备品质与随机属性波动的核心灵石（金砖专供或首领掉落）。',
     type: 'material',
-    priceSilver: 480,
+    priceSilver: 0,
+    priceGold: 15,
   },
   jiangling: {
     itemId: 'jiangling',
     name: '招贤令',
     desc: '在招贤馆消耗 1 枚寻访名将，有机会直接抽到关羽、赵云、貂蝉、吕布！',
     type: 'material',
-    priceSilver: 500,
+    priceSilver: 0,
+    priceGold: 25,
   },
   jingyandan: {
     itemId: 'jingyandan',
@@ -395,56 +398,63 @@ export const ITEMS: Record<string, ItemTemplate> = {
     name: '洗髓丹',
     desc: '在副将营帐重洗副将的成长率与初值，有机会洗出极品/神品！',
     type: 'material',
-    priceSilver: 420,
+    priceSilver: 0,
+    priceGold: 20,
   },
   baotu: {
     itemId: 'baotu',
     name: '藏宝图',
-    desc: '古旧羊皮图卷，在行囊点击「挖宝」可寻得神兵、名马或银两。',
+    desc: '古旧羊皮图卷，在行囊点击「挖宝」可寻得神兵、名马、金砖或银两。',
     type: 'material',
-    priceSilver: 260,
+    priceSilver: 300,
   },
   book_lianji: {
     itemId: 'book_lianji',
     name: '《连环突刺》秘籍',
     desc: '副将技能书：在副将营帐给副将研习，习得武士连击【连环突刺】。',
     type: 'material',
-    priceSilver: 900,
+    priceSilver: 0,
+    priceGold: 45,
   },
   book_psdh: {
     itemId: 'book_psdh',
     name: '《排山倒海》秘籍',
     desc: '副将技能书：在副将营帐给副将研习，习得群攻绝技【排山倒海】。',
     type: 'material',
-    priceSilver: 1200,
+    priceSilver: 0,
+    priceGold: 60,
   },
   book_hunluan: {
     itemId: 'book_hunluan',
     name: '《离间计》兵书',
     desc: '副将技能书：在副将营帐给副将研习，习得群体混乱【离间计】。',
     type: 'material',
-    priceSilver: 1100,
+    priceSilver: 0,
+    priceGold: 55,
   },
   book_fengyin: {
     itemId: 'book_fengyin',
     name: '《定身计》兵书',
     desc: '副将技能书：在副将营帐给副将研习，习得强控封印【定身计】。',
     type: 'material',
-    priceSilver: 1100,
+    priceSilver: 0,
+    priceGold: 55,
   },
   book_wlhd: {
     itemId: 'book_wlhd',
     name: '《五雷轰顶》道书',
     desc: '副将技能书：在副将营帐给副将研习，习得爆发雷法【五雷轰顶】。',
     type: 'material',
-    priceSilver: 1100,
+    priceSilver: 0,
+    priceGold: 55,
   },
   book_huigong: {
     itemId: 'book_huigong',
     name: '《妙手回春》医书',
     desc: '副将技能书：副将在战斗中见主将或友军残血时自动施展【妙手回春】疗伤！',
     type: 'material',
-    priceSilver: 1000,
+    priceSilver: 0,
+    priceGold: 45,
   },
 };
 
@@ -630,19 +640,19 @@ export const CRAFT_RECIPES: CraftRecipeDef[] = [
     id: 'craft_lv35',
     name: '打造 35级 五虎神威',
     levelReq: 30,
-    silverCost: 9500,
+    silverCost: 11000,
     oreCost: 3,
     pool: ['zhangba_mao', 'zhuge_yushan', 'wuhou_jin', 'xuanwu_jia', 'lingbo_lv'],
-    desc: '消耗 3 枚玄铁矿 + 9500 银两，锻造带随机词条的 35 级五虎套装部件。',
+    desc: '消耗 3 枚玄铁矿 + 11000 银两，锻造带随机词条的 35 级五虎套装部件。',
   },
   {
     id: 'craft_lv50',
     name: '打造 50级 卧龙神兵',
     levelReq: 45,
-    silverCost: 24000,
+    silverCost: 28000,
     oreCost: 5,
     pool: ['fangtian_ji', 'taiji_fajian', 'tianlong_guan', 'qilin_baojia', 'tengyun_xue'],
-    desc: '消耗 5 枚玄铁矿 + 24000 银两，锻造顶级 50 级卧龙传世神兵部件！',
+    desc: '消耗 5 枚玄铁矿 + 28000 银两，锻造顶级 50 级卧龙传世神兵部件！',
   },
 ];
 
@@ -1790,6 +1800,21 @@ export const ENEMY_GROUPS: Record<string, EnemyGroupDef> = {
       { name: '青城方士', level: 32, roleClass: 'yiren', spriteKey: 'n3', hp: 2080, mp: 260, atk: 246, spd: 82 },
     ],
   },
+  yizhou_manbing: {
+    id: 'yizhou_manbing',
+    name: '南中藤甲精兵',
+    mapId: 'yizhou',
+    minLevel: 33,
+    silverReward: 1420,
+    expReward: 3250,
+    capturableTemplateId: 'huangzhong',
+    enemies: [
+      { name: '藤甲刀盾手', level: 34, roleClass: 'wushi', spriteKey: 'n1', hp: 2850, mp: 120, atk: 274, spd: 82 },
+      { name: '南蛮毒箭手', level: 34, roleClass: 'wenren', spriteKey: 'n2', hp: 2420, mp: 250, atk: 262, spd: 90 },
+      { name: '白耳精锐卫', level: 35, roleClass: 'wushi', spriteKey: 'n1', hp: 3120, mp: 140, atk: 290, spd: 86 },
+      { name: '巫祝术士', level: 35, roleClass: 'yiren', spriteKey: 'n3n', hp: 2560, mp: 290, atk: 278, spd: 88 },
+    ],
+  },
   boss_zhangren: {
     id: 'boss_zhangren',
     name: '落凤坡·张任大阵',
@@ -2687,6 +2712,12 @@ export const MAPS: Record<string, MapNode> = {
         name: '西川栈道劲旅',
         action: 'battle',
         enemyGroupId: 'yizhou_chuanjun',
+      },
+      {
+        id: 'npc_yizhou_manbing',
+        name: '南中藤甲精兵',
+        action: 'battle',
+        enemyGroupId: 'yizhou_manbing',
       },
       {
         id: 'npc_boss_zhangren',

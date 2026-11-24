@@ -1465,7 +1465,10 @@ export function SubPanels({
           {/* PHARMACY SHOP */}
           {panel === 'shop' && (
             <div className="space-y-2">
-              <div className="text-xs text-[#ffe27a]">当前银两：{character.silver} 两</div>
+              <div className="text-xs text-[#ffe27a] flex items-center justify-between">
+                <span>银两：{character.silver} 两</span>
+                <span className="text-[#ffd24d]">金砖：{character.gold} 金</span>
+              </div>
               {Object.values(ITEMS)
                 .filter((it) => !GENERAL_SKILL_BOOKS[it.itemId])
                 .map((it) => (
@@ -1476,7 +1479,11 @@ export function SubPanels({
                   <div>
                     <div className="font-bold text-[#ffe678]">
                       {it.name}{' '}
-                      <span className="text-[#a4e8ff] text-xs">{it.priceSilver} 银/个</span>
+                      {it.priceGold ? (
+                        <span className="text-[#ffd24d] text-xs">{it.priceGold} 金/个</span>
+                      ) : (
+                        <span className="text-[#a4e8ff] text-xs">{it.priceSilver} 银/个</span>
+                      )}
                     </div>
                     <div className="text-[11px] text-[#e0c7e8]">{it.desc}</div>
                   </div>
@@ -1526,7 +1533,7 @@ export function SubPanels({
               {tavernTab === 'books' ? (
                 <div className="space-y-2">
                   <div className="text-xs text-[#ffe27a] flex items-center justify-between">
-                    <span>当前银两：{character.silver} 两</span>
+                    <span className="text-[#ffd24d]">当前金砖：{character.gold} 金</span>
                     <span className="text-[#d7bddf]">购后在「副将营帐」点击习技</span>
                   </div>
                   {Object.values(ITEMS)
@@ -1539,7 +1546,11 @@ export function SubPanels({
                         <div>
                           <div className="font-bold text-[#ffe678] text-xs">
                             {it.name}{' '}
-                            <span className="text-[#a4e8ff]">{it.priceSilver} 银/本</span>
+                            {it.priceGold ? (
+                              <span className="text-[#ffd24d]">{it.priceGold} 金/本</span>
+                            ) : (
+                              <span className="text-[#a4e8ff]">{it.priceSilver} 银/本</span>
+                            )}
                           </div>
                           <div className="text-[11px] text-[#e0c7e8]">{it.desc}</div>
                         </div>
@@ -1896,7 +1907,7 @@ export function SubPanels({
                             许昌经典跑环 · 第 {paohuan.ring} / 10 环
                           </div>
                           <div className="text-[10.5px] text-[#e7cfbb]">
-                            环数越高经验银两越丰厚 · 累计大满贯 {paohuan.completedRounds} 轮
+                            环数越高经验银两越丰厚 · 累计大满贯 {paohuan.completedRounds} 轮 · 今日金砖 {paohuan.dailyGoldRoundsUsed ?? 0}/{paohuan.dailyGoldRoundsMax ?? 3} 轮
                           </div>
                         </div>
                         <span
@@ -3366,7 +3377,7 @@ export function SubPanels({
                 <div className="p-2.5 bg-[#2a082f] border border-[#b88b3d] space-y-2">
                   <div className="font-bold text-[#ffe678]">金银兑汇（实时汇率）</div>
                   <div className="text-[11px] text-[#e7cfbb]">
-                    · 1 金砖 → 100 银两（免手续费） · 105 银两 → 1 金砖
+                    · 1 金砖 → 500 银两（免手续费） · 550 银两 → 1 金砖
                   </div>
                   <div className="grid grid-cols-2 gap-1.5">
                     <button
@@ -3375,7 +3386,7 @@ export function SubPanels({
                       onClick={() => void doBank('gold_to_silver', 10)}
                       className="hx-btn-gold py-1.5 text-[11px]"
                     >
-                      10 金砖 → 1000 银
+                      10 金砖 → 5000 银
                     </button>
                     <button
                       type="button"
@@ -3383,7 +3394,7 @@ export function SubPanels({
                       onClick={() => void doBank('silver_to_gold', 10)}
                       className="hx-btn-gold py-1.5 text-[11px]"
                     >
-                      1050 银 → 10 金砖
+                      5500 银 → 10 金砖
                     </button>
                     <button
                       type="button"
@@ -3391,7 +3402,7 @@ export function SubPanels({
                       onClick={() => void doBank('gold_to_silver', 50)}
                       className="hx-btn-gold py-1.5 text-[11px]"
                     >
-                      50 金砖 → 5000 银
+                      50 金砖 → 25000 银
                     </button>
                     <button
                       type="button"
@@ -3399,7 +3410,7 @@ export function SubPanels({
                       onClick={() => void doBank('silver_to_gold', 50)}
                       className="hx-btn-gold py-1.5 text-[11px]"
                     >
-                      5250 银 → 50 金砖
+                      27500 银 → 50 金砖
                     </button>
                   </div>
                 </div>

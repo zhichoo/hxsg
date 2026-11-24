@@ -190,7 +190,7 @@ export const api = {
       },
     ),
   restInn: (realmId: string) =>
-    callEndpoint<{ character: CharacterView }>('facilityInn', '/api/facility/inn', {
+    callEndpoint<{ character: CharacterView; message?: string }>('facilityInn', '/api/facility/inn', {
       method: 'POST',
       body: { realmId },
     }),

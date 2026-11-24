@@ -310,6 +310,8 @@ const newCols: Array<[string, string]> = [
   ['escort_origin_map_id', 'TEXT DEFAULT NULL'],
   ['escort_target_map_id', 'TEXT DEFAULT NULL'],
   ['world_boss_date', 'TEXT DEFAULT NULL'],
+  ['paohuan_gold_date', 'TEXT DEFAULT NULL'],
+  ['paohuan_gold_rounds', 'INTEGER NOT NULL DEFAULT 0'],
   ['rebirth', 'INTEGER NOT NULL DEFAULT 0'],
 ];
 

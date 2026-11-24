@@ -210,7 +210,7 @@ export default function App() {
     try {
       const res = await api.restInn(realmId);
       setCharacter(res.character);
-      notify('在客栈美美歇息了一番，主角与副将气血精力已全部回满！');
+      notify(res.message || '在客栈美美歇息了一番，主角与副将气血精力已全部回满！');
     } catch (err) {
       notify(err instanceof Error ? err.message : '休息失败');
     }
