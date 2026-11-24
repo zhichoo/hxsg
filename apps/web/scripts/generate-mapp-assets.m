@@ -734,35 +734,118 @@ static void gen_ui(void) {
     CGImageRelease(im); CGContextRelease(c);
 }
 
+// Helper: find tight foreground bbox of a uniform-background AI sheet cell, then frame it cleanly
+static CGImageRef tight_crop_cell(CGImageRef sheet, CGRect cellRect, RGBA *outBg) {
+    CGImageRef cell = CGImageCreateWithImageInRect(sheet, cellRect);
+    if (!cell) return NULL;
+    int cw = (int)CGImageGetWidth(cell), ch = (int)CGImageGetHeight(cell);
+    uint8_t *buf = (uint8_t *)calloc((size_t)cw * (size_t)ch * 4, 1);
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(buf, cw, ch, 8, cw * 4, cs, kCGImageAlphaPremultipliedLast);
+    CGContextDrawImage(ctx, CGRectMake(0, 0, cw, ch), cell);
+    CGContextRelease(ctx); CGColorSpaceRelease(cs);
+
+    // Sample 4 corners to get robust uniform background color
+    int corners[4][2] = {{2,2}, {cw-3,2}, {2,ch-3}, {cw-3,ch-3}};
+    int sr = 0, sg = 0, sb = 0;
+    for (int k = 0; k < 4; k++) {
+        int idx = (corners[k][1] * cw + corners[k][0]) * 4;
+        sr += buf[idx]; sg += buf[idx+1]; sb += buf[idx+2];
+    }
+    uint8_t bgR = (uint8_t)(sr / 4), bgG = (uint8_t)(sg / 4), bgB = (uint8_t)(sb / 4);
+    if (outBg) { outBg->r = bgR; outBg->g = bgG; outBg->b = bgB; outBg->a = 255; }
+
+    int minX = cw, minY = ch, maxX = -1, maxY = -1;
+    for (int y = 2; y < ch - 2; y++) {
+        for (int x = 2; x < cw - 2; x++) {
+            int idx = (y * cw + x) * 4;
+            int dr = abs((int)buf[idx] - (int)bgR);
+            int dg = abs((int)buf[idx+1] - (int)bgG);
+            int db = abs((int)buf[idx+2] - (int)bgB);
+            if (dr + dg + db > 28) {
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x > maxX) maxX = x;
+                if (y > maxY) maxY = y;
+            }
+        }
+    }
+    free(buf);
+    if (maxX <= minX || maxY <= minY) return cell;
+
+    int pad = 6;
+    minX = minX > pad ? minX - pad : 0;
+    minY = minY > pad ? minY - pad : 0;
+    maxX = (maxX + pad < cw) ? maxX + pad : cw - 1;
+    maxY = (maxY + pad < ch) ? maxY + pad : ch - 1;
+
+    CGImageRef tight = CGImageCreateWithImageInRect(cell, CGRectMake(minX, minY, maxX - minX + 1, maxY - minY + 1));
+    CGImageRelease(cell);
+    return tight;
+}
+
+static void save_framed_ai_cell(CGImageRef sheet, int cols, int rows, int cellIdx, int outW, int outH, int pad, RGBA borderCol, CGFloat borderW, NSString *outRel) {
+    double cellW = CGImageGetWidth(sheet) / (double)cols;
+    double cellH = CGImageGetHeight(sheet) / (double)rows;
+    int col = cellIdx % cols, row = cellIdx / cols;
+    CGRect cellRect = CGRectMake(round(col * cellW), round(row * cellH), round(cellW), round(cellH));
+
+    RGBA bg = rgb(0x180c12);
+    CGImageRef tight = tight_crop_cell(sheet, cellRect, &bg);
+    if (!tight) return;
+
+    CGContextRef c = create_ctx(outW, outH);
+    CGColorRef bgCG = cg_color(bg);
+    CGContextSetFillColorWithColor(c, bgCG);
+    CGContextFillRect(c, CGRectMake(0, 0, outW, outH));
+    CGColorRelease(bgCG);
+
+    double tw = CGImageGetWidth(tight), th = CGImageGetHeight(tight);
+    double scale = fmin((double)(outW - pad * 2) / tw, (double)(outH - pad * 2) / th);
+    double dw = round(tw * scale), dh = round(th * scale);
+    double dx = round((outW - dw) / 2.0), dy = round((outH - dh) / 2.0);
+    CGContextSetInterpolationQuality(c, kCGInterpolationHigh);
+    CGContextDrawImage(c, CGRectMake(dx, dy, dw, dh), tight);
+    CGImageRelease(tight);
+
+    // Subtle inner highlight + ornate gold border
+    CGColorRef bcg = cg_color(borderCol);
+    CGContextSetStrokeColorWithColor(c, bcg);
+    CGContextSetLineWidth(c, borderW);
+    CGContextStrokeRect(c, CGRectMake(borderW / 2.0, borderW / 2.0, outW - borderW, outH - borderW));
+    CGColorRelease(bcg);
+
+    if (borderW >= 3.0) {
+        CGColorRef icg = cg_color(rgba_hex(0xffffff, 38));
+        CGContextSetStrokeColorWithColor(c, icg);
+        CGContextSetLineWidth(c, 1.0);
+        CGContextStrokeRect(c, CGRectMake(borderW + 1.5, borderW + 1.5, outW - (borderW + 1.5) * 2, outH - (borderW + 1.5) * 2));
+        CGColorRelease(icg);
+    }
+
+    CGImageRef out = CGBitmapContextCreateImage(c);
+    save_cgimage(out, [gOutRoot stringByAppendingPathComponent:outRel]);
+    CGImageRelease(out); CGContextRelease(c);
+}
+
 // =========================================================================
 // 5. MAP MINI-THUMBS (site_m1..10, 12..16)
 // =========================================================================
 static void gen_map_thumbs(void) {
     int ids[15] = {1,2,3,4,5,6,7,8,9,10,12,13,14,15,16};
-    NSArray *cc0Maps = @[
-        @"ss_m_3.png",@"ss_m_11.png",@"ss_m_7.png",@"ss_m_4.png",@"ss_m_1.png",
-        @"ss_m_6.png",@"ss_m_12.png",@"ss_m_8.png",@"ss_m_9.png",@"ss_m_10.png",
-        @"ss_m_2.png",@"ss_m_5.png",@"ss_m_7.png",@"ss_m_8.png",@"ss_m_12.png"
-    ];
+    int facIdx[15] = {2, 10, 6, 3, 0, 5, 11, 7, 8, 9, 1, 4, 6, 7, 11};
+    CGImageRef facSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"facilities-sheet.png"]);
     for (int i=0;i<15;i++) {
-        CGImageRef tile = load_cgimage([gCc0Dir stringByAppendingPathComponent:cc0Maps[i]]);
-        CGContextRef c = create_ctx(23, 20);
-        draw_gradient(c, CGRectMake(0,0,23,20), rgb(0x24313d), rgb(0x19232c), rgb(0x10171f), false);
-        if (tile) {
-            CGContextSetInterpolationQuality(c, kCGInterpolationHigh);
-            CGContextDrawImage(c, CGRectMake(2, 1, 19, 18), tile);
-            CGImageRelease(tile);
+        NSString *outRel = [NSString stringWithFormat:@"site_m%d.png", ids[i]];
+        if (facSheet) {
+            save_framed_ai_cell(facSheet, 4, 3, facIdx[i], 23, 20, 2, rgb(0xb8903c), 1.0, outRel);
         }
-        CGColorRef bd = cg_color(rgb(0xb8903c)); CGContextSetStrokeColorWithColor(c, bd); CGContextSetLineWidth(c, 1);
-        CGContextStrokeRect(c, CGRectMake(0.5,0.5,22,19)); CGColorRelease(bd);
-        CGImageRef out = CGBitmapContextCreateImage(c);
-        save_cgimage(out, [gOutRoot stringByAppendingPathComponent:[NSString stringWithFormat:@"site_m%d.png", ids[i]]]);
-        CGImageRelease(out); CGContextRelease(c);
     }
+    if (facSheet) CGImageRelease(facSheet);
 }
 
 // =========================================================================
-// 6. CC0 DCSS ARTIST PIXEL ART: 15 EQUIPMENT + 12 FACILITIES + 8 WARHORSES
+// 6. CC0 DCSS EQUIPMENT + CODEX AI 12 FACILITIES & 8 WARHORSES
 // =========================================================================
 static void composite_cc0_card(NSString *cc0File, int cw, int ch, RGBA bgTop, RGBA bgBot, RGBA border, RGBA glowC, bool hasGlow, int pad, NSString *outRel) {
     CGImageRef tile = load_cgimage([gCc0Dir stringByAppendingPathComponent:cc0File]);
@@ -811,14 +894,36 @@ static void gen_cc0_equipment_and_facilities(void) {
         NSString *fn = [NSString stringWithFormat:@"sg4b_item%d.png", i];
         composite_cc0_card(fn, 207, 167, rgb(0x3a1442), rgb(0x17061c), rgb(eqBorder[i-1]), rgb(eqBorder[i-1]), eqGlow[i-1], 18, fn);
     }
-    for (int i=1;i<=12;i++) {
-        NSString *fn = [NSString stringWithFormat:@"ss_m_%d.png", i];
-        composite_cc0_card(fn, 104, 90, rgb(0x283645), rgb(0x111821), rgb(0xc99c42), rgb(0xffe07d), i==8 || i==10, 8, fn);
+
+    // 12 Chinese Three Kingdoms city facilities from Codex AI sprite sheet (4x3)
+    CGImageRef facSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"facilities-sheet.png"]);
+    if (facSheet) {
+        for (int i = 0; i < 12; i++) {
+            NSString *fn = [NSString stringWithFormat:@"ss_m_%d.png", i + 1];
+            RGBA bCol = (i == 7 || i == 9) ? rgb(0xf5cc58) : rgb(0xc99c42);
+            save_framed_ai_cell(facSheet, 4, 3, i, 104, 90, 6, bCol, 3.0, fn);
+        }
+        CGImageRelease(facSheet);
+    } else {
+        for (int i=1;i<=12;i++) {
+            NSString *fn = [NSString stringWithFormat:@"ss_m_%d.png", i];
+            composite_cc0_card(fn, 104, 90, rgb(0x283645), rgb(0x111821), rgb(0xc99c42), rgb(0xffe07d), i==8 || i==10, 8, fn);
+        }
     }
 }
 
-// 8 Legendary Warhorses recolored from CC0 OpenGameArt hand-pixelled horse (52x39) + ornate saddle & aura
+// 8 Legendary Warhorses from Codex AI sprite sheet (4x2), fallback to CC0 horse
 static void gen_cc0_mounts(void) {
+    CGImageRef mountSheet = load_cgimage([gRawDir stringByAppendingPathComponent:@"mounts-sheet.png"]);
+    if (mountSheet) {
+        uint32_t mBorder[8] = {0xf5cc58, 0xc99c42, 0xb8c4d4, 0x8ea6cc, 0x61c8ff, 0xffd23f, 0x45e8ff, 0xff9e3d};
+        for (int i = 0; i < 8; i++) {
+            NSString *fn = [NSString stringWithFormat:@"h_%d.png", i + 1];
+            save_framed_ai_cell(mountSheet, 4, 2, i, 207, 203, 12, rgb(mBorder[i]), 5.0, fn);
+        }
+        CGImageRelease(mountSheet);
+        return;
+    }
     CGImageRef baseImg = load_cgimage([gCc0Dir stringByAppendingPathComponent:@"horse_horse-0.png"]);
     if (!baseImg) return;
     int bw = (int)CGImageGetWidth(baseImg), bh = (int)CGImageGetHeight(baseImg);
