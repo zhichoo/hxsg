@@ -239,38 +239,50 @@ export function MainCity({
             </div>
           </div>
 
-          {/* 3 General Slots using real sc_fjbg.png */}
+          {/* 3 General Slots using real sc_fjbg.png (441x117) with exact pixel-measured octagon bounds */}
           <button
             type="button"
             onClick={() => onOpenPanel('generals')}
-            className="relative w-full aspect-[441/117] group"
+            className="relative w-full aspect-[441/117] group block"
             title="点击管理出战副将"
           >
             <AssetImg
               path="sc_fjbg.png"
               alt="副将槽位"
-              className="w-full h-full object-contain pixelated"
+              className="w-full h-full object-fill pixelated block"
             />
-            <div className="absolute inset-0 grid grid-cols-3 px-[8.5%] py-[10%] gap-1.5 items-center">
-              {activeGenerals.map((g, idx) => (
+            {([
+              { left: '12.5%', top: '19.5%' },
+              { left: '42.0%', top: '19.5%' },
+              { left: '71.2%', top: '19.5%' },
+            ] as const).map((pos, idx) => {
+              const g = activeGenerals[idx];
+              if (!g) return null;
+              return (
                 <div
                   key={idx}
-                  className="w-full h-full flex items-center justify-center overflow-hidden"
+                  style={{
+                    left: pos.left,
+                    top: pos.top,
+                    width: '15.8%',
+                    height: '60%',
+                    clipPath:
+                      'polygon(24% 0%, 76% 0%, 100% 24%, 100% 76%, 76% 100%, 24% 100%, 0% 76%, 0% 24%)',
+                  }}
+                  className="absolute bg-[#140d09] overflow-hidden"
                 >
-                  {g && (
-                    <AssetImg
-                      path={
-                        g.avatarKey.startsWith('f')
-                          ? g.avatarKey
-                          : `portraits/${g.avatarKey}`
-                      }
-                      alt={g.name}
-                      className="w-[82%] aspect-square rounded-full object-cover pixelated border border-[#e6be56] shadow-[0_1px_2px_#000]"
-                    />
-                  )}
+                  <AssetImg
+                    path={
+                      g.avatarKey.startsWith('f')
+                        ? g.avatarKey
+                        : `portraits/${g.avatarKey}`
+                    }
+                    alt={g.name}
+                    className="w-full h-full object-cover object-top pixelated"
+                  />
                 </div>
-              ))}
-            </div>
+              );
+            })}
           </button>
 
           {/* Black Gold-Bordered Character Stats Box (matches classic_3.jpg) */}
