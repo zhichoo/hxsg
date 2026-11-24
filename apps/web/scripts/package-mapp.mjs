@@ -7,7 +7,7 @@ import { pack } from '@discourse-mini-app/sdk/pack';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(__dirname, '..');
 const webDistDir = path.join(webRoot, 'dist-mapp/web');
-const publicAssetsDir = path.join(webRoot, 'public/assets/hxsg');
+const publicAssetsDir = path.join(webRoot, 'mapp/assets');
 const outputDirectory = path.join(webRoot, 'dist-mapp/package');
 
 const apiBaseRaw = (process.env.MAPP_API_BASE_URL || 'https://api.example.com').replace(/\/+$/, '');
