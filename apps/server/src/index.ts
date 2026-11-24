@@ -178,7 +178,7 @@ app.get('/api/health', async () => ({
 
 app.get('/api/realms', async (req) => {
   await verifyOptionalAuth(req);
-  return REALMS.map((r) => ({
+  return REALMS.filter((r) => !r.hidden).map((r) => ({
     ...r,
     onlineCount: getOnlineCountByRealm(r.id),
   }));

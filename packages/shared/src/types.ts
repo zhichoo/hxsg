@@ -60,6 +60,8 @@ export interface ServerRealm {
   desc: string;
   bgImg: string;
   onlineBase: number;
+  expMultiplier?: number;
+  hidden?: boolean;
 }
 
 export interface CharacterAllocations {

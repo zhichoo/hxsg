@@ -42,6 +42,12 @@ export function ServerSelect({
       .catch((e: Error) => onNotify(e.message));
   }, [onNotify, platformReady]);
 
+  useEffect(() => {
+    if (realms.length > 0 && !realms.some((r) => r.id === selectedRealm)) {
+      onSelectRealm(realms[0].id);
+    }
+  }, [realms, selectedRealm, onSelectRealm]);
+
   const activeRealmObj = realms.find((r) => r.id === selectedRealm) ?? realms[0];
   const canEnter = isMapp ? Boolean(mappUser) : Boolean(account);
 

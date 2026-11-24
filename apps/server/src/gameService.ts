@@ -692,6 +692,7 @@ export function createCharacter(params: {
 }): CharacterView {
   const realm = REALMS.find((r) => r.id === params.realmId);
   if (!realm) throw new Error('无效的服务器分区');
+  if (realm.hidden) throw new Error('该服务器分区暂未开放');
 
   const name = params.name.trim();
   if (name.length < 2 || name.length > 10) {
@@ -1015,8 +1016,8 @@ export function claimMainQuest(
      WHERE character_id = ? AND quest_id = ?`,
   ).run(def.requiredCount, Date.now(), characterId, def.questId);
 
-  const rewardParts: string[] = [`经验+${def.rewards.exp}`, `银两+${def.rewards.silver}`];
-  applyExpAndSilver(characterId, def.rewards.exp, def.rewards.silver);
+  const expRes = applyExpAndSilver(characterId, def.rewards.exp, def.rewards.silver);
+  const rewardParts: string[] = [`经验+${expRes.appliedExp}`, `银两+${def.rewards.silver}`];
 
   if (def.rewards.gold && def.rewards.gold > 0) {
     db.prepare('UPDATE characters SET gold = gold + ?, updated_at = ? WHERE id = ?').run(
@@ -1158,9 +1159,8 @@ export function claimPaohuan(characterId: number): { character: CharacterView; m
 
   const ring = ph.ring;
   const reward = calcPaohuanReward(ch.level, ring);
-  const parts: string[] = [`经验+${reward.exp}`, `银两+${reward.silver}`];
-
-  applyExpAndSilver(characterId, reward.exp, reward.silver);
+  const expRes = applyExpAndSilver(characterId, reward.exp, reward.silver);
+  const parts: string[] = [`经验+${expRes.appliedExp}`, `银两+${reward.silver}`];
 
   if (ring === 5) {
     const bonusItem = Math.random() < 0.5 ? 'jingyandan' : 'baotu';
@@ -2246,12 +2246,15 @@ export function applyExpAndSilver(
   silverGain: number,
   hpAfter?: number,
   mpAfter?: number,
-): { character: CharacterView; leveledUp: boolean; newLevel: number } {
+): { character: CharacterView; leveledUp: boolean; newLevel: number; appliedExp: number } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
 
+  const realmMult = REALMS.find((r) => r.id === ch.realmId)?.expMultiplier ?? 1;
+  const appliedExp = expGain > 0 ? Math.round(expGain * realmMult) : 0;
+
   let level = ch.level;
-  let exp = ch.exp + expGain;
+  let exp = ch.exp + appliedExp;
   let levelsGained = 0;
 
   while (exp >= expRequiredForLevel(level) && level < 140) {
@@ -2295,7 +2298,7 @@ export function applyExpAndSilver(
   const activeGenerals = ch.generals.filter((g) => g.slot !== null);
   for (const g of activeGenerals) {
     let gLv = g.level;
-    let gExp = g.exp + Math.round(expGain * 0.85);
+    let gExp = g.exp + Math.round(appliedExp * 0.85);
     while (gExp >= expRequiredForLevel(gLv) && gLv < level + 3) {
       gExp -= expRequiredForLevel(gLv);
       gLv++;
@@ -2314,6 +2317,7 @@ export function applyExpAndSilver(
     character: getCharacterById(characterId)!,
     leveledUp,
     newLevel: level,
+    appliedExp,
   };
 }
 
@@ -2514,14 +2518,13 @@ export function sweepTowerDaily(characterId: number): {
   const f = ch.tower.highestFloor;
   const exp = Math.round(f * 150 + (f > 20 ? (f - 20) * (f - 20) * 32 : 0));
   const silver = Math.round(f * 180 + (f > 20 ? (f - 20) * 140 : 0));
-  const parts: string[] = [`经验+${exp}`, `银两+${silver}`];
-
   db.prepare('UPDATE characters SET tower_sweep_date = ?, updated_at = ? WHERE id = ?').run(
     getTodayDateStr(),
     Date.now(),
     characterId,
   );
-  applyExpAndSilver(characterId, exp, silver);
+  const expRes = applyExpAndSilver(characterId, exp, silver);
+  const parts: string[] = [`经验+${expRes.appliedExp}`, `银两+${silver}`];
 
   if (f >= 5) {
     const pillQty = f >= 35 ? 3 : f >= 20 ? 2 : 1;
@@ -2861,7 +2864,7 @@ export function tickAllCasinoRounds(
   now = Date.now(),
 ): Array<{ realmId: string; message: string }> {
   const out: Array<{ realmId: string; message: string }> = [];
-  for (const realm of REALMS) {
+  for (const realm of REALMS.filter((r) => !r.hidden)) {
     for (const game of ['dice', 'chibi'] as const) {
       const res = syncCasinoGame(realm.id, game, now);
       for (const message of res.announcements) {
@@ -4091,11 +4094,11 @@ export function answerKejuQuestion(
      WHERE id = ?`,
   ).run(today, nextAnswered, nextCorrect, Date.now(), characterId);
 
-  applyExpAndSilver(characterId, expGain, silverGain);
+  const expRes = applyExpAndSilver(characterId, expGain, silverGain);
 
   const parts: string[] = [
     isCorrect ? `回答正确！` : `回答有误（正确答案：${q.options[q.answerIndex]}）。`,
-    `经验+${expGain}、银两+${silverGain}`,
+    `经验+${expRes.appliedExp}、银两+${silverGain}`,
   ];
 
   const finished = nextAnswered >= KEJU_DAILY_TOTAL;
@@ -4215,13 +4218,13 @@ export function claimDailyEscort(characterId: number): {
      WHERE id = ?`,
   ).run(rew.gold, Date.now(), characterId);
 
-  applyExpAndSilver(characterId, rew.exp, rew.silver);
+  const expRes = applyExpAndSilver(characterId, rew.exp, rew.silver);
   addItem(characterId, 'baotu', 2);
   addItem(characterId, 'jingyandan', 2);
 
   return {
     character: getCharacterById(characterId)!,
-    message: `🚚 顺利护送重镖抵达【${targetName}】！获赏 经验+${rew.exp}、银两+${rew.silver}、金砖+${rew.gold}、藏宝图×2、副将经验丹×2！`,
+    message: `🚚 顺利护送重镖抵达【${targetName}】！获赏 经验+${expRes.appliedExp}、银两+${rew.silver}、金砖+${rew.gold}、藏宝图×2、副将经验丹×2！`,
   };
 }
 
@@ -4251,11 +4254,11 @@ export function recordWorldBossVictory(
      WHERE id = ?`,
   ).run(today, bonusGold, Date.now(), characterId);
 
-  applyExpAndSilver(characterId, bonusExp, bonusSilver);
+  const expRes = applyExpAndSilver(characterId, bonusExp, bonusSilver);
   addItem(characterId, 'xisuidan', 1);
 
   const parts: string[] = [
-    `经验+${bonusExp}`,
+    `经验+${expRes.appliedExp}`,
     `银两+${bonusSilver}`,
     `金砖+${bonusGold}`,
     '洗髓丹×1',

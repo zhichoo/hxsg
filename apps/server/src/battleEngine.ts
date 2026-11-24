@@ -1592,7 +1592,7 @@ export function performBattleAction(
       );
       updatedChar = res.character;
       battle.rewards = {
-        exp: arenaRes.exp,
+        exp: res.appliedExp,
         silver: arenaRes.silver,
         leveledUp: res.leveledUp,
         newLevel: res.newLevel,
@@ -1706,7 +1706,7 @@ export function performBattleAction(
       const res = applyExpAndSilver(characterId, exp, silver, mainUnit.hp, mainUnit.mp);
       updatedChar = res.character;
       battle.rewards = {
-        exp,
+        exp: res.appliedExp,
         silver,
         leveledUp: res.leveledUp,
         newLevel: res.newLevel,

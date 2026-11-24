@@ -11,18 +11,19 @@ export const REALMS: ServerRealm[] = [
   {
     id: 'dingjunshan',
     name: '定军山',
-    tag: '推荐',
-    desc: '经典怀旧一区 · 1:1 复古三国世界',
+    tag: '双倍经验',
+    desc: '经典怀旧一区 · 双倍经验 · 1:1 复古三国世界',
     bgImg: 'f_bg2_5.png',
     onlineBase: 1,
+    expMultiplier: 2,
   },
   {
     id: 'nanyangguan',
-    name: '南阳关(新)',
-    tag: '双倍经验',
+    name: '南阳关',
     desc: '经典二区 · 适合新朋友快速起号',
     bgImg: 'f_bg5_5.png',
     onlineBase: 0,
+    hidden: true,
   },
   {
     id: 'gongan',
@@ -30,6 +31,7 @@ export const REALMS: ServerRealm[] = [
     desc: '荆州重镇 · 怀旧经典互通',
     bgImg: 'f_bg6_5.png',
     onlineBase: 0,
+    hidden: true,
   },
   {
     id: 'pingyang',
@@ -37,6 +39,7 @@ export const REALMS: ServerRealm[] = [
     desc: '河东故地 · 怀旧老区',
     bgImg: 'f_bg7_5.png',
     onlineBase: 0,
+    hidden: true,
   },
   {
     id: 'wushengguan',
@@ -44,6 +47,7 @@ export const REALMS: ServerRealm[] = [
     desc: '中原雄关 · 怀旧老区',
     bgImg: 'f_bg8_5.png',
     onlineBase: 0,
+    hidden: true,
   },
 ];
 
