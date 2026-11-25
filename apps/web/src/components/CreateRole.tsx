@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { ROLE_CLASS_META, type CharacterView, type Gender, type RoleClass } from '@hxsg/shared';
 import { api } from '../api';
+import type { PlatformUser } from '../platform/host';
 import { AssetBg, AssetImg } from './AssetImg';
 import { PixelSprite } from './PixelSprite';
 
 interface CreateRoleProps {
   realmId: string;
+  isMapp?: boolean;
+  mappUser?: PlatformUser | null;
   onCreated: (ch: CharacterView) => void;
   onBack: () => void;
   onNotify: (msg: string) => void;
@@ -13,7 +16,14 @@ interface CreateRoleProps {
 
 const CLASSES: RoleClass[] = ['wushi', 'wenren', 'yiren'];
 
-export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleProps) {
+export function CreateRole({
+  realmId,
+  isMapp = false,
+  mappUser = null,
+  onCreated,
+  onBack,
+  onNotify,
+}: CreateRoleProps) {
   const [name, setName] = useState('');
   const [roleClass, setRoleClass] = useState<RoleClass>('wushi');
   const [gender, setGender] = useState<Gender>('male');
@@ -23,9 +33,19 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
   const spriteKey = gender === 'female' ? meta.femaleSprite : meta.maleSprite;
   const portraitKey = gender === 'female' ? meta.femalePortrait : meta.portrait;
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (name.trim().length < 2) {
+  const communityName = Array.from(
+    (mappUser?.name?.trim() || mappUser?.username?.trim() || '')
+      .replace(/[\u0000-\u001f\u007f]/g, '')
+      .replace(/\s+/g, ' '),
+  )
+    .slice(0, 20)
+    .join('')
+    .trim();
+
+  const submit = async () => {
+    if (busy) return;
+    const finalName = isMapp ? communityName : name.trim();
+    if (!isMapp && finalName.length < 2) {
       onNotify('角色名至少 2 个字');
       return;
     }
@@ -33,7 +53,7 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
     try {
       const { character } = await api.createCharacter({
         realmId,
-        name: name.trim(),
+        name: finalName,
         roleClass,
         gender,
       });
@@ -51,15 +71,12 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
         path="tit_bg.png"
         className="h-[40px] border-b border-[#5b6a6c] shrink-0"
       >
-        <span className="text-[17px] font-bold tracking-widest hx-stroke">创建角色</span>
+        <span className="text-[17px] font-bold tracking-widest text-white hx-stroke">创建角色</span>
       </AssetBg>
 
       <div className="flex-1 flex overflow-hidden">
         <div className="w-[14px] hx-cloud-pillar shrink-0 border-r border-black" />
-        <form
-          onSubmit={submit}
-          className="flex-1 hx-purple-bg p-3 flex flex-col justify-between overflow-y-auto hx-scroll"
-        >
+        <div className="flex-1 hx-purple-bg p-3 flex flex-col justify-between overflow-y-auto hx-scroll">
           <div className="space-y-3">
             {/* Class selector */}
             <div>
@@ -133,29 +150,67 @@ export function CreateRole({ realmId, onCreated, onBack, onNotify }: CreateRoleP
               </div>
             </div>
 
-            {/* Name input */}
-            <div>
-              <div className="text-xs text-[#ffda73] font-bold mb-1">主公名号（2~10字）：</div>
-              <input
-                type="text"
-                maxLength={10}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="例如：常山赵子龙、青龙一号..."
-                className="w-full px-3 py-2 bg-[#120416] border-2 border-[#b68934] text-sm text-white placeholder-[#8e6f99] focus:outline-none focus:border-[#ffe678]"
-              />
-            </div>
+            {/* Name display (Community nickname in MAPP mode vs editable input in Standalone Web) */}
+            {isMapp ? (
+              <div className="p-2.5 bg-[#120416]/90 border border-[#b68934] flex items-center gap-2.5">
+                {mappUser?.avatarUrl ? (
+                  <img
+                    src={mappUser.avatarUrl}
+                    alt={communityName || '社区账号'}
+                    className="w-9 h-9 rounded-full border border-[#e6be53] object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full border border-[#e6be53] bg-[#2a1036] flex items-center justify-center font-bold text-[#ffe97d] text-xs shrink-0">
+                    {mappUser?.initials || '侠'}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] text-[#ffda73] font-bold">主公名号（同步社区昵称）</div>
+                  <div className="text-sm font-bold text-white truncate">
+                    {communityName || '社区少侠'}
+                    {mappUser?.username && mappUser.username !== communityName && (
+                      <span className="ml-1.5 text-[11px] font-normal text-[#c5a8d1]">
+                        @{mappUser.username}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-xs text-[#ffda73] font-bold mb-1">主公名号（2~10字）：</div>
+                <input
+                  type="text"
+                  maxLength={10}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void submit();
+                    }
+                  }}
+                  placeholder="例如：常山赵子龙、青龙一号..."
+                  className="w-full px-3 py-2 bg-[#120416] border-2 border-[#b68934] text-sm text-white placeholder-[#8e6f99] focus:outline-none focus:border-[#ffe678]"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between pt-3">
             <button type="button" onClick={onBack} className="hx-btn-gold px-4 py-1.5 text-sm">
               返回选区
             </button>
-            <button type="submit" disabled={busy} className="hx-btn-gold px-6 py-1.5 text-sm">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void submit()}
+              className="hx-btn-gold px-6 py-1.5 text-sm"
+            >
               {busy ? '创建中...' : '踏入三国'}
             </button>
           </div>
-        </form>
+        </div>
         <div className="w-[14px] hx-cloud-pillar shrink-0 border-l border-black" />
       </div>
     </div>

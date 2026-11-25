@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type {
-  BattleState,
-  CharacterView,
-  ChatChannel,
-  ChatMessage,
-  OnlinePlayerSummary,
+import {
+  MAPS,
+  type BattleState,
+  type CharacterView,
+  type ChatChannel,
+  type ChatMessage,
+  type OnlinePlayerSummary,
 } from '@hxsg/shared';
 import {
   api,
   getSavedRealm,
   getSavedToken,
+  loadSavedBattlePrefs,
   loadSavedRealm,
   setSavedRealm,
   setSavedToken,
@@ -27,6 +29,7 @@ import {
   initPlatform,
   isMappRuntime,
   signalPlatformReady,
+  WsTransportError,
   type PlatformTheme,
   type PlatformUser,
   type RealtimeHandle,
@@ -58,7 +61,7 @@ export default function App() {
   const notify = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2600);
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 1100);
   }, []);
 
   const enterRealm = useCallback(
@@ -103,7 +106,7 @@ export default function App() {
         setMappUser(init.user);
         if (init.theme) setTheme(init.theme);
 
-        const savedRealm = await loadSavedRealm();
+        const [savedRealm] = await Promise.all([loadSavedRealm(), loadSavedBattlePrefs()]);
         if (!cancelled) setRealmId(savedRealm);
 
         if (init.isMapp) {
@@ -218,7 +221,21 @@ export default function App() {
 
   const handleStartBattle = async (enemyGroupId: string) => {
     try {
-      const res = await api.startBattle(realmId, enemyGroupId);
+      let res: { battle: BattleState };
+      const rt = realtimeRef.current;
+      if (rt?.isConnected()) {
+        try {
+          res = await rt.request<{ battle: BattleState }>('battle:start', { enemyGroupId });
+        } catch (err) {
+          if (err instanceof WsTransportError) {
+            res = await api.startBattle(realmId, enemyGroupId);
+          } else {
+            throw err;
+          }
+        }
+      } else {
+        res = await api.startBattle(realmId, enemyGroupId);
+      }
       setBattle(res.battle);
       setSubPanel(null);
     } catch (err) {
@@ -239,7 +256,24 @@ export default function App() {
       itemId?: string;
     }>;
   }) => {
-    const res = await api.battleAction({ realmId, ...cmd });
+    let res: { battle: BattleState; character: CharacterView };
+    const rt = realtimeRef.current;
+    if (rt?.isConnected()) {
+      try {
+        res = await rt.request<{ battle: BattleState; character: CharacterView }>(
+          'battle:action',
+          cmd as unknown as Record<string, unknown>,
+        );
+      } catch (err) {
+        if (err instanceof WsTransportError) {
+          res = await api.battleAction({ realmId, ...cmd });
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      res = await api.battleAction({ realmId, ...cmd });
+    }
     setBattle(res.battle);
     setCharacter(res.character);
   };
@@ -267,10 +301,12 @@ export default function App() {
       {screen === 'create' && (
         <CreateRole
           realmId={realmId}
+          isMapp={isMapp}
+          mappUser={mappUser}
           onCreated={(ch) => {
             setCharacter(ch);
             setScreen('play');
-            notify(`欢迎【${ch.name}】来到许昌！`);
+            notify(`欢迎【${ch.name}】来到${MAPS[ch.mapId]?.name ?? '新手村'}！`);
           }}
           onBack={() => setScreen('server')}
           onNotify={notify}

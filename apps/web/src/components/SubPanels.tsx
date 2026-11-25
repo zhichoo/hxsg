@@ -3,10 +3,13 @@ import {
   CRAFT_RECIPES,
   EQUIPMENT_SLOT_LABELS,
   EQUIPMENT_TEMPLATES,
+  findMapPath,
+  formatMapRoute,
   GENERAL_SKILL_BOOKS,
   GENERAL_TEMPLATES,
   getTowerFloorMeta,
   ITEMS,
+  MAPS,
   ROLE_CLASS_META,
   type BattleState,
   type CasinoStateView,
@@ -44,8 +47,7 @@ export type SubPanelType =
   | 'shop'
   | 'blacksmith'
   | 'tavern'
-  | 'notice'
-  | 'gm';
+  | 'notice';
 
 const QUALITY_COLOR: Record<EquipmentQuality, string> = {
   common: 'text-white',
@@ -121,7 +123,6 @@ const TITLES: Record<SubPanelType, string> = {
   blacksmith: '铁匠铺与马市',
   tavern: '许昌招贤馆',
   notice: '游戏公告',
-  gm: 'GM 管理面板',
 };
 
 export function SubPanels({
@@ -179,8 +180,6 @@ export function SubPanels({
   const [digResult, setDigResult] = useState<TreasureDigResult | null>(null);
   const [rankSort, setRankSort] = useState<'level' | 'silver' | 'gold'>('level');
   const [rankings, setRankings] = useState<RankEntry[]>([]);
-  const [gmCode, setGmCode] = useState('');
-  const [announceText, setAnnounceText] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -336,7 +335,7 @@ export function SubPanels({
         path="tit_bg.png"
         className="h-[38px] border-b border-[#5b6a6c] shrink-0"
       >
-        <span className="text-[17px] font-bold tracking-widest hx-stroke">{TITLES[panel]}</span>
+        <span className="text-[17px] font-bold tracking-widest text-white hx-stroke">{TITLES[panel]}</span>
       </AssetBg>
 
       {/* Classic Deep-Purple Body with Silver Cloud Pillars (classic_5.jpg) */}
@@ -1725,7 +1724,7 @@ export function SubPanels({
                     {allMainClaimed ? (
                       <div className="p-3 bg-[#1d2e14] border-2 border-[#7dff92] text-center space-y-1">
                         <div className="text-[#ffe46e] font-black text-sm">
-                          🏆 三国主线八章全通 · 威震华夏！
+                          🏆 三国主线 {mainQuests.length} 章全通 · 威震华夏！
                         </div>
                         <div className="text-[#d6ffd9]">
                           少侠已历经黄巾、虎牢、官渡、赤壁诸大战役，可继续刷许昌跑环、培养转生名将！
@@ -1849,11 +1848,27 @@ export function SubPanels({
                                 交付领奖！
                               </button>
                             )}
-                            {currentMain.status === 'active' && (
-                              <div className="text-[11px] text-[#e8cde9]">
-                                请先点主界面「移动」前往【{currentMain.targetMapName}】完成目标
-                              </div>
-                            )}
+                            {currentMain.status === 'active' && (() => {
+                              const route = findMapPath(character.mapId, currentMain.targetMapId);
+                              return (
+                                <div className="text-[11px] text-[#e8cde9] text-right space-y-0.5">
+                                  <div>
+                                    {character.mapId === currentMain.targetMapId
+                                      ? `已抵达【${currentMain.targetMapName}】，返回主界面点「人物」即可完成目标`
+                                      : `请先点主界面「移动」前往【${currentMain.targetMapName}】${
+                                          route.length >= 2
+                                            ? `（路径：${formatMapRoute(route)}）`
+                                            : ''
+                                        }`}
+                                  </div>
+                                  {currentMain.questId === 'main_04' && (
+                                    <div className="text-[10.5px] text-[#ffe099]">
+                                      提示：建议先装备【百炼钢刀】、带齐副将并在客栈回满状态后再战张角
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       )
@@ -1969,14 +1984,26 @@ export function SubPanels({
                               {paohuan.progress} / {paohuan.requiredCount}
                             </span>
                           </div>
-                          {paohuan.targetMapName && (
-                            <div className="text-[11px] text-[#a9d6ff]">
-                              目标地点：【{paohuan.targetMapName}】
-                              {paohuan.taskType === 'visit_map'
-                                ? '（移动到该地图即自动达成）'
-                                : '（击败对应怪物即可计数）'}
-                            </div>
-                          )}
+                          {paohuan.targetMapName && (() => {
+                            const pRoute = paohuan.targetMapId
+                              ? findMapPath(character.mapId, paohuan.targetMapId)
+                              : [];
+                            return (
+                              <div className="text-[11px] text-[#a9d6ff] space-y-0.5">
+                                <div>
+                                  目标地点：【{paohuan.targetMapName}】
+                                  {paohuan.taskType === 'visit_map'
+                                    ? '（移动到该地图即自动达成）'
+                                    : '（击败对应怪物即可计数）'}
+                                </div>
+                                {paohuan.status === 'active' && pRoute.length >= 2 && (
+                                  <div className="text-[10.5px] text-[#d8e6ff]">
+                                    路径：{formatMapRoute(pRoute)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <div className="h-2 bg-black/60 border border-[#6e5028] overflow-hidden">
                             <div
                               className="h-full bg-gradient-to-r from-[#238a34] to-[#78ff8b]"
@@ -2256,7 +2283,21 @@ export function SubPanels({
                         【{character.daily.worldBoss.title}】{character.daily.worldBoss.bossName}
                       </div>
                       <div className="text-[11px] text-[#9ee0ff]">
-                        本整点现身：{character.daily.worldBoss.mapName} · 约 {character.daily.worldBoss.nextRefreshMinutes} 分钟后换阵
+                        本整点现身：{character.daily.worldBoss.mapName}
+                        {MAPS[character.daily.worldBoss.mapId]?.region
+                          ? `（${MAPS[character.daily.worldBoss.mapId].region}）`
+                          : ''}
+                        {' · '}约 {character.daily.worldBoss.nextRefreshMinutes} 分钟后换阵
+                      </div>
+                      <div className="text-[10.5px] text-[#cbe9ff] mt-0.5">
+                        可直接点下方按钮在历练台迎战，也可循路前往现场
+                        {(() => {
+                          const wbRoute = findMapPath(
+                            character.mapId,
+                            character.daily.worldBoss.mapId,
+                          );
+                          return wbRoute.length >= 2 ? `（路线：${formatMapRoute(wbRoute)}）` : '';
+                        })()}
                       </div>
                     </div>
                     <span
@@ -2997,41 +3038,50 @@ export function SubPanels({
           })()}
 
           {/* FRIENDS PANEL (4.7 江湖好友) */}
-          {panel === 'friends' && (
+          {panel === 'friends' && (() => {
+            const handleAddFriend = async () => {
+              if (busy || !friendNameInput.trim()) return;
+              setBusy(true);
+              try {
+                const res = await api.addFriend(realmId, {
+                  targetName: friendNameInput.trim(),
+                });
+                setFriends(res.friends);
+                onUpdateCharacter(res.character);
+                setFriendNameInput('');
+                onNotify(res.message);
+              } catch (err) {
+                onNotify(err instanceof Error ? err.message : '添加好友失败');
+              } finally {
+                setBusy(false);
+              }
+            };
+            return (
             <div className="space-y-2.5 text-xs">
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!friendNameInput.trim()) return;
-                  setBusy(true);
-                  try {
-                    const res = await api.addFriend(realmId, {
-                      targetName: friendNameInput.trim(),
-                    });
-                    setFriends(res.friends);
-                    onUpdateCharacter(res.character);
-                    setFriendNameInput('');
-                    onNotify(res.message);
-                  } catch (err) {
-                    onNotify(err instanceof Error ? err.message : '添加好友失败');
-                  } finally {
-                    setBusy(false);
-                  }
-                }}
-                className="flex gap-1.5"
-              >
+              <div className="flex gap-1.5">
                 <input
                   type="text"
-                  maxLength={12}
+                  maxLength={20}
                   value={friendNameInput}
                   onChange={(e) => setFriendNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      void handleAddFriend();
+                    }
+                  }}
                   placeholder="输入玩家名号加为好友..."
                   className="flex-1 px-2 py-1.5 bg-[#120416] border border-[#9e7430] text-white"
                 />
-                <button type="submit" disabled={busy} className="hx-btn-gold px-3 py-1">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleAddFriend()}
+                  className="hx-btn-gold px-3 py-1"
+                >
                   加好友
                 </button>
-              </form>
+              </div>
 
               <div className="space-y-1.5">
                 {friends.length === 0 ? (
@@ -3107,7 +3157,8 @@ export function SubPanels({
                 )}
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* PLAYER INSPECT PANEL (4.7 查看侠士资料/装备/副将/加好友/私聊/切磋) */}
           {panel === 'inspect' && (
@@ -3270,7 +3321,9 @@ export function SubPanels({
 
           {/* BANK (许昌钱庄：存取与金银兑换) */}
           {panel === 'bank' && (() => {
-            const amt = Math.max(1, Math.floor(Number(bankAmount) || 0));
+            const rawBankAmt = Number(bankAmount);
+            const amt =
+              bankAmount.trim() && Number.isFinite(rawBankAmt) ? Math.floor(rawBankAmt) : 0;
             const doBank = async (
               action:
                 | 'deposit_silver'
@@ -3282,6 +3335,10 @@ export function SubPanels({
               amount: number,
             ) => {
               if (busy) return;
+              if (!Number.isFinite(amount) || amount < 1) {
+                onNotify('请输入大于 0 的数额');
+                return;
+              }
               setBusy(true);
               try {
                 const res = await api.bankTransfer({ realmId, action, amount });
@@ -3433,10 +3490,16 @@ export function SubPanels({
                 : listings;
             const unequippedGear = character.equipment.filter((e) => !e.equipped);
             const benchedGenerals = character.generals.filter((g) => g.slot === null);
-            const parsedPrice = Math.max(1, Math.floor(Number(sellPrice) || 0));
+            const rawSellPrice = Number(sellPrice);
+            const parsedPrice =
+              sellPrice.trim() && Number.isFinite(rawSellPrice) ? Math.floor(rawSellPrice) : 0;
 
             const handleSell = async (kind: MarketListingKind, refId: string | number) => {
               if (busy) return;
+              if (parsedPrice < 1) {
+                onNotify('请输入大于 0 的上架价格');
+                return;
+              }
               setBusy(true);
               try {
                 const res = await api.createMarketListing({
@@ -3839,7 +3902,9 @@ export function SubPanels({
                               来自：{m.senderName}
                             </span>
                           </div>
-                          <div className="text-[#f5e7fa] leading-relaxed">{m.body}</div>
+                          <div className="text-[#f5e7fa] leading-relaxed whitespace-pre-wrap break-all">
+                            {m.body}
+                          </div>
                           {(m.attachSilver > 0 || m.attachGold > 0) && (
                             <div className="text-[11px] text-[#9be8ff] font-bold">
                               附件：
@@ -4023,156 +4088,6 @@ export function SubPanels({
             </div>
           )}
 
-          {/* GM PANEL */}
-          {panel === 'gm' && (
-            <div className="space-y-2.5 text-xs">
-              <div className="p-2 bg-[#2a082f] border border-[#d9aa42] text-[#ffea88]">
-                {character.isGm
-                  ? '当前账号为【服主GM】，可直接免口令操作。'
-                  : '需输入服务器 GM 管理口令方可使用。'}
-              </div>
-              {!character.isGm && (
-                <input
-                  type="password"
-                  value={gmCode}
-                  onChange={(e) => setGmCode(e.target.value)}
-                  placeholder="输入 GM 管理口令"
-                  className="w-full px-2.5 py-1.5 bg-[#120416] border border-[#9e7430] text-white"
-                />
-              )}
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => api.gmGrant({ realmId, passcode: gmCode, silver: 10000 }),
-                      'GM 发放 10,000 银两成功',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  +10,000 银两
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => api.gmGrant({ realmId, passcode: gmCode, gold: 500 }),
-                      'GM 发放 500 金砖成功',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  +500 金砖
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => api.gmGrant({ realmId, passcode: gmCode, exp: 500 }),
-                      'GM 发放 500 经验成功',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  +500 经验
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () => api.gmGrant({ realmId, passcode: gmCode, fullHeal: true }),
-                      '已一键满血满蓝',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  一键满血满蓝
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () =>
-                        api.gmGrant({
-                          realmId,
-                          passcode: gmCode,
-                          grantBaotu: 5,
-                        }),
-                      'GM 发放 5 张【藏宝图】成功！',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  +5 藏宝图
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () =>
-                        api.gmGrant({
-                          realmId,
-                          passcode: gmCode,
-                          grantEquipId: 'chitu_ma',
-                        }),
-                      '已直接领取【赤兔宝马】（请到物品穿戴）！',
-                    )
-                  }
-                  className="hx-btn-gold py-1.5"
-                >
-                  领取【赤兔宝马】
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    run(
-                      () =>
-                        api.gmGrant({
-                          realmId,
-                          passcode: gmCode,
-                          grantGeneralId: 'zhaoyun',
-                        }),
-                      '已直接领取神将【赵云】！',
-                    )
-                  }
-                  className="col-span-2 hx-btn-red py-1.5"
-                >
-                  一键领取神将【赵云】
-                </button>
-              </div>
-              <div className="pt-2 border-t border-white/15 flex gap-1.5">
-                <input
-                  type="text"
-                  value={announceText}
-                  onChange={(e) => setAnnounceText(e.target.value)}
-                  placeholder="发送全服系统公告..."
-                  className="flex-1 px-2 py-1 bg-[#120416] border border-[#9e7430] text-white"
-                />
-                <button
-                  type="button"
-                  disabled={busy || !announceText.trim()}
-                  onClick={async () => {
-                    await run(
-                      () => api.gmGrant({ realmId, passcode: gmCode, announce: announceText }),
-                      '系统公告已广播',
-                    );
-                    setAnnounceText('');
-                  }}
-                  className="hx-btn-gold px-3 py-1"
-                >
-                  广播
-                </button>
-              </div>
-            </div>
-          )}
         </div>
         <div className="w-[14px] hx-cloud-pillar shrink-0 border-l border-black" />
       </div>

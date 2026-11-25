@@ -705,15 +705,13 @@ export function createCharacter(params: {
   name: string;
   roleClass: RoleClass;
   gender: Gender;
+  isPlatformAuth?: boolean;
+  fallbackUsername?: string;
 }): CharacterView {
   const realm = REALMS.find((r) => r.id === params.realmId);
   if (!realm) throw new Error('无效的服务器分区');
   if (realm.hidden) throw new Error('该服务器分区暂未开放');
 
-  const name = params.name.trim();
-  if (name.length < 2 || name.length > 10) {
-    throw new Error('角色名需为 2~10 个字');
-  }
   if (!ROLE_CLASS_META[params.roleClass]) {
     throw new Error('无效的职业');
   }
@@ -722,10 +720,40 @@ export function createCharacter(params: {
     .get(params.accountId, params.realmId);
   if (existing) throw new Error('你在该区已有角色');
 
-  const nameTaken = db
-    .prepare('SELECT id FROM characters WHERE realm_id = ? AND name = ?')
-    .get(params.realmId, name);
-  if (nameTaken) throw new Error('该角色名已被占用');
+  const sanitizeName = (raw: string) =>
+    raw.replace(/[\u0000-\u001f\u007f]/g, '').replace(/\s+/g, ' ').trim();
+
+  let name = sanitizeName(params.name);
+  if (params.isPlatformAuth) {
+    const base = Array.from(
+      name || sanitizeName(params.fallbackUsername ?? '') || `少侠${params.accountId}`,
+    )
+      .slice(0, 20)
+      .join('')
+      .trim();
+    const rootName = base || `少侠${params.accountId}`;
+    let candidate = rootName;
+    let suffix = 2;
+    while (
+      db
+        .prepare('SELECT id FROM characters WHERE realm_id = ? AND name = ?')
+        .get(params.realmId, candidate)
+    ) {
+      const tag = `_${suffix}`;
+      const prefixMax = Math.max(1, 20 - tag.length);
+      candidate = `${Array.from(rootName).slice(0, prefixMax).join('')}${tag}`;
+      suffix += 1;
+    }
+    name = candidate;
+  } else {
+    if (name.length < 2 || name.length > 10) {
+      throw new Error('角色名需为 2~10 个字');
+    }
+    const nameTaken = db
+      .prepare('SELECT id FROM characters WHERE realm_id = ? AND name = ?')
+      .get(params.realmId, name);
+    if (nameTaken) throw new Error('该角色名已被占用');
+  }
 
   const stats = calcRoleStats(params.roleClass, 1);
   const classMeta = ROLE_CLASS_META[params.roleClass];
@@ -772,10 +800,11 @@ export function createCharacter(params: {
   addItem(characterId, 'xisuidan', 1);
 
   // Auto-accept Chapter 1 main quest for new characters
+  const firstMainQuestId = MAIN_QUESTS[0]?.questId ?? 'main_00a';
   db.prepare(
     `INSERT OR IGNORE INTO character_main_quests (character_id, quest_id, status, progress, updated_at)
-     VALUES (?, 'main_01', 'active', 0, ?)`,
-  ).run(characterId, now);
+     VALUES (?, ?, 'active', 0, ?)`,
+  ).run(characterId, firstMainQuestId, now);
 
   return getCharacterById(characterId)!;
 }
@@ -2399,51 +2428,6 @@ export function getRankings(realmId: string, sort: 'level' | 'silver' | 'gold'):
     silver: r.silver,
     gold: r.gold,
   }));
-}
-
-export function gmGrant(
-  characterId: number,
-  opts: {
-    silver?: number;
-    gold?: number;
-    exp?: number;
-    fullHeal?: boolean;
-    grantGeneralId?: string;
-    grantEquipId?: string;
-    grantBaotu?: number;
-  },
-): CharacterView {
-  const ch = getCharacterById(characterId);
-  if (!ch) throw new Error('角色不存在');
-
-  if (opts.silver) {
-    db.prepare('UPDATE characters SET silver = MAX(0, silver + ?) WHERE id = ?').run(
-      opts.silver,
-      characterId,
-    );
-  }
-  if (opts.gold) {
-    db.prepare('UPDATE characters SET gold = MAX(0, gold + ?) WHERE id = ?').run(
-      opts.gold,
-      characterId,
-    );
-  }
-  if (opts.exp && opts.exp > 0) {
-    applyExpAndSilver(characterId, opts.exp, 0);
-  }
-  if (opts.fullHeal) {
-    restAtInn(characterId, true);
-  }
-  if (opts.grantGeneralId && GENERAL_TEMPLATES[opts.grantGeneralId]) {
-    grantGeneralToCharacter(characterId, opts.grantGeneralId, ch.level);
-  }
-  if (opts.grantEquipId && EQUIPMENT_TEMPLATES[opts.grantEquipId]) {
-    grantEquipmentToCharacter(characterId, opts.grantEquipId, true);
-  }
-  if (opts.grantBaotu && opts.grantBaotu > 0) {
-    addItem(characterId, 'baotu', Math.min(20, opts.grantBaotu));
-  }
-  return getCharacterById(characterId)!;
 }
 
 export function recordTowerClear(characterId: number, floor: number): string | null {

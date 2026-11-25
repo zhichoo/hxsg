@@ -51,8 +51,8 @@ export function ServerSelect({
   const activeRealmObj = realms.find((r) => r.id === selectedRealm) ?? realms[0];
   const canEnter = isMapp ? Boolean(mappUser) : Boolean(account);
 
-  const handleAuthSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAuthSubmit = async () => {
+    if (busy) return;
     if (!username.trim() || !password.trim()) {
       onNotify('请输入账号与密码');
       return;
@@ -161,11 +161,6 @@ export function ServerSelect({
                           TL{mappUser.trustLevel}
                         </span>
                       )}
-                      {account?.isGm && (
-                        <span className="px-1 py-0.5 bg-[#8a1414] border border-[#f5c84c] text-[10px] text-[#ffe97d] shrink-0">
-                          服主GM
-                        </span>
-                      )}
                     </div>
                     <div className="text-[11px] text-[#a9c2ff] truncate">
                       已通过社区账号免密授权，选区直接进入
@@ -183,11 +178,6 @@ export function ServerSelect({
               <div>
                 <span className="text-[#9cb6f5]">当前账号：</span>
                 <span className="text-[#ffe97d] font-bold">{account.username}</span>
-                {account.isGm && (
-                  <span className="ml-1.5 px-1 py-0.5 bg-[#8a1414] border border-[#f5c84c] text-[10px] text-[#ffe97d]">
-                    服主GM
-                  </span>
-                )}
               </div>
               <button
                 type="button"
@@ -198,7 +188,7 @@ export function ServerSelect({
               </button>
             </div>
           ) : (
-            <form onSubmit={handleAuthSubmit} className="space-y-2">
+            <div className="space-y-2">
               <div className="flex gap-1 text-xs">
                 <button
                   type="button"
@@ -227,6 +217,12 @@ export function ServerSelect({
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void handleAuthSubmit();
+                  }
+                }}
                 placeholder="输入账号（3~20位）"
                 className="w-full px-2.5 py-1.5 bg-[#030821] border border-[#516eb3] text-sm text-white placeholder-[#6980ba] focus:outline-none focus:border-[#ffd85c]"
               />
@@ -234,6 +230,12 @@ export function ServerSelect({
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    void handleAuthSubmit();
+                  }
+                }}
                 placeholder="输入密码（4位以上）"
                 className="w-full px-2.5 py-1.5 bg-[#030821] border border-[#516eb3] text-sm text-white placeholder-[#6980ba] focus:outline-none focus:border-[#ffd85c]"
               />
@@ -242,14 +244,15 @@ export function ServerSelect({
                   {mode === 'register' ? '注册后选区创建角色即可开玩' : '没有账号可点上方「快速注册」'}
                 </span>
                 <button
-                  type="submit"
+                  type="button"
                   disabled={busy}
+                  onClick={() => void handleAuthSubmit()}
                   className="hx-btn-gold px-4 py-1 text-xs shrink-0"
                 >
                   {busy ? '请稍候...' : mode === 'register' ? '注册并进入' : '登录并进入'}
                 </button>
               </div>
-            </form>
+            </div>
           )}
         </div>
       </div>

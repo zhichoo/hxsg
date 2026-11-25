@@ -9,6 +9,7 @@ import {
   type ChatChannel,
   type ChatMessage,
 } from '@hxsg/shared';
+import { getSavedBattlePrefs, loadSavedBattlePrefs, setSavedBattlePrefs } from '../api';
 import { getCachedAssetImage, loadAssetImage } from '../platform/host';
 import { AssetBg, AssetImg } from './AssetImg';
 import { ChatDock } from './ChatDock';
@@ -297,9 +298,14 @@ export function BattleStage({
   const [selectedTargetUid, setSelectedTargetUid] = useState<string | undefined>(undefined);
   const [subMenu, setSubMenu] = useState<'none' | 'skill' | 'item'>('none');
   const [pendingItemId, setPendingItemId] = useState<string | null>(null);
-  const [autoBattle, setAutoBattle] = useState(false);
-  const [autoGenerals, setAutoGenerals] = useState(false);
-  const [battleSpeed, setBattleSpeed] = useState<1 | 2>(1);
+  const [autoBattle, setAutoBattle] = useState<boolean>(() => getSavedBattlePrefs().autoBattle);
+  const [autoGenerals, setAutoGenerals] = useState<boolean>(() => getSavedBattlePrefs().autoGenerals);
+  const [battleSpeed, setBattleSpeed] = useState<1 | 2>(() => getSavedBattlePrefs().battleSpeed);
+  const touchedPrefsRef = useRef({
+    battleSpeed: false,
+    autoBattle: false,
+    autoGenerals: false,
+  });
   const [stepIdx, setStepIdx] = useState(0);
   const [queuedHeroCmd, setQueuedHeroCmd] = useState<HeroCommandInput | null>(null);
   const [queuedGeneralCmds, setQueuedGeneralCmds] = useState<GeneralCommandInput[]>([]);
@@ -310,8 +316,36 @@ export function BattleStage({
   const [busy, setBusy] = useState(false);
   const [countdown, setCountdown] = useState(30);
   const [isReplaying, setIsReplaying] = useState(false);
-  const battleSpeedRef = useRef<1 | 2>(1);
+  const battleSpeedRef = useRef<1 | 2>(battleSpeed);
   battleSpeedRef.current = battleSpeed;
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadSavedBattlePrefs().then((prefs) => {
+      if (cancelled) return;
+      if (!touchedPrefsRef.current.battleSpeed) setBattleSpeed(prefs.battleSpeed);
+      if (!touchedPrefsRef.current.autoBattle) setAutoBattle(prefs.autoBattle);
+      if (!touchedPrefsRef.current.autoGenerals) setAutoGenerals(prefs.autoGenerals);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const updateBattleSpeed = useCallback((next: 1 | 2) => {
+    touchedPrefsRef.current.battleSpeed = true;
+    setBattleSpeed(next);
+    setSavedBattlePrefs({ battleSpeed: next });
+  }, []);
+
+  const toggleAutoBattle = useCallback(() => {
+    touchedPrefsRef.current.autoBattle = true;
+    setAutoBattle((prev) => {
+      const next = !prev;
+      setSavedBattlePrefs({ autoBattle: next });
+      return next;
+    });
+  }, []);
 
   const fxRef = useRef<ActiveFx[]>([]);
   const floatsRef = useRef<FloatingNum[]>([]);
@@ -635,7 +669,7 @@ export function BattleStage({
           : ms(380);
     });
 
-    const totalMs = Math.min(6000, cursor + ms(280));
+    const totalMs = Math.min(6000, cursor + ms(120));
     setIsReplaying(true);
     const timer = window.setTimeout(() => setIsReplaying(false), totalMs);
     return () => window.clearTimeout(timer);
@@ -790,8 +824,10 @@ export function BattleStage({
   }, [stepIdx, controllableUnits]);
 
   const toggleAutoGenerals = useCallback(() => {
+    touchedPrefsRef.current.autoGenerals = true;
     setAutoGenerals((prev) => {
       const next = !prev;
+      setSavedBattlePrefs({ autoGenerals: next });
       if (next && queuedHeroCmd && battle.status === 'ongoing' && !busy) {
         void submitRound(queuedHeroCmd, queuedGeneralCmds);
       }
@@ -813,7 +849,7 @@ export function BattleStage({
           ? { ...lastRoundCmd.hero, targetUid: selectedTargetUid }
           : ({ action: 'attack', targetUid: selectedTargetUid } as HeroCommandInput);
       void submitRound(heroCmd, []);
-    }, battleSpeed === 2 ? 320 : 520);
+    }, battleSpeed === 2 ? 120 : 240);
     return () => clearTimeout(t);
   }, [autoBattle, battle.status, battle.round, busy, isReplaying, battleSpeed, submitRound, selectedTargetUid, lastRoundCmd]);
 
@@ -1657,7 +1693,7 @@ export function BattleStage({
               <div className="pointer-events-auto inline-flex border border-[#d6aa49] bg-[#1a0921]/85 shadow overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setBattleSpeed(1)}
+                  onClick={() => updateBattleSpeed(1)}
                   className={`px-2.5 py-0.5 text-[11px] font-bold transition ${
                     battleSpeed === 1
                       ? 'bg-[#b8730b] text-[#fff8cc]'
@@ -1669,7 +1705,7 @@ export function BattleStage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setBattleSpeed(2)}
+                  onClick={() => updateBattleSpeed(2)}
                   className={`px-2.5 py-0.5 text-[11px] font-bold border-l border-[#7a5822] transition ${
                     battleSpeed === 2
                       ? 'bg-[#b8730b] text-[#fff8cc]'
@@ -1866,7 +1902,7 @@ export function BattleStage({
             )}
             <button
               type="button"
-              onClick={() => setAutoBattle((v) => !v)}
+              onClick={toggleAutoBattle}
               className={`hx-btn-red px-2 py-0.5 text-[11px] ${
                 autoBattle ? 'ring-2 ring-[#ffe96e]' : ''
               }`}

@@ -20,8 +20,8 @@ export function GameShell({ children, toast, isMapp = false, theme }: GameShellP
     : `min-h-[100dvh] w-full flex items-center justify-center sm:p-3 ${outerBg}`;
 
   const frameLayout = isMapp
-    ? 'relative w-full max-w-[430px] h-[740px] bg-black overflow-hidden flex flex-col border-2 border-[#5e4b25] shadow-[0_0_24px_rgba(0,0,0,0.65)]'
-    : 'relative w-full max-w-[430px] h-[100dvh] sm:h-[min(780px,95dvh)] bg-black overflow-hidden flex flex-col sm:border-2 sm:border-[#5e4b25] sm:shadow-[0_0_32px_rgba(0,0,0,0.95)]';
+    ? 'relative w-full max-w-[430px] h-[740px] bg-black text-white overflow-hidden flex flex-col border-2 border-[#5e4b25] shadow-[0_0_24px_rgba(0,0,0,0.65)]'
+    : 'relative w-full max-w-[430px] h-[100dvh] sm:h-[min(780px,95dvh)] bg-black text-white overflow-hidden flex flex-col sm:border-2 sm:border-[#5e4b25] sm:shadow-[0_0_32px_rgba(0,0,0,0.95)]';
 
   return (
     <div className={outerLayout}>

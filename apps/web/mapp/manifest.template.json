@@ -2,7 +2,7 @@
   "format": 1,
   "id": "019a2a58-0000-7000-8000-000000000001",
   "name": "幻想三国 · 经典版",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "tags": ["游戏", "三国", "回合制", "rpg"],
   "entry": "index.html",
   "script": "app.js",
@@ -325,11 +325,6 @@
     },
     "dailyWorldBossChallenge": {
       "url": "__API_BASE__/api/daily/world-boss/challenge",
-      "method": "POST",
-      "auth": "platform"
-    },
-    "gmGrant": {
-      "url": "__API_BASE__/api/gm/grant",
       "method": "POST",
       "auth": "platform"
     }

@@ -435,6 +435,20 @@ export function performBattleAction(
   }
 
   const mainUnit = battle.units.find((u) => u.isMainRole)!;
+  if (mainUnit.alive) {
+    if (cmd.action === 'skill') {
+      const skill = cmd.skillId ? SKILLS.find((s) => s.id === cmd.skillId) : undefined;
+      if (!skill || skill.roleClass !== ch.roleClass) {
+        throw new Error('无效的技能或当前职业不可施放');
+      }
+    }
+    if (cmd.action === 'item') {
+      const tpl = cmd.itemId ? ITEMS[cmd.itemId] : undefined;
+      if (!tpl || tpl.type !== 'consumable') {
+        throw new Error('无效的战斗丹药');
+      }
+    }
+  }
   const group = battle.arenaTargetId ? undefined : resolveEnemyGroup(battle.enemyGroupId, ch.level);
 
   const aliveActors = battle.units
@@ -561,21 +575,57 @@ export function performBattleAction(
             const mpAdd = tpl.mpRestore ?? 0;
             const allyTarget =
               alivePlayers.find((p) => p.uid === cmd.targetUid) ?? actor;
+            const beforeHp = allyTarget.hp;
+            const beforeMp = allyTarget.mp;
             allyTarget.hp = Math.min(allyTarget.maxHp, allyTarget.hp + hpAdd);
             allyTarget.mp = Math.min(allyTarget.maxMp, allyTarget.mp + mpAdd);
+            const actualHpAdd = allyTarget.hp - beforeHp;
+            const actualMpAdd = allyTarget.mp - beforeMp;
+            const restoreParts: string[] = [];
+            if (hpAdd > 0) restoreParts.push(`气血 ${actualHpAdd}`);
+            if (mpAdd > 0) restoreParts.push(`精力 ${actualMpAdd}`);
+            const restoreText = restoreParts.join(' / ') || '气血 0';
             logs.push({
               actorUid: actor.uid,
               actorName: actor.name,
               action: 'item',
               effect: 'heal',
-              targets: [{ uid: allyTarget.uid, name: allyTarget.name, damage: 0, heal: hpAdd }],
+              targets: [{ uid: allyTarget.uid, name: allyTarget.name, damage: 0, heal: actualHpAdd }],
               message:
                 allyTarget.uid === actor.uid
-                  ? `${actor.name} 服用【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`
-                  : `${actor.name} 为 ${allyTarget.name} 喂服【${tpl.name}】，恢复气血 ${hpAdd} / 精力 ${mpAdd}！`,
+                  ? `${actor.name} 服用【${tpl.name}】，恢复${restoreText}！`
+                  : `${actor.name} 为 ${allyTarget.name} 喂服【${tpl.name}】，恢复${restoreText}！`,
             });
             continue;
           }
+        } else if (tpl) {
+          // Item ran out (e.g. repeated command in auto-battle): explain fallback clearly
+          const fallbackTarget = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
+          if (hasStatus(actor, 'trap')) {
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'status',
+              effect: 'trap',
+              targets: [],
+              message: `【${tpl.name}】已耗尽，且 ${actor.name} 处于【围困】状态无法普攻！`,
+            });
+            continue;
+          }
+          const { damage, crit } = calcDamage(getEffectiveAtk(actor), fallbackTarget.defending, 1, {
+            resistPct: fallbackTarget.resist?.phys,
+            targetTrapped: hasStatus(fallbackTarget, 'trap'),
+          });
+          const { actualDamage } = applyIncomingDamage(fallbackTarget, damage, loyaltyPenaltyIds);
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'attack',
+            effect: 'slash',
+            targets: [{ uid: fallbackTarget.uid, name: fallbackTarget.name, damage: actualDamage, crit, killed: !fallbackTarget.alive }],
+            message: `【${tpl.name}】已耗尽，${actor.name} 改以普攻攻击 ${fallbackTarget.name}，造成 ${actualDamage} 点伤害！`,
+          });
+          continue;
         }
       }
 
@@ -652,7 +702,9 @@ export function performBattleAction(
             battle.healCooldownUntilRound = battle.round + 3;
             const healMult = getSkillPowerMultiplier(0.36, curProf, ch.alloc.int);
             const healVal = Math.round(actor.maxHp * Math.min(0.55, healMult));
+            const beforeHp = actor.hp;
             actor.hp = Math.min(actor.maxHp, actor.hp + healVal);
+            const actualHeal = actor.hp - beforeHp;
             logs.push({
               actorUid: actor.uid,
               actorName: actor.name,
@@ -661,8 +713,8 @@ export function performBattleAction(
               skillName: skill.name,
               effect: 'heal',
               proficiencyGain: profGain,
-              targets: [{ uid: actor.uid, name: actor.name, damage: 0, heal: healVal }],
-              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${healVal}（调息 3 回合，熟练度 +${profGain}）！`,
+              targets: [{ uid: actor.uid, name: actor.name, damage: 0, heal: actualHeal }],
+              message: `${actor.name} 施展【${skill.name}】，恢复气血 ${actualHeal}（调息 3 回合，熟练度 +${profGain}）！`,
             });
             continue;
           }
@@ -867,6 +919,34 @@ export function performBattleAction(
             proficiencyGain: profGain,
             targets: targetResults,
             message: `${actor.name} 施展【${skill.name}】(${tier}阶)，命中 ${targets.length} 人共造成 ${targetResults.reduce((s, r) => s + r.damage, 0)} 点伤害（熟练度 +${profGain}）！`,
+          });
+          continue;
+        } else if (skill) {
+          // Insufficient MP (e.g. auto-battle repeating previous round skill): explain fallback clearly
+          if (hasStatus(actor, 'trap')) {
+            logs.push({
+              actorUid: actor.uid,
+              actorName: actor.name,
+              action: 'status',
+              effect: 'trap',
+              targets: [],
+              message: `精力不足（【${skill.name}】需 ${skill.mpCost} 精力），且 ${actor.name} 处于【围困】状态无法普攻！`,
+            });
+            continue;
+          }
+          const fallbackTarget = aliveEnemies.find((e) => e.uid === cmd.targetUid) ?? aliveEnemies[0];
+          const { damage, crit } = calcDamage(getEffectiveAtk(actor), fallbackTarget.defending, 1, {
+            resistPct: fallbackTarget.resist?.phys,
+            targetTrapped: hasStatus(fallbackTarget, 'trap'),
+          });
+          const { actualDamage } = applyIncomingDamage(fallbackTarget, damage, loyaltyPenaltyIds);
+          logs.push({
+            actorUid: actor.uid,
+            actorName: actor.name,
+            action: 'attack',
+            effect: 'slash',
+            targets: [{ uid: fallbackTarget.uid, name: fallbackTarget.name, damage: actualDamage, crit, killed: !fallbackTarget.alive }],
+            message: `精力不足（【${skill.name}】需 ${skill.mpCost} 精力），${actor.name} 改以普攻攻击 ${fallbackTarget.name}${crit ? '（暴击！）' : ''}，造成 ${actualDamage} 点伤害！`,
           });
           continue;
         }

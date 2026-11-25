@@ -49,15 +49,14 @@ function loadMappConfig(): MappServerConfig {
   );
 
   let issuerOrigin = '';
-  let enabled = false;
-  if (issuer && audience && appId) {
+  if (issuer) {
     try {
       issuerOrigin = new URL(issuer).origin;
-      enabled = true;
     } catch {
-      enabled = false;
+      issuerOrigin = '';
     }
   }
+  const enabled = Boolean(issuerOrigin && audience && appId);
 
   const jwksUrl = (process.env.HXSG_MAPP_JWKS_URL || '').trim() || (issuer ? `${issuer}/mini-app-api/jwks` : '');
 

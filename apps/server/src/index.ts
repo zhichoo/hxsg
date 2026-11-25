@@ -55,7 +55,6 @@ import {
   getMails,
   getMarketListings,
   getRankings,
-  gmGrant,
   inspectPlayer,
   learnGeneralSkillBook,
   markMailRead,
@@ -98,7 +97,6 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT || 3001);
 const HOST = process.env.HOST || '0.0.0.0';
-const GM_PASSCODE = process.env.HXSG_GM_CODE || 'hxsg888';
 
 const app = Fastify({
   logger: {
@@ -121,6 +119,7 @@ await app.register(cors, {
     : true,
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Authorization', 'Content-Type'],
+  maxAge: 86400,
   credentials: false,
 });
 
@@ -228,6 +227,8 @@ app.post('/api/character', async (req) => {
     name: body.name || '',
     roleClass: body.roleClass || 'wushi',
     gender: body.gender || 'male',
+    isPlatformAuth: auth.authSource === 'platform',
+    fallbackUsername: auth.username,
   });
   broadcastSystemMessage(
     character.realmId,
@@ -849,33 +850,6 @@ app.post('/api/daily/world-boss/challenge', async (req) => {
   const wb = getCurrentWorldBoss();
   const battle = startBattle(current.id, `world_boss:${wb.boss.id}`);
   return { battle };
-});
-
-app.post('/api/gm/grant', async (req) => {
-  const auth = await requireAuth(req);
-  const body = req.body as {
-    realmId?: string;
-    passcode?: string;
-    silver?: number;
-    gold?: number;
-    exp?: number;
-    fullHeal?: boolean;
-    grantGeneralId?: string;
-    grantEquipId?: string;
-    grantBaotu?: number;
-    announce?: string;
-  };
-  if (!auth.isGm && body.passcode !== GM_PASSCODE) {
-    throw new Error('无 GM 权限（需服主账号或输入 GM 口令）');
-  }
-  const realmId = body.realmId || 'dingjunshan';
-  const current = getCharacterByAccountAndRealm(auth.accountId, realmId);
-  if (!current) throw new Error('尚未创建角色');
-  const character = gmGrant(current.id, body);
-  if (body.announce?.trim()) {
-    broadcastSystemMessage(realmId, body.announce.trim(), 'shi');
-  }
-  return { character };
 });
 
 // Serve built web frontend in production

@@ -74,8 +74,7 @@ export function ChatDock({
     }
   }, [filtered.length]);
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const submit = () => {
     const val = text.trim();
     if (!val) return;
     if (channel === 'si') {
@@ -97,7 +96,11 @@ export function ChatDock({
   };
 
   return (
-    <div className="relative flex flex-col border-t border-[#4b5f63] bg-[#2a3335]">
+    <div
+      className={`relative flex flex-col border-t border-[#4b5f63] bg-[#2a3335] ${
+        compact ? 'shrink-0' : 'flex-1 min-h-0'
+      }`}
+    >
       {/* Top tab strip: 快捷键 + 区 派 商 世 私 */}
       <div className="flex items-center justify-between h-[26px] bg-[#1e2628] border-b border-[#46595d]">
         <div className="h-full px-3 flex items-center bg-gradient-to-b from-[#d98424] to-[#9b4c0e] text-[#ffefab] text-[12px] font-bold [clip-path:polygon(0_0,100%_0,88%_100%,0_100%)] pr-5">
@@ -220,19 +223,22 @@ export function ChatDock({
 
       {/* Inline input drawer when 发言 clicked */}
       {inputOpen && (
-        <form
-          onSubmit={submit}
-          className="flex items-center gap-1 p-1.5 bg-[#12191b] border-t border-[#c89c3b]"
-        >
+        <div className="flex items-center gap-1 p-1.5 bg-[#12191b] border-t border-[#c89c3b]">
           <span className="px-1.5 py-0.5 text-[11px] bg-[#304245] text-[#ffe57d] border border-[#6c868a] shrink-0">
             {CHANNELS.find((c) => c.id === channel)?.label}
           </span>
           {channel === 'si' && (
             <input
               type="text"
-              maxLength={12}
+              maxLength={20}
               value={recipient}
               onChange={(e) => setRecipient(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
               placeholder="对方名号"
               className="w-[74px] px-1.5 py-1 bg-black border border-[#a85aa6] text-xs text-[#ffbdf8] focus:outline-none focus:border-[#ff8ef7] shrink-0"
             />
@@ -255,13 +261,23 @@ export function ChatDock({
             maxLength={120}
             value={text}
             onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
             placeholder={channel === 'si' ? '输入私聊内容...' : '输入聊天内容，回车发送...'}
             className="flex-1 min-w-0 px-2 py-1 bg-black border border-[#5c7478] text-xs text-white focus:outline-none focus:border-[#ffd85c]"
           />
-          <button type="submit" className="hx-btn-gold px-2.5 py-1 text-xs shrink-0">
+          <button
+            type="button"
+            onClick={submit}
+            className="hx-btn-gold px-2.5 py-1 text-xs shrink-0"
+          >
             发送
           </button>
-        </form>
+        </div>
       )}
     </div>
   );

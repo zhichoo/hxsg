@@ -22,6 +22,67 @@ import { isMappRuntime, platformHttpRequest, platformStorage } from './platform/
 
 const TOKEN_KEY = 'hxsg_token';
 const REALM_KEY = 'hxsg_realm';
+const BATTLE_PREFS_KEY = 'hxsg_battle_prefs';
+
+export interface BattlePrefs {
+  battleSpeed: 1 | 2;
+  autoBattle: boolean;
+  autoGenerals: boolean;
+}
+
+const DEFAULT_BATTLE_PREFS: BattlePrefs = {
+  battleSpeed: 1,
+  autoBattle: false,
+  autoGenerals: false,
+};
+
+function parseBattlePrefs(raw: string | null): BattlePrefs {
+  if (!raw) return { ...DEFAULT_BATTLE_PREFS };
+  try {
+    const parsed = JSON.parse(raw) as Partial<BattlePrefs> | null;
+    return {
+      battleSpeed: parsed?.battleSpeed === 2 ? 2 : 1,
+      autoBattle: Boolean(parsed?.autoBattle),
+      autoGenerals: Boolean(parsed?.autoGenerals),
+    };
+  } catch {
+    return { ...DEFAULT_BATTLE_PREFS };
+  }
+}
+
+let cachedBattlePrefs: BattlePrefs = (() => {
+  if (isMappRuntime()) return { ...DEFAULT_BATTLE_PREFS };
+  try {
+    return parseBattlePrefs(window.localStorage.getItem(BATTLE_PREFS_KEY));
+  } catch {
+    return { ...DEFAULT_BATTLE_PREFS };
+  }
+})();
+
+export function getSavedBattlePrefs(): BattlePrefs {
+  return { ...cachedBattlePrefs };
+}
+
+export async function loadSavedBattlePrefs(): Promise<BattlePrefs> {
+  const raw = await platformStorage.getItem(BATTLE_PREFS_KEY);
+  if (raw) {
+    cachedBattlePrefs = parseBattlePrefs(raw);
+  }
+  return { ...cachedBattlePrefs };
+}
+
+export function setSavedBattlePrefs(patch: Partial<BattlePrefs>): BattlePrefs {
+  cachedBattlePrefs = {
+    battleSpeed:
+      patch.battleSpeed !== undefined ? (patch.battleSpeed === 2 ? 2 : 1) : cachedBattlePrefs.battleSpeed,
+    autoBattle:
+      patch.autoBattle !== undefined ? Boolean(patch.autoBattle) : cachedBattlePrefs.autoBattle,
+    autoGenerals:
+      patch.autoGenerals !== undefined ? Boolean(patch.autoGenerals) : cachedBattlePrefs.autoGenerals,
+  };
+  void platformStorage.setItem(BATTLE_PREFS_KEY, JSON.stringify(cachedBattlePrefs));
+  return { ...cachedBattlePrefs };
+}
 
 let cachedToken: string | null = (() => {
   if (isMappRuntime()) return null;
@@ -583,20 +644,4 @@ export const api = {
         body: { realmId },
       },
     ),
-  gmGrant: (payload: {
-    realmId: string;
-    passcode?: string;
-    silver?: number;
-    gold?: number;
-    exp?: number;
-    fullHeal?: boolean;
-    grantGeneralId?: string;
-    grantEquipId?: string;
-    grantBaotu?: number;
-    announce?: string;
-  }) =>
-    callEndpoint<{ character: CharacterView }>('gmGrant', '/api/gm/grant', {
-      method: 'POST',
-      body: payload,
-    }),
 };

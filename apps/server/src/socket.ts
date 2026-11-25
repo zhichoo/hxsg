@@ -7,6 +7,12 @@ import {
   type OnlinePlayerSummary,
 } from '@hxsg/shared';
 import { verifyToken, type AuthPayload } from './auth.js';
+import {
+  getActiveBattle,
+  performBattleAction,
+  startBattle,
+  type PlayerBattleCommand,
+} from './battleEngine.js';
 import { db } from './db.js';
 import { getCharacterByAccountAndRealm } from './gameService.js';
 import { resolvePlatformAccount, verifyMappWsUpgrade } from './mappAuth.js';
@@ -23,9 +29,15 @@ interface ConnectedPlayer {
 
 const onlineBySocket = new Map<WebSocket, ConnectedPlayer>();
 
+const shanghaiTimeFmt = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function formatHHMM(ts: number): string {
-  const d = new Date(ts);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  return shanghaiTimeFmt.format(new Date(ts));
 }
 
 function sendJson(ws: WebSocket, payload: unknown) {
@@ -277,23 +289,74 @@ export function attachSocketServer(httpServer: HttpServer) {
           player.alive = true;
           let payload: {
             type?: string;
+            reqId?: string;
             channel?: ChatChannel;
             content?: string;
             recipientName?: string;
+            enemyGroupId?: string;
+            action?: PlayerBattleCommand['action'];
+            targetUid?: string;
+            skillId?: string;
+            itemId?: string;
+            generalCommands?: PlayerBattleCommand['generalCommands'];
           };
           try {
-            payload = JSON.parse(raw.toString('utf8')) as {
-              type?: string;
-              channel?: ChatChannel;
-              content?: string;
-              recipientName?: string;
-            };
+            payload = JSON.parse(raw.toString('utf8')) as typeof payload;
           } catch {
             return;
           }
 
           if (payload.type === 'ping') {
             sendJson(ws, { type: 'pong' });
+            return;
+          }
+
+          if (payload.type === 'battle:start' && typeof payload.reqId === 'string') {
+            try {
+              const existing = getActiveBattle(player.characterId);
+              if (existing && existing.status === 'ongoing') {
+                sendJson(ws, { type: 'rpc:result', reqId: payload.reqId, ok: true, data: { battle: existing } });
+                return;
+              }
+              const battle = startBattle(player.characterId, payload.enemyGroupId || 'xuchang_dipi');
+              sendJson(ws, { type: 'rpc:result', reqId: payload.reqId, ok: true, data: { battle } });
+            } catch (err) {
+              sendJson(ws, {
+                type: 'rpc:result',
+                reqId: payload.reqId,
+                ok: false,
+                error: err instanceof Error ? err.message : '进入战斗失败',
+              });
+            }
+            return;
+          }
+
+          if (payload.type === 'battle:action' && typeof payload.reqId === 'string') {
+            try {
+              const res = performBattleAction(player.characterId, {
+                action: payload.action ?? 'attack',
+                targetUid: payload.targetUid,
+                skillId: payload.skillId,
+                itemId: payload.itemId,
+                generalCommands: payload.generalCommands,
+              });
+              if (res.worldBroadcast) {
+                broadcastSystemMessage(realmId, res.worldBroadcast, 'shi');
+              }
+              sendJson(ws, {
+                type: 'rpc:result',
+                reqId: payload.reqId,
+                ok: true,
+                data: { battle: res.battle, character: res.character },
+              });
+            } catch (err) {
+              sendJson(ws, {
+                type: 'rpc:result',
+                reqId: payload.reqId,
+                ok: false,
+                error: err instanceof Error ? err.message : '指令执行失败',
+              });
+            }
             return;
           }
 

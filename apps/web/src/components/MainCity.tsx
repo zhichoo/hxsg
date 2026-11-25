@@ -154,7 +154,6 @@ export function MainCity({
     { label: '钱庄', onClick: () => onOpenPanel('bank') },
     { label: '集市', onClick: () => onOpenPanel('market') },
     { label: '客栈', onClick: () => onRestInn() },
-    ...(character.isGm ? [{ label: 'GM', onClick: () => onOpenPanel('gm') }] : []),
     { label: '登出', onClick: onLogout },
   ];
 
@@ -322,15 +321,6 @@ export function MainCity({
               <div className="text-[#e8e8e8] truncate">银:{character.silver}</div>
               <div className="flex items-center justify-between gap-1">
                 <span className="text-[#ffe04b] font-bold truncate">金:{character.gold}</span>
-                {character.isGm && (
-                  <button
-                    type="button"
-                    onClick={() => onOpenPanel('gm')}
-                    className="px-1.5 py-0.5 bg-[#c71a1a] text-white text-[11px] font-bold border border-[#ffb870] hover:brightness-110 shrink-0"
-                  >
-                    福利GM
-                  </button>
-                )}
               </div>
             </div>
             <div className="pt-1 border-t border-white/15 flex items-center justify-between gap-1 text-[11px] whitespace-nowrap">
@@ -392,13 +382,9 @@ export function MainCity({
               </>
             )}
 
-            {tab === 'facility' && (() => {
-              const visibleFacilities = currentMap.facilities.filter(
-                (fac) => fac.kind !== 'gm' || character.isGm,
-              );
-              return (
+            {tab === 'facility' && (
               <>
-                {visibleFacilities.map((fac) => (
+                {currentMap.facilities.map((fac) => (
                   <button
                     key={fac.id}
                     type="button"
@@ -412,7 +398,6 @@ export function MainCity({
                       else if (fac.kind === 'casino') onOpenPanel('casino');
                       else if (fac.kind === 'bank') onOpenPanel('bank');
                       else if (fac.kind === 'market') onOpenPanel('market');
-                      else if (fac.kind === 'gm') onOpenPanel('gm');
                     }}
                     className="w-full flex items-center gap-2 px-1.5 py-1 bg-[#2b0b07]/85 border border-[#8d6728] hover:bg-[#5b1d12] text-left"
                   >
@@ -429,14 +414,13 @@ export function MainCity({
                     </div>
                   </button>
                 ))}
-                {visibleFacilities.length === 0 && (
+                {currentMap.facilities.length === 0 && (
                   <div className="text-xs text-[#e0c4a0] py-5 text-center">
                     野外荒郊暂无城池设施，可点「移动」回城休整。
                   </div>
                 )}
               </>
-              );
-            })()}
+            )}
 
             {tab === 'move' && (
               <>

@@ -463,7 +463,7 @@ export interface MapFacility {
   name: string;
   desc: string;
   icon: string;
-  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'tower' | 'casino' | 'bank' | 'market' | 'arena' | 'daily' | 'gm';
+  kind: 'inn' | 'pharmacy' | 'blacksmith' | 'tavern' | 'tower' | 'casino' | 'bank' | 'market' | 'arena' | 'daily';
 }
 
 export interface MapNode {

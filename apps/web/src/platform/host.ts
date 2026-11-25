@@ -1,5 +1,6 @@
 import {
   getSDK,
+  type HttpRequestOptions,
   type JsonValue,
   type MiniAppSDK,
   type MiniAppTheme,
@@ -22,8 +23,21 @@ export interface RealtimeHandlers {
   onMapPlayers: (players: OnlinePlayerSummary[]) => void;
 }
 
+export class WsTransportError extends Error {
+  constructor(message = '实时连接暂不可用') {
+    super(message);
+    this.name = 'WsTransportError';
+  }
+}
+
 export interface RealtimeHandle {
   sendChat: (channel: ChatChannel, content: string, recipientName?: string) => void;
+  request: <T>(
+    type: string,
+    payload?: Record<string, unknown>,
+    timeoutMs?: number,
+  ) => Promise<T>;
+  isConnected: () => boolean;
   close: () => void;
 }
 
@@ -161,6 +175,29 @@ export const platformStorage = {
   },
 };
 
+function toStrictJsonValue(value: unknown): JsonValue {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => toStrictJsonValue(item));
+  }
+  if (typeof value === 'object' && value !== null) {
+    const out: { [key: string]: JsonValue } = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined || typeof v === 'function' || typeof v === 'symbol') {
+        continue;
+      }
+      out[k] = toStrictJsonValue(v);
+    }
+    return out;
+  }
+  return null;
+}
+
 export async function platformHttpRequest<T>(
   endpointName: string,
   webPath: string,
@@ -178,12 +215,25 @@ export async function platformHttpRequest<T>(
     if (!sdk.permissions.has('network.request')) {
       throw new Error('未获得网络请求权限（network.request）');
     }
-    const res = await sdk.http.request(endpointName, {
+    const requestOptions: HttpRequestOptions<'json'> = {
       method,
-      query: opts.query,
-      json: method === 'POST' ? ((opts.body ?? {}) as JsonValue) : undefined,
       responseType: 'json',
-    });
+    };
+    if (opts.query) {
+      const cleanQuery: Record<string, string> = {};
+      for (const [k, v] of Object.entries(opts.query)) {
+        if (v !== undefined && v !== null) {
+          cleanQuery[k] = String(v);
+        }
+      }
+      if (Object.keys(cleanQuery).length > 0) {
+        requestOptions.query = cleanQuery;
+      }
+    }
+    if (method === 'POST') {
+      requestOptions.json = toStrictJsonValue(opts.body ?? {});
+    }
+    const res = await sdk.http.request(endpointName, requestOptions);
     const data = res.body as Record<string, unknown> | null;
     if (res.status < 200 || res.status >= 300) {
       throw new Error(
@@ -219,7 +269,17 @@ export async function platformHttpRequest<T>(
   return data as T;
 }
 
-function handleRealtimePacket(raw: unknown, handlers: RealtimeHandlers) {
+interface PendingRpc {
+  resolve: (value: unknown) => void;
+  reject: (err: Error) => void;
+  timer: number;
+}
+
+function handleRealtimePacket(
+  raw: unknown,
+  handlers: RealtimeHandlers,
+  pendingRpcs: Map<string, PendingRpc>,
+) {
   let msg = raw;
   if (typeof msg === 'string') {
     try {
@@ -229,7 +289,25 @@ function handleRealtimePacket(raw: unknown, handlers: RealtimeHandlers) {
     }
   }
   if (!msg || typeof msg !== 'object') return;
-  const pkt = msg as { type?: string; data?: unknown };
+  const pkt = msg as {
+    type?: string;
+    data?: unknown;
+    reqId?: string;
+    ok?: boolean;
+    error?: string;
+  };
+  if (pkt.type === 'rpc:result' && typeof pkt.reqId === 'string') {
+    const pending = pendingRpcs.get(pkt.reqId);
+    if (!pending) return;
+    pendingRpcs.delete(pkt.reqId);
+    window.clearTimeout(pending.timer);
+    if (pkt.ok) {
+      pending.resolve(pkt.data);
+    } else {
+      pending.reject(new Error(pkt.error || '指令执行失败'));
+    }
+    return;
+  }
   if (pkt.type === 'chat:history' && Array.isArray(pkt.data)) {
     handlers.onHistory(pkt.data as ChatMessage[]);
   } else if (pkt.type === 'chat:message' && pkt.data) {
@@ -248,6 +326,16 @@ export function connectPlatformRealtime(
   let reconnectTimer: number | null = null;
   let pingTimer: number | null = null;
   let attempt = 0;
+  let rpcSeq = 0;
+  const pendingRpcs = new Map<string, PendingRpc>();
+
+  const rejectAllPending = (reason: string) => {
+    for (const [id, pending] of pendingRpcs.entries()) {
+      pendingRpcs.delete(id);
+      window.clearTimeout(pending.timer);
+      pending.reject(new WsTransportError(reason));
+    }
+  };
 
   const sdk = getOptionalSDK();
   if (sdk) {
@@ -264,6 +352,7 @@ export function connectPlatformRealtime(
         window.clearInterval(pingTimer);
         pingTimer = null;
       }
+      rejectAllPending('WebSocket 连接已断开');
     };
 
     const scheduleReconnect = () => {
@@ -287,7 +376,7 @@ export function connectPlatformRealtime(
         }
         attempt = 0;
         activeConn = conn;
-        offMessage = conn.on('message', (data) => handleRealtimePacket(data, handlers));
+        offMessage = conn.on('message', (data) => handleRealtimePacket(data, handlers, pendingRpcs));
         offClose = conn.on('close', () => {
           cleanupConn();
           activeConn = null;
@@ -307,11 +396,45 @@ export function connectPlatformRealtime(
       sendChat(channel, content, recipientName) {
         void activeConn
           ?.send(
-            recipientName
-              ? { type: 'chat:send', channel, content, recipientName }
-              : { type: 'chat:send', channel, content },
+            toStrictJsonValue(
+              recipientName
+                ? { type: 'chat:send', channel, content, recipientName }
+                : { type: 'chat:send', channel, content },
+            ),
           )
           .catch(() => {});
+      },
+      request<T>(type: string, payload?: Record<string, unknown>, timeoutMs = 8000): Promise<T> {
+        const conn = activeConn;
+        if (!conn) {
+          return Promise.reject(new WsTransportError('WebSocket 尚未就绪'));
+        }
+        const reqId = `r_${Date.now().toString(36)}_${++rpcSeq}`;
+        return new Promise<T>((resolve, reject) => {
+          const timer = window.setTimeout(() => {
+            if (pendingRpcs.delete(reqId)) {
+              reject(new WsTransportError('实时请求超时'));
+            }
+          }, timeoutMs);
+          pendingRpcs.set(reqId, {
+            resolve: (v) => resolve(v as T),
+            reject,
+            timer,
+          });
+          void conn
+            .send(toStrictJsonValue({ ...(payload ?? {}), type, reqId }))
+            .catch(() => {
+              const p = pendingRpcs.get(reqId);
+              if (p) {
+                pendingRpcs.delete(reqId);
+                window.clearTimeout(p.timer);
+                p.reject(new WsTransportError('实时发送失败'));
+              }
+            });
+        });
+      },
+      isConnected() {
+        return activeConn !== null;
       },
       close() {
         closed = true;
@@ -353,7 +476,7 @@ export function connectPlatformRealtime(
     };
 
     sock.onmessage = (ev) => {
-      handleRealtimePacket(ev.data, handlers);
+      handleRealtimePacket(ev.data, handlers, pendingRpcs);
     };
 
     sock.onclose = () => {
@@ -362,6 +485,7 @@ export function connectPlatformRealtime(
         pingTimer = null;
       }
       if (ws === sock) ws = null;
+      rejectAllPending('WebSocket 连接已断开');
       scheduleReconnect();
     };
   };
@@ -374,10 +498,39 @@ export function connectPlatformRealtime(
         ws.send(JSON.stringify({ type: 'chat:send', channel, content, recipientName }));
       }
     },
+    request<T>(type: string, payload?: Record<string, unknown>, timeoutMs = 8000): Promise<T> {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        return Promise.reject(new WsTransportError('WebSocket 尚未就绪'));
+      }
+      const reqId = `r_${Date.now().toString(36)}_${++rpcSeq}`;
+      return new Promise<T>((resolve, reject) => {
+        const timer = window.setTimeout(() => {
+          if (pendingRpcs.delete(reqId)) {
+            reject(new WsTransportError('实时请求超时'));
+          }
+        }, timeoutMs);
+        pendingRpcs.set(reqId, {
+          resolve: (v) => resolve(v as T),
+          reject,
+          timer,
+        });
+        try {
+          ws!.send(JSON.stringify({ ...(payload ?? {}), type, reqId }));
+        } catch {
+          pendingRpcs.delete(reqId);
+          window.clearTimeout(timer);
+          reject(new WsTransportError('实时发送失败'));
+        }
+      });
+    },
+    isConnected() {
+      return Boolean(ws && ws.readyState === WebSocket.OPEN);
+    },
     close() {
       closed = true;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       if (pingTimer) window.clearInterval(pingTimer);
+      rejectAllPending('WebSocket 已关闭');
       if (ws) {
         ws.close(1000, 'leave');
         ws = null;

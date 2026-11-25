@@ -2617,7 +2617,7 @@ export const MAPS: Record<string, MapNode> = {
       },
     ],
     facilities: [
-      { id: 'inn', name: '下邳客栈', desc: '歇脚打尖，恢复满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
+      { id: 'inn', name: '下邳客栈', desc: '歇脚打尖，10级内免费，11级起微收房钱', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '下邳医馆', desc: '购买丹药与稀有消耗品', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '下邳铁匠铺', desc: '购置兵器、防具与打造装备', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '下邳招贤馆', desc: '招募三国副将与购置秘籍', icon: 'ss_m_3.png', kind: 'tavern' },
@@ -2671,7 +2671,7 @@ export const MAPS: Record<string, MapNode> = {
         id: 'npc_paohuan',
         name: '跑环使者',
         action: 'talk',
-        dialogue: '长社附近有黄巾道士出没，打败他们可获丰厚银两与经验！',
+        dialogue: '出许昌郊外便是长社（颍川古战场），黄巾道士常在那里出没，打败他们可获丰厚银两与经验！',
       },
       {
         id: 'npc_xunluo',
@@ -2681,7 +2681,7 @@ export const MAPS: Record<string, MapNode> = {
       },
     ],
     facilities: [
-      { id: 'inn', name: '许昌客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
+      { id: 'inn', name: '许昌客栈', desc: '歇脚打尖，10级内免费，11级起微收房钱', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '回春药铺', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '铁匠铺与马市', desc: '购置兵器、铠甲、战靴与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '招贤馆', desc: '招募名将与购买副将技能书', icon: 'ss_m_3.png', kind: 'tavern' },
@@ -2690,7 +2690,6 @@ export const MAPS: Record<string, MapNode> = {
       { id: 'casino', name: '许昌赌坊', desc: '经典猜大小/豹子 与 赤壁押注', icon: 'ss_m_9.png', kind: 'casino' },
       { id: 'bank', name: '许昌钱庄', desc: '存取银两金砖、金银自由兑换', icon: 'ss_m_10.png', kind: 'bank' },
       { id: 'market', name: '许昌集市', desc: '玩家离线摆摊寄售装备/副将/秘籍', icon: 'ss_m_11.png', kind: 'market' },
-      { id: 'gm', name: '福利驿站', desc: '发银两/金砖、一键满状态、刷经验', icon: 'ss_m_5.png', kind: 'gm' },
     ],
   },
   xuchang_jiao: {
@@ -2764,7 +2763,7 @@ export const MAPS: Record<string, MapNode> = {
       },
     ],
     facilities: [
-      { id: 'inn', name: '洛阳悦来客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
+      { id: 'inn', name: '洛阳悦来客栈', desc: '歇脚打尖，10级内免费，11级起微收房钱', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '太医署药房', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '洛阳兵马司', desc: '购置精良兵器防具与名驹', icon: 'ss_m_7.png', kind: 'blacksmith' },
       { id: 'tavern', name: '洛阳招贤馆', desc: '招募强力三国副将', icon: 'ss_m_3.png', kind: 'tavern' },
@@ -2896,7 +2895,7 @@ export const MAPS: Record<string, MapNode> = {
       },
     ],
     facilities: [
-      { id: 'inn', name: '荆州客栈', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_1.png', kind: 'inn' },
+      { id: 'inn', name: '荆州客栈', desc: '歇脚打尖，10级内免费，11级起微收房钱', icon: 'ss_m_1.png', kind: 'inn' },
       { id: 'pharmacy', name: '荆州回春堂', desc: '购买丹药与藏宝图', icon: 'ss_m_2.png', kind: 'pharmacy' },
       { id: 'blacksmith', name: '荆州兵甲坊', desc: '购置高阶兵器、铠甲与名马', icon: 'ss_m_6.png', kind: 'blacksmith' },
       { id: 'tavern', name: '荆州招贤馆', desc: '招募中后期三国名将与技能书', icon: 'ss_m_3.png', kind: 'tavern' },
@@ -3061,7 +3060,7 @@ export const MAPS: Record<string, MapNode> = {
       },
     ],
     facilities: [
-      { id: 'inn', name: '桃园酒肆', desc: '歇脚打尖，免费满血满蓝', icon: 'ss_m_4.png', kind: 'inn' },
+      { id: 'inn', name: '桃园酒肆', desc: '歇脚打尖，10级内免费，11级起微收房钱', icon: 'ss_m_4.png', kind: 'inn' },
     ],
   },
 };
@@ -3357,4 +3356,36 @@ export function buildWorldBossEnemyGroup(bossId: string, level: number): EnemyGr
     expReward: Math.round(320 + lv * 120),
     enemies,
   };
+}
+
+/**
+ * Computes the shortest directed path (array of mapIds, inclusive of start and end)
+ * between two maps using MAPS[id].neighbors. Returns [] if unreachable.
+ */
+export function findMapPath(fromMapId: string, toMapId: string): string[] {
+  if (!MAPS[fromMapId] || !MAPS[toMapId]) return [];
+  if (fromMapId === toMapId) return [fromMapId];
+
+  const queue: string[][] = [[fromMapId]];
+  const visited = new Set<string>([fromMapId]);
+
+  while (queue.length > 0) {
+    const path = queue.shift()!;
+    const current = path[path.length - 1];
+    const node = MAPS[current];
+    if (!node) continue;
+    for (const next of node.neighbors) {
+      if (visited.has(next)) continue;
+      const nextPath = [...path, next];
+      if (next === toMapId) return nextPath;
+      visited.add(next);
+      queue.push(nextPath);
+    }
+  }
+  return [];
+}
+
+/** Formats a mapId path as human-readable route text, e.g. "许昌 → 许昌郊外 → 长社" */
+export function formatMapRoute(path: string[]): string {
+  return path.map((id) => MAPS[id]?.name ?? id).join(' → ');
 }
