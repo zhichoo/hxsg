@@ -1257,10 +1257,10 @@ static void slice_ai_sheets(void) {
 
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
-        gOutRoot = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : @"/Users/villow/myProject/github/hxsg/apps/web/mapp/assets";
-        gRawDir  = argc > 2 ? [NSString stringWithUTF8String:argv[2]] : @"/Users/villow/myProject/github/hxsg/apps/web/mapp/raw-sheets";
-        gCc0Dir  = argc > 3 ? [NSString stringWithUTF8String:argv[3]] : @"/Users/villow/myProject/github/hxsg/apps/web/mapp/raw-cc0";
-        gIconOut = argc > 4 ? [NSString stringWithUTF8String:argv[4]] : @"/Users/villow/myProject/github/hxsg/apps/web/mapp/icon.png";
+        gOutRoot = argc > 1 ? [NSString stringWithUTF8String:argv[1]] : @"apps/web/mapp/assets";
+        gRawDir  = argc > 2 ? [NSString stringWithUTF8String:argv[2]] : @"apps/web/mapp/raw-sheets";
+        gCc0Dir  = argc > 3 ? [NSString stringWithUTF8String:argv[3]] : @"apps/web/mapp/raw-cc0";
+        gIconOut = argc > 4 ? [NSString stringWithUTF8String:argv[4]] : @"apps/web/mapp/icon.png";
 
         NSFileManager *fm = [NSFileManager defaultManager];
         [fm createDirectoryAtPath:[gOutRoot stringByAppendingPathComponent:@"portraits"] withIntermediateDirectories:YES attributes:nil error:nil];

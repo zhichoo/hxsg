@@ -168,11 +168,16 @@ app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   reply.status(status).send({ error: err.message || '请求失败' });
 });
 
+const DISABLE_PUBLIC_REGISTER =
+  process.env.HXSG_DISABLE_PUBLIC_REGISTER === '1' ||
+  process.env.HXSG_DISABLE_PUBLIC_REGISTER?.toLowerCase() === 'true';
+
 app.get('/api/health', async () => ({
   ok: true,
   dbPath,
   mappEnabled: mappConfig.enabled,
   mappChannel: mappConfig.enabled ? mappConfig.channel : null,
+  publicRegisterEnabled: !DISABLE_PUBLIC_REGISTER,
 }));
 
 app.get('/api/realms', async (req) => {
@@ -184,6 +189,13 @@ app.get('/api/realms', async (req) => {
 });
 
 app.post('/api/auth/register', async (req) => {
+  if (DISABLE_PUBLIC_REGISTER) {
+    const err = new Error('当前仅开放 LINUX.DO 社区登录，暂不开放匿名注册') as Error & {
+      statusCode: number;
+    };
+    err.statusCode = 403;
+    throw err;
+  }
   const body = req.body as { username?: string; password?: string };
   return registerAccount(body.username ?? '', body.password ?? '');
 });

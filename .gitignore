@@ -10,14 +10,17 @@ build/
 
 # Local env & DB
 .env
-.env.local
+.env.*
+!.env.example
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
+*.zip
 
-# Raw client packages & temporary unpack dirs (large binaries)
+# Raw client packages & intermediate asset sheets (large binaries kept locally)
 raw/
+apps/web/mapp/raw-sheets/
 *.apk
 *.mrp
 *.jar

@@ -10,7 +10,6 @@ services:
       - PORT=3001
       - HXSG_DATA_DIR=/data
       - HXSG_SECRET=${HXSG_SECRET:-change-this-secret-in-production}
-      - HXSG_GM_CODE=${HXSG_GM_CODE:-hxsg888}
     volumes:
       - ./data:/data
     deploy:
