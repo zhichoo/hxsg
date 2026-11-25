@@ -356,6 +356,7 @@ export function BattleStage({
   const lungeRef = useRef<Map<string, number>>(new Map());
   const imgCacheRef = useRef<Map<string, HTMLImageElement | null>>(new Map());
   const timeoutFiredRoundRef = useRef<number>(0);
+  const manualSkillIdRef = useRef<string | null>(null);
 
   // Preload all official FX sprites on mount so even the VERY FIRST cast has crisp instant visuals
   useEffect(() => {
@@ -405,6 +406,11 @@ export function BattleStage({
     () => character.inventory.filter((i) => i.type === 'consumable' && i.quantity > 0),
     [character.inventory],
   );
+
+  // Reset manual skill preference on a brand new battle
+  useEffect(() => {
+    manualSkillIdRef.current = null;
+  }, [battle.battleId]);
 
   // Reset turn command queue cleanly on each new round or battle
   useEffect(() => {
@@ -726,6 +732,9 @@ export function BattleStage({
       const targetUid = cmd.targetUid ?? selectedTargetUid;
 
       if (isCommandingHero) {
+        if (cmd.action === 'skill' && cmd.skillId) {
+          manualSkillIdRef.current = cmd.skillId;
+        }
         const heroCmd: HeroCommandInput = { ...cmd, targetUid };
         if (cmd.action === 'flee' || autoBattle || autoGenerals || controllableUnits.length <= 1) {
           await submitRound(heroCmd, []);
@@ -840,18 +849,83 @@ export function BattleStage({
     void submitRound(lastRoundCmd.hero, autoGenerals ? [] : lastRoundCmd.generals);
   }, [lastRoundCmd, busy, battle.status, autoGenerals, submitRound]);
 
-  // Auto-battle repeats last chosen hero command after current round animation finishes
+  const pickAutoHeroCommand = useCallback((): HeroCommandInput => {
+    const heroUnit = battle.units.find((u) => u.isMainRole);
+    const heroSkills = SKILLS.filter(
+      (s) => s.roleClass === character.roleClass || s.roleClass === 'all',
+    );
+    const currentMp = heroUnit?.mp ?? character.mp;
+    const currentHp = heroUnit?.hp ?? character.hp;
+    const maxHp = heroUnit?.maxHp ?? character.maxHp;
+    const affordable = heroSkills.filter((s) => currentMp >= s.mpCost);
+
+    if (affordable.length > 0) {
+      // 1. Respect player's manually selected skill in this battle when still valid & useful
+      const preferred = manualSkillIdRef.current
+        ? affordable.find((s) => s.id === manualSkillIdRef.current)
+        : undefined;
+      if (
+        preferred &&
+        (preferred.kind !== 'heal' || currentHp < maxHp * 0.75)
+      ) {
+        return {
+          action: 'skill',
+          skillId: preferred.id,
+          targetUid: selectedTargetUid,
+        };
+      }
+
+      // 2. Emergency self-heal when hero HP drops below 45%
+      if (currentHp < maxHp * 0.45) {
+        const healSkill = affordable.find((s) => s.kind === 'heal');
+        if (healSkill) {
+          return { action: 'skill', skillId: healSkill.id, targetUid: selectedTargetUid };
+        }
+      }
+
+      // 3. Smart priority: prefer AOE damage on >= 2 enemies, single-target burst on 1 enemy
+      const scoreSkill = (s: (typeof affordable)[number]): number => {
+        if (s.kind === 'heal') return -100;
+        if (s.kind === 'buff') return 10;
+        if (aliveEnemies.length >= 2) {
+          if (s.kind === 'damage' && s.aoe) return 100 + s.power * 10;
+          if (s.kind === 'poison') return 85 + s.power * 10;
+          if (s.kind === 'multi_hit') return 75 + s.power * 10;
+          if (s.kind === 'damage') return 70 + s.power * 10;
+          if (s.kind === 'debuff') return 65 + s.power * 10;
+          if (s.kind === 'control') return 55;
+        } else {
+          if (s.kind === 'multi_hit') return 100 + s.power * 10;
+          if (s.kind === 'damage' && !s.aoe) return 95 + s.power * 10;
+          if (s.kind === 'debuff') return 88 + s.power * 10;
+          if (s.kind === 'damage' && s.aoe) return 80 + s.power * 10;
+          if (s.kind === 'poison') return 70 + s.power * 10;
+          if (s.kind === 'control') return 50;
+        }
+        return 0;
+      };
+
+      const best = [...affordable].sort((a, b) => scoreSkill(b) - scoreSkill(a))[0];
+      if (best && scoreSkill(best) > 0) {
+        return {
+          action: 'skill',
+          skillId: best.id,
+          targetUid: selectedTargetUid,
+        };
+      }
+    }
+
+    return { action: 'attack', targetUid: selectedTargetUid };
+  }, [battle.units, character.roleClass, character.hp, character.maxHp, character.mp, aliveEnemies.length, selectedTargetUid]);
+
+  // Auto-battle prioritizes affordable class skills (respecting manual skill pick) and only falls back to attack when out of MP
   useEffect(() => {
     if (!autoBattle || battle.status !== 'ongoing' || busy || isReplaying) return;
     const t = setTimeout(() => {
-      const heroCmd =
-        lastRoundCmd?.hero && lastRoundCmd.hero.action !== 'item'
-          ? { ...lastRoundCmd.hero, targetUid: selectedTargetUid }
-          : ({ action: 'attack', targetUid: selectedTargetUid } as HeroCommandInput);
-      void submitRound(heroCmd, []);
+      void submitRound(pickAutoHeroCommand(), []);
     }, battleSpeed === 2 ? 120 : 240);
     return () => clearTimeout(t);
-  }, [autoBattle, battle.status, battle.round, busy, isReplaying, battleSpeed, submitRound, selectedTargetUid, lastRoundCmd]);
+  }, [autoBattle, battle.status, battle.round, busy, isReplaying, battleSpeed, submitRound, pickAutoHeroCommand]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

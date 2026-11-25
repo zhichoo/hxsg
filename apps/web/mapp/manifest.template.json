@@ -2,7 +2,7 @@
   "format": 1,
   "id": "019a2a58-0000-7000-8000-000000000001",
   "name": "幻想三国 · 经典版",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "tags": ["游戏", "三国", "回合制", "rpg"],
   "entry": "index.html",
   "script": "app.js",

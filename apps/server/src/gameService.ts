@@ -833,8 +833,10 @@ export function allocateCharacterStats(
   const stats = calcRoleStats(ch.roleClass, ch.level, nextAlloc, ch.rebirth);
   const effMaxHp = stats.maxHp + ch.equipBonus.hp;
   const effMaxMp = stats.maxMp + ch.equipBonus.mp;
-  const nextHp = Math.min(effMaxHp, ch.hp + dVit * 18);
-  const nextMp = Math.min(effMaxMp, ch.mp + dInt * 16);
+  const hpGain = Math.max(0, effMaxHp - ch.maxHp);
+  const mpGain = Math.max(0, effMaxMp - ch.maxMp);
+  const nextHp = Math.min(effMaxHp, ch.hp + hpGain);
+  const nextMp = Math.min(effMaxMp, ch.mp + mpGain);
 
   db.prepare(
     `UPDATE characters
@@ -1419,14 +1421,36 @@ export function restAtInn(
 ): { character: CharacterView; fee: number; message: string } {
   const ch = getCharacterById(characterId);
   if (!ch) throw new Error('角色不存在');
+  const needsRest =
+    ch.hp < ch.maxHp ||
+    ch.mp < ch.maxMp ||
+    ch.generals.some((g) => g.hp < g.maxHp || g.mp < g.maxMp);
+  if (!needsRest) {
+    return {
+      character: ch,
+      fee: 0,
+      message: '主角与副将气血精力均已全满，无需住店花钱！',
+    };
+  }
   const baseFee = free || ch.level <= 10 ? 0 : ch.level * 8;
   const actualFee = Math.min(ch.silver, baseFee);
   db.prepare(
     'UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, silver = silver - ?, updated_at = ? WHERE id = ?',
   ).run(ch.maxHp, ch.maxMp, ch.maxHp, ch.maxMp, actualFee, Date.now(), characterId);
-  db.prepare('UPDATE generals SET hp = max_hp, mp = max_mp WHERE character_id = ?').run(
-    characterId,
-  );
+  for (const g of ch.generals) {
+    const gStats = calcGeneralStatsAtLevel(
+      { hp: g.baseHp, mp: g.baseMp, atk: g.baseAtk, spd: g.baseSpd },
+      g.growth,
+      g.level,
+    );
+    db.prepare('UPDATE generals SET hp = ?, max_hp = ?, mp = ?, max_mp = ? WHERE id = ?').run(
+      gStats.maxHp,
+      gStats.maxHp,
+      gStats.maxMp,
+      gStats.maxMp,
+      g.id,
+    );
+  }
   const message =
     baseFee === 0
       ? '新手 10 级内免费在客栈歇息，主角与副将气血精力已全部回满！'
@@ -1664,7 +1688,22 @@ export function reforgeEquipment(
     characterId,
   );
 
-  const updated = getCharacterById(characterId)!;
+  let updated = getCharacterById(characterId)!;
+  if (target.equipped) {
+    const hpGain = Math.max(0, updated.maxHp - ch.maxHp);
+    const mpGain = Math.max(0, updated.maxMp - ch.maxMp);
+    const nextHp = Math.min(updated.maxHp, ch.hp + hpGain);
+    const nextMp = Math.min(updated.maxMp, ch.mp + mpGain);
+    db.prepare('UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?').run(
+      nextHp,
+      nextMp,
+      updated.maxHp,
+      updated.maxMp,
+      Date.now(),
+      characterId,
+    );
+    updated = getCharacterById(characterId)!;
+  }
   const newEq = updated.equipment.find((e) => e.id === equipId)!;
   return {
     equipment: newEq,
@@ -1709,8 +1748,10 @@ export function equipItem(characterId: number, equipId: number): CharacterView {
   );
 
   const updated = getCharacterById(characterId)!;
-  const nextHp = Math.min(updated.maxHp, ch.hp + Math.max(0, target.hpBonus));
-  const nextMp = Math.min(updated.maxMp, ch.mp + Math.max(0, target.mpBonus));
+  const hpGain = Math.max(0, updated.maxHp - ch.maxHp);
+  const mpGain = Math.max(0, updated.maxMp - ch.maxMp);
+  const nextHp = Math.min(updated.maxHp, ch.hp + hpGain);
+  const nextMp = Math.min(updated.maxMp, ch.mp + mpGain);
   db.prepare('UPDATE characters SET hp = ?, mp = ?, max_hp = ?, max_mp = ?, updated_at = ? WHERE id = ?').run(
     nextHp,
     nextMp,
